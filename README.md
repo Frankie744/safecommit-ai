@@ -27,9 +27,24 @@ Copy `.env.example` to `.env.local` only when configuring credentials. Never
 commit `.env.local`.
 
 ```powershell
-npm install
+npm ci
 npm run dev
 ```
 
-The full setup, live-provider smoke tests, fallback replay, and demo runbook are
-added as their corresponding phases become verified.
+Run `npm run verify` while developing. After all intended changes are committed
+and `git status --short` is empty, `npm run verify:p0` captures typecheck,
+Vitest, production build, Chrome Playwright, and the exact 14-test P0 matrix in
+a hash-manifested Phase 6 evidence package. This is a local-test claim only.
+
+Project handoff:
+
+- [Architecture](docs/architecture.md)
+- [Setup, verification, and external smoke runbook](docs/runbook.md)
+- [P0 and judging map](docs/judging-map.md)
+- [Three-minute demo runbook](DEMO_RUNBOOK.md)
+- [Devpost draft](DEVPOST.md)
+
+The live Fireworks, Daytona, Braintrust, GitHub, and CodeRabbit path still
+requires authorized credentials, a public demo repository, and CodeRabbit App
+installation. Missing provider access fails closed and is never relabelled as
+live success.
