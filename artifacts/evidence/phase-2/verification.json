@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-22T12:26:39.9043474-07:00",
+  "provenance": "local-test",
+  "result": "pass",
+  "commands": [
+    {
+      "command": "npm run test:unit -- --reporter=verbose",
+      "exitCode": 0,
+      "testFilesPassed": 4,
+      "testsPassed": 11,
+      "durationMs": 561
+    },
+    {
+      "command": "npm run test:adversarial -- --reporter=verbose",
+      "exitCode": 0,
+      "testFilesPassed": 1,
+      "testsPassed": 5,
+      "durationMs": 298
+    },
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check -- packages/domain packages/safety-policy tests/unit tests/adversarial",
+      "exitCode": 0
+    }
+  ],
+  "p0Tests": [
+    "candidate_patch_schema_is_validated",
+    "each_candidate_uses_unique_sandbox",
+    "failed_build_is_ineligible",
+    "failed_safety_gate_cannot_be_compensated_by_high_average_score",
+    "patch_cannot_modify_existing_tests",
+    "patch_cannot_modify_safety_thresholds",
+    "highest_eligible_candidate_is_selected",
+    "human_approval_required_before_pr",
+    "approval_invalidated_when_patch_changes",
+    "critical_review_finding_blocks_ready_to_merge",
+    "review_fix_reenters_full_validation_pipeline"
+  ],
+  "scope": {
+    "verified": "Pure domain and safety-policy behavior",
+    "notClaimed": "The unique-sandbox test is a provider-contract guard and is not evidence of live Daytona sandbox creation."
+  }
+}
