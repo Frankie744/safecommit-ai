@@ -105,7 +105,6 @@ export interface LocalTournamentResult {
 export interface LocalTournamentOptions {
   sessionId: string;
   workspaceRoot?: string;
-  candidates?: readonly CandidatePatch[];
   commandTimeoutMs?: number;
   now?: () => Date;
 }
@@ -115,11 +114,14 @@ export interface LiveTournamentProvider {
 }
 
 export interface ExternalTournamentResult {
-  provenance: {
-    mode: "live" | "cached";
-    kind: string;
-    provider: string;
-  };
+  provenance:
+    | { mode: "live"; kind: "live"; provider: string }
+    | {
+        mode: "cached";
+        kind: "recorded-live";
+        provider: string;
+        evidenceRef: string;
+      };
   [key: string]: unknown;
 }
 
@@ -134,6 +136,43 @@ interface SpawnResult {
   stdout: string;
   stderr: string;
   timedOut: boolean;
+}
+
+const CHILD_ENVIRONMENT_ALLOWLIST = [
+  "COMSPEC",
+  "HOME",
+  "LANG",
+  "LC_ALL",
+  "NUMBER_OF_PROCESSORS",
+  "OS",
+  "PATH",
+  "PATHEXT",
+  "PROCESSOR_ARCHITECTURE",
+  "PROGRAMDATA",
+  "PROGRAMFILES",
+  "PROGRAMFILES(X86)",
+  "SYSTEMDRIVE",
+  "SYSTEMROOT",
+  "TEMP",
+  "TMP",
+  "USERPROFILE",
+  "WINDIR",
+] as const;
+
+/**
+ * Local execution is only for the three repository-owned demo patches. Even
+ * those binaries receive a minimal environment so provider credentials can
+ * never be read with getenv().
+ */
+export function buildLocalChildEnvironment(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): NodeJS.ProcessEnv {
+  const allowed = new Set<string>(CHILD_ENVIRONMENT_ALLOWLIST);
+  return Object.fromEntries(
+    Object.entries(environment).filter(([name, value]) =>
+      value !== undefined && allowed.has(name.toUpperCase()),
+    ),
+  ) as NodeJS.ProcessEnv;
 }
 
 function safeSegment(value: string): string {
@@ -181,11 +220,25 @@ async function runSpawn(
       cwd,
       shell: false,
       windowsHide: true,
-      env: process.env,
+      env: buildLocalChildEnvironment(),
     });
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill();
+      if (process.platform === "win32" && child.pid !== undefined) {
+        const killer = spawn(
+          "taskkill.exe",
+          ["/PID", String(child.pid), "/T", "/F"],
+          {
+            env: buildLocalChildEnvironment(),
+            shell: false,
+            stdio: "ignore",
+            windowsHide: true,
+          },
+        );
+        killer.unref();
+      } else {
+        child.kill("SIGKILL");
+      }
     }, timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer | string) => {
@@ -214,6 +267,15 @@ async function runSpawn(
 
 function redactAndSummarize(text: string, maxLength = 8_000): string {
   let safe = text;
+  for (const [name, value] of Object.entries(process.env)) {
+    if (
+      value !== undefined &&
+      value.length >= 4 &&
+      /(?:KEY|TOKEN|SECRET|PASSWORD|AUTHORIZATION|CREDENTIAL)/iu.test(name)
+    ) {
+      safe = safe.replaceAll(value, "[REDACTED]");
+    }
+  }
   if (process.env.USERPROFILE) {
     safe = safe.replaceAll(process.env.USERPROFILE, "%USERPROFILE%");
   }
@@ -260,9 +322,31 @@ async function hashArtifacts(buildDirectory: string): Promise<string> {
 
 async function determineGitRevision(workspaceRoot: string): Promise<string> {
   const result = await runSpawn("git", ["rev-parse", "HEAD"], workspaceRoot, 10_000);
-  return result.exitCode === 0 && /^[0-9a-f]{40}$/iu.test(result.stdout.trim())
-    ? result.stdout.trim()
-    : "LOCAL_UNCOMMITTED_TREE";
+  const head = result.stdout.trim();
+  if (result.exitCode !== 0 || !/^[0-9a-f]{40}$/iu.test(head)) {
+    return "LOCAL_UNCOMMITTED_TREE";
+  }
+  const status = await runSpawn(
+    "git",
+    [
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all",
+      "--",
+      "fixtures/battery-controller",
+      "demo/candidate-patches",
+      "apps/orchestrator",
+      "packages/domain",
+      "packages/safety-policy",
+      "package.json",
+      "package-lock.json",
+      "tsconfig.json",
+    ],
+    workspaceRoot,
+    10_000,
+  );
+  if (status.exitCode !== 0) return "LOCAL_UNCOMMITTED_TREE";
+  return status.stdout.trim() === "" ? head : `${head}-DIRTY`;
 }
 
 export async function discoverLocalToolchain(): Promise<Toolchain> {
@@ -325,21 +409,15 @@ export async function discoverLocalToolchain(): Promise<Toolchain> {
   };
 }
 
-function parseSuiteSummary(output: string, executed: boolean, exitCode: number | null): TestSuiteEvidence {
+function deterministicSuiteEvidence(
+  executed: boolean,
+  exitCode: number | null,
+  timedOut: boolean,
+  expectedTotal: number,
+): TestSuiteEvidence {
   if (!executed) return { executed: false, passed: 0, total: 0, exitCode: null };
-  const matches = [...output.matchAll(/\[SUMMARY\]\s+(\d+) passed,\s+(\d+) failed/giu)];
-  const last = matches.at(-1);
-  if (!last) {
-    return {
-      executed: true,
-      passed: exitCode === 0 ? 1 : 0,
-      total: 1,
-      exitCode,
-    };
-  }
-  const passed = Number(last[1]);
-  const failed = Number(last[2]);
-  return { executed: true, passed, total: passed + failed, exitCode };
+  const passed = exitCode === 0 && !timedOut ? expectedTotal : 0;
+  return { executed: true, passed, total: expectedTotal, exitCode };
 }
 
 function scoreValues(
@@ -348,9 +426,14 @@ function scoreValues(
   safetyTests: TestSuiteEvidence,
   integrity: PatchIntegrityResult,
 ): ScorerValues {
-  const unitRate = unitTests.total === 0 ? 0 : unitTests.passed / unitTests.total;
+  const unitRate =
+    unitTests.exitCode === 0 && unitTests.total > 0
+      ? unitTests.passed / unitTests.total
+      : 0;
   const safetyRate =
-    safetyTests.total === 0 ? 0 : safetyTests.passed / safetyTests.total;
+    safetyTests.exitCode === 0 && safetyTests.total > 0
+      ? safetyTests.passed / safetyTests.total
+      : 0;
   const changedLines = integrity.addedLines + integrity.removedLines;
   return {
     buildSuccess: buildPassed ? 1 : 0,
@@ -437,7 +520,7 @@ function buildArguments(toolchain: Toolchain, build: string): string[] {
 function ctestArguments(toolchain: Toolchain, build: string, label: string): string[] {
   const args = ["--test-dir", build];
   if (toolchain.multiConfig) args.push("-C", "Debug");
-  args.push("-V", "-L", label, "--output-on-failure");
+  args.push("-V", "-L", label, "--output-on-failure", "--no-tests=error");
   return args;
 }
 
@@ -597,16 +680,22 @@ async function validateOneCandidate(input: {
     );
   }
 
-  const buildPassed = configure.exitCode === 0 && build?.exitCode === 0;
-  const unitTests = parseSuiteSummary(
-    `${unit?.stdoutSummary ?? ""}\n${unit?.stderrSummary ?? ""}`,
+  const buildPassed =
+    configure.exitCode === 0 &&
+    !configure.timedOut &&
+    build?.exitCode === 0 &&
+    !build.timedOut;
+  const unitTests = deterministicSuiteEvidence(
     unit !== undefined,
     unit?.exitCode ?? null,
+    unit?.timedOut ?? false,
+    5,
   );
-  const safetyTests = parseSuiteSummary(
-    `${safety?.stdoutSummary ?? ""}\n${safety?.stderrSummary ?? ""}`,
+  const safetyTests = deterministicSuiteEvidence(
     safety !== undefined,
     safety?.exitCode ?? null,
+    safety?.timedOut ?? false,
+    6,
   );
   const scores = scoreValues(buildPassed, unitTests, safetyTests, integrity);
   const evidenceDigest = computeEvidenceDigest({
@@ -646,7 +735,9 @@ export async function runLocalTournament(
   const now = options.now ?? (() => new Date());
   const workspaceRoot = resolve(options.workspaceRoot ?? process.cwd());
   const sessionId = safeSegment(options.sessionId);
-  const candidates = (options.candidates ?? LOCAL_TOURNAMENT_CANDIDATES).map((candidate) =>
+  // This host runner deliberately accepts only repository-owned fixtures.
+  // Fireworks/model-authored candidates must use Daytona live execution.
+  const candidates = LOCAL_TOURNAMENT_CANDIDATES.map((candidate) =>
     CandidatePatchSchema.parse(candidate),
   );
   if (
@@ -685,7 +776,7 @@ export async function runLocalTournament(
   });
 
   try {
-    const rawResults = await Promise.all(
+    const settledResults = await Promise.allSettled(
       candidates.map((candidate) =>
         validateOneCandidate({
           candidate,
@@ -700,6 +791,16 @@ export async function runLocalTournament(
         }),
       ),
     );
+    const failed = settledResults.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failed !== undefined) throw failed.reason;
+    const rawResults = settledResults.map((result) => {
+      if (result.status !== "fulfilled") {
+        throw new Error("Unreachable rejected local tournament result");
+      }
+      return result.value;
+    });
     const decision = selectCandidate(
       rawResults.map((result) => ({
         candidateId: result.candidate.candidateId,
@@ -793,7 +894,15 @@ export async function runSafetyTournament(
   if (options.mode !== "mock") {
     if (!options.provider) throw new LiveTournamentProviderRequiredError(options.mode);
     const result = await options.provider.run(options);
-    if (result.provenance.mode !== options.mode) {
+    const expectedKind = options.mode === "live" ? "live" : "recorded-live";
+    if (
+      result.provenance.mode !== options.mode ||
+      result.provenance.kind !== expectedKind ||
+      result.provenance.provider.trim() === "" ||
+      (options.mode === "cached" &&
+        (result.provenance.mode !== "cached" ||
+          result.provenance.evidenceRef.trim() === ""))
+    ) {
       throw new LiveTournamentProviderRequiredError(options.mode);
     }
     return result;

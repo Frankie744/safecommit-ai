@@ -11,7 +11,7 @@ import {
 } from "./github";
 import {
   ProviderResponseError,
-  liveEnvelope,
+  manualVerifiedEnvelope,
   requireLiveConfiguration,
   transportEnvelope,
   type Environment,
@@ -69,8 +69,22 @@ export interface CodeRabbitCheckArtifact {
   completedAt?: string;
 }
 
+export interface CodeRabbitPullRequestArtifact {
+  number: number;
+  headSha: string;
+  baseRef: string;
+  state: "open" | "closed";
+  merged: boolean;
+  url: string;
+}
+
 export interface CodeRabbitClientPort {
   readonly transport: ProviderTransport;
+  getPullRequest(
+    owner: string,
+    repository: string,
+    pullNumber: number,
+  ): Promise<CodeRabbitPullRequestArtifact>;
   listReviews(
     owner: string,
     repository: string,
@@ -98,6 +112,7 @@ export interface NormalizedCodeRabbitFinding {
 export interface CodeRabbitInspectionEvidence {
   pullNumber: number;
   headSha: string;
+  observedPrHeadSha: string;
   status: "passed" | "blocked" | "pending" | "stale";
   passed: boolean;
   timedOut: boolean;
@@ -168,6 +183,22 @@ export function createCodeRabbitClient(
   );
   return {
     transport: "official-sdk",
+    async getPullRequest(owner, repository, pullNumber) {
+      const octokit = await octokitPromise;
+      const response = await octokit.rest.pulls.get({
+        owner,
+        repo: repository,
+        pull_number: pullNumber,
+      });
+      return {
+        number: response.data.number,
+        headSha: response.data.head.sha,
+        baseRef: response.data.base.ref,
+        state: response.data.state,
+        merged: response.data.merged,
+        url: response.data.html_url,
+      };
+    },
     async listReviews(owner, repository, pullNumber) {
       const octokit = await octokitPromise;
       const rows = await octokit.paginate(octokit.rest.pulls.listReviews, {
@@ -276,9 +307,12 @@ export function extractCodeRabbitSeverity(body: string): {
   return mapCodeRabbitSeverity(match ?? "unknown");
 }
 
-function isCodeRabbitActor(loginOrSlug: string | undefined): boolean {
-  if (loginOrSlug === undefined) return false;
-  return /code[-_]?rabbit(?:ai)?/iu.test(loginOrSlug);
+function isOfficialCodeRabbitBot(login: string | undefined): boolean {
+  return login?.toLowerCase() === "coderabbitai[bot]";
+}
+
+function isOfficialCodeRabbitApp(slug: string | undefined): boolean {
+  return slug?.toLowerCase() === "coderabbitai";
 }
 
 function findingTitle(body: string, fallback: string): string {
@@ -363,6 +397,48 @@ export class CodeRabbitAdapter {
   ): Promise<ProviderEnvelope<CodeRabbitInspectionEvidence>> {
     validateInspectionRequest(request);
     try {
+      const pullRequest = await this.client.getPullRequest(
+        this.config.owner,
+        this.config.repository,
+        request.pullNumber,
+      );
+      if (
+        pullRequest.number !== request.pullNumber ||
+        pullRequest.headSha.toLowerCase() !== request.headSha.toLowerCase()
+      ) {
+        return transportEnvelope("coderabbit", this.client.transport, {
+          pullNumber: request.pullNumber,
+          headSha: request.headSha,
+          observedPrHeadSha: pullRequest.headSha,
+          status: "stale",
+          passed: false,
+          timedOut: false,
+          findings: [],
+          exactHeadEvidenceIds: [],
+          staleEvidenceIds: [`pull-request-head:${pullRequest.headSha}`],
+          reason:
+            "Requested CodeRabbit evidence head is stale because the pull request now points to a different head SHA.",
+        });
+      }
+      if (
+        pullRequest.state !== "open" ||
+        pullRequest.merged ||
+        pullRequest.baseRef !== this.config.baseBranch
+      ) {
+        return transportEnvelope("coderabbit", this.client.transport, {
+          pullNumber: request.pullNumber,
+          headSha: request.headSha,
+          observedPrHeadSha: pullRequest.headSha,
+          status: "blocked",
+          passed: false,
+          timedOut: false,
+          findings: [],
+          exactHeadEvidenceIds: [],
+          staleEvidenceIds: [],
+          reason:
+            "CodeRabbit gate requires an open, unmerged PR against the configured base branch.",
+        });
+      }
       const [reviews, comments, checks] = await Promise.all([
         this.client.listReviews(
           this.config.owner,
@@ -382,14 +458,13 @@ export class CodeRabbitAdapter {
       ]);
 
       const botReviews = reviews.filter((review) =>
-        isCodeRabbitActor(review.actorLogin),
+        isOfficialCodeRabbitBot(review.actorLogin),
       );
       const botComments = comments.filter((comment) =>
-        isCodeRabbitActor(comment.actorLogin),
+        isOfficialCodeRabbitBot(comment.actorLogin),
       );
       const botChecks = checks.filter(
-        (check) =>
-          isCodeRabbitActor(check.appSlug) || isCodeRabbitActor(check.name),
+        (check) => isOfficialCodeRabbitApp(check.appSlug),
       );
       const exactReviews = botReviews.filter(
         (review) => review.commitId?.toLowerCase() === request.headSha.toLowerCase(),
@@ -523,9 +598,40 @@ export class CodeRabbitAdapter {
         reason = "CodeRabbit passed the exact PR head SHA with no unresolved Critical/Major findings.";
       }
 
+      const finalPullRequest = await this.client.getPullRequest(
+        this.config.owner,
+        this.config.repository,
+        request.pullNumber,
+      );
+      if (
+        finalPullRequest.number !== pullRequest.number ||
+        finalPullRequest.headSha.toLowerCase() !== pullRequest.headSha.toLowerCase() ||
+        finalPullRequest.state !== "open" ||
+        finalPullRequest.merged ||
+        finalPullRequest.baseRef !== this.config.baseBranch
+      ) {
+        return transportEnvelope("coderabbit", this.client.transport, {
+          pullNumber: request.pullNumber,
+          headSha: request.headSha,
+          observedPrHeadSha: finalPullRequest.headSha,
+          status: "stale",
+          passed: false,
+          timedOut: false,
+          findings: normalized,
+          exactHeadEvidenceIds: [],
+          staleEvidenceIds: [
+            ...staleEvidenceIds,
+            `pull-request-head:${finalPullRequest.headSha}`,
+          ],
+          reason:
+            "Pull request head or state changed while CodeRabbit evidence was being evaluated.",
+        });
+      }
+
       return transportEnvelope("coderabbit", this.client.transport, {
         pullNumber: request.pullNumber,
         headSha: request.headSha,
+        observedPrHeadSha: finalPullRequest.headSha,
         status,
         passed: status === "passed",
         timedOut: false,
@@ -577,6 +683,8 @@ export class CodeRabbitAdapter {
 
 export function createManualVerifiedCodeRabbitFinding(input: {
   sessionId: string;
+  repository: Pick<CodeRabbitConfig, "owner" | "repository">;
+  pullNumber: number;
   headSha: string;
   externalId: string;
   reviewUrl: string;
@@ -590,14 +698,24 @@ export function createManualVerifiedCodeRabbitFinding(input: {
 }): ProviderEnvelope<NormalizedCodeRabbitFinding> {
   validateInspectionRequest({
     sessionId: input.sessionId,
-    pullNumber: 1,
+    pullNumber: input.pullNumber,
     headSha: input.headSha,
   });
   const url = new URL(input.reviewUrl);
-  if (url.protocol !== "https:" || url.hostname !== "github.com") {
+  const expectedPullPath = `/${encodeURIComponent(input.repository.owner)}/${encodeURIComponent(
+    input.repository.repository,
+  )}/pull/${input.pullNumber}`;
+  if (
+    url.protocol !== "https:" ||
+    url.hostname.toLowerCase() !== "github.com" ||
+    (url.pathname !== expectedPullPath &&
+      !url.pathname.startsWith(`${expectedPullPath}/`)) ||
+    input.repository.owner.trim() === "" ||
+    input.repository.repository.trim() === ""
+  ) {
     throw new ProviderResponseError(
       "coderabbit",
-      "Manual CodeRabbit attestation must link to a verifiable GitHub review page",
+      "Manual CodeRabbit attestation URL must match the configured repository and pull request",
       false,
     );
   }
@@ -609,8 +727,9 @@ export function createManualVerifiedCodeRabbitFinding(input: {
     );
   }
   const mapped = mapCodeRabbitSeverity(input.rawSeverity);
-  return liveEnvelope(
-    "coderabbit",
+  // A human attestation is intentionally not represented as live CodeRabbit
+  // provider output. Its inner ReviewFinding remains manual_verified.
+  return manualVerifiedEnvelope(
     normalizedFinding({
       sessionId: input.sessionId,
       headSha: input.headSha,
@@ -625,6 +744,10 @@ export function createManualVerifiedCodeRabbitFinding(input: {
       line: input.line,
       provider: "manual_verified",
     }),
-    input.attestedAt,
+    {
+      attestedAt: input.attestedAt,
+      attestedBy: input.attestedBy,
+      evidenceRef: input.reviewUrl,
+    },
   );
 }

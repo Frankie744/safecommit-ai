@@ -34,11 +34,20 @@ export interface LocalTestProvenance {
   capturedAt: string;
 }
 
+export interface ManualVerifiedProvenance {
+  mode: "manual-verified";
+  kind: "manual-verified";
+  attestedAt: string;
+  attestedBy: string;
+  evidenceRef: string;
+}
+
 export type ProviderProvenance =
   | LiveProvenance
   | CachedProvenance
   | MockProvenance
-  | LocalTestProvenance;
+  | LocalTestProvenance
+  | ManualVerifiedProvenance;
 
 export type ProviderTransport = "official-sdk" | "local-test";
 
@@ -146,6 +155,36 @@ export function localTestEnvelope<T>(
   return {
     provider,
     provenance: { mode: "local-test", kind: "local-test", capturedAt },
+    data,
+  };
+}
+
+export function manualVerifiedEnvelope<T>(
+  data: T,
+  metadata: {
+    attestedAt: string;
+    attestedBy: string;
+    evidenceRef: string;
+  },
+): ProviderEnvelope<T> {
+  if (
+    !nonEmpty(metadata.attestedAt) ||
+    !nonEmpty(metadata.attestedBy) ||
+    !nonEmpty(metadata.evidenceRef)
+  ) {
+    throw new ProviderConfigurationError(
+      "coderabbit",
+      ["attestedAt", "attestedBy", "evidenceRef"],
+      "Manual verification requires an identified actor, timestamp, and evidence reference",
+    );
+  }
+  return {
+    provider: "coderabbit",
+    provenance: {
+      mode: "manual-verified",
+      kind: "manual-verified",
+      ...metadata,
+    },
     data,
   };
 }

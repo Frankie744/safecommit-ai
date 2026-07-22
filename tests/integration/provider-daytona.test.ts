@@ -148,6 +148,22 @@ describe("Daytona isolation contract", () => {
       fake.commands.find((command) => command.command.startsWith("cmake -S"))
         ?.command,
     ).toContain("fixtures/battery-controller");
+    expect(
+      fake.commands
+        .filter((command) => command.command.startsWith("ctest "))
+        .every((command) => command.command.includes("--no-tests=error")),
+    ).toBe(true);
+    const artifactManifest = result.data.commands.find(
+      (command) => command.id.endsWith(":artifact-manifest"),
+    );
+    expect(artifactManifest?.artifactHash).toMatch(/^[0-9a-f]{64}$/u);
+    expect(
+      result.data.commands
+        .filter((command) => command !== artifactManifest)
+        .every((command) => command.artifactHash === undefined),
+    ).toBe(true);
+    expect(result.data.commands.every((command) => command.stdoutHash !== undefined))
+      .toBe(true);
   });
 
   it("stops after a trusted command failure but still destroys the sandbox", async () => {
@@ -183,6 +199,37 @@ describe("Daytona isolation contract", () => {
       }),
     ).rejects.toBeInstanceOf(ProviderResponseError);
     expect(fake.events).toEqual([]);
+  });
+
+  it("rejects protected-path and threshold patches before creating a sandbox", async () => {
+    const unsafeCandidates: CandidatePatch[] = [
+      {
+        ...CANDIDATE,
+        unifiedDiff:
+          "diff --git a/fixtures/battery-controller/tests/safety_tests.c b/fixtures/battery-controller/tests/safety_tests.c\n--- a/fixtures/battery-controller/tests/safety_tests.c\n+++ b/fixtures/battery-controller/tests/safety_tests.c\n@@ -1 +1 @@\n-old\n+new\n",
+      },
+      {
+        ...CANDIDATE,
+        unifiedDiff:
+          "diff --git a/fixtures/battery-controller/src/battery_controller.c b/fixtures/battery-controller/src/battery_controller.c\n--- a/fixtures/battery-controller/src/battery_controller.c\n+++ b/fixtures/battery-controller/src/battery_controller.c\n@@ -1 +1,2 @@\n-old\n+#define SENSOR_STALE_TIMEOUT_MS 9999\n+new\n",
+      },
+    ];
+
+    for (const candidate of unsafeCandidates) {
+      const fake = new FakeDaytona();
+      await expect(
+        new DaytonaAdapter(CONFIG, fake).validateCandidate({
+          runId: "run-unsafe",
+          sessionId: "session-daytona",
+          candidate,
+          repository: {
+            repoUrl: "https://github.com/example/safeflash.git",
+            commitSha: COMMIT,
+          },
+        }),
+      ).rejects.toBeInstanceOf(ProviderResponseError);
+      expect(fake.events).toEqual([]);
+    }
   });
 
   it("runs a network-blocked disposable smoke and verifies exact output", async () => {

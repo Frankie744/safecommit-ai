@@ -9,6 +9,7 @@ import {
   type OperatingMode,
 } from "@safeflash/domain";
 import { Daytona, type Sandbox } from "@daytona/sdk";
+import { validatePatchIntegrity } from "@safeflash/safety-policy";
 
 import {
   ProviderResponseError,
@@ -28,9 +29,10 @@ export type DaytonaCommandId =
   | "patch-apply"
   | "configure"
   | "build"
+  | "artifact-manifest"
   | "unit-tests"
   | "safety-tests"
-  | "integrity-checks";
+  | "staged-diff-whitespace";
 
 export interface DaytonaCommandDefinition {
   id: DaytonaCommandId;
@@ -67,17 +69,23 @@ export const DEFAULT_DAYTONA_COMMAND_POLICY: readonly DaytonaCommandDefinition[]
       timeoutSeconds: 90,
     },
     {
+      id: "artifact-manifest",
+      command:
+        "sha256sum build/battery_unit_tests build/battery_safety_tests",
+      timeoutSeconds: 10,
+    },
+    {
       id: "unit-tests",
-      command: "ctest --test-dir build --output-on-failure -L unit",
+      command: "ctest --test-dir build --output-on-failure --no-tests=error -L unit",
       timeoutSeconds: 45,
     },
     {
       id: "safety-tests",
-      command: "ctest --test-dir build --output-on-failure -L safety",
+      command: "ctest --test-dir build --output-on-failure --no-tests=error -L safety",
       timeoutSeconds: 45,
     },
     {
-      id: "integrity-checks",
+      id: "staged-diff-whitespace",
       command: "git diff --cached --check",
       timeoutSeconds: 10,
     },
@@ -378,6 +386,16 @@ export class DaytonaAdapter {
   ): Promise<ProviderEnvelope<DaytonaValidationEvidence>> {
     validateRepository(request.repository);
     const candidate = parseCandidatePatch(request.candidate);
+    const integrity = validatePatchIntegrity(candidate.unifiedDiff);
+    if (!integrity.valid) {
+      throw new ProviderResponseError(
+        "daytona",
+        `Candidate patch failed server-owned integrity policy: ${integrity.violations
+          .map((violation) => violation.code)
+          .join(", ")}`,
+        false,
+      );
+    }
     let sandbox: DaytonaSandboxPort | undefined;
     let destroyed = false;
     const commands: CommandEvidence[] = [];
@@ -439,7 +457,10 @@ export class DaytonaAdapter {
             ["/bin/sh", "-lc", definition.command],
             REPOSITORY_PATH,
           ),
-          artifactHash: sha256(output),
+          artifactHash:
+            definition.id === "artifact-manifest"
+              ? sha256(output.trim())
+              : undefined,
           exitCode: response.exitCode,
           durationMs: Math.max(0, finishedAt.getTime() - startedAt.getTime()),
           stdoutSummary: outputSummary(output),

@@ -215,6 +215,17 @@ function validateCreateRequest(
       false,
     );
   }
+  if (
+    request.currentBinding.candidateId !== request.candidateId ||
+    request.currentBinding.evidenceDigest !== request.description.evidenceDigest ||
+    request.currentBinding.commitSha !== request.expectedHeadSha
+  ) {
+    throw new ProviderResponseError(
+      "github",
+      "PR candidate, evidence digest, and head SHA must exactly match the approved binding",
+      false,
+    );
+  }
   if (!/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/iu.test(request.expectedHeadSha)) {
     throw new ProviderResponseError(
       "github",

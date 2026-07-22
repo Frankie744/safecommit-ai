@@ -18,7 +18,6 @@ import {
   type GitHubPullRequestInfo,
 } from "@safeflash/integrations";
 
-const BASE_SHA = "a".repeat(40);
 const HEAD_SHA = "b".repeat(40);
 const OLD_HEAD_SHA = "c".repeat(40);
 
@@ -36,7 +35,7 @@ const CURRENT_BINDING: ApprovalBinding = {
   patchDigest: "patch-digest",
   evidenceDigest: "evidence-digest",
   policyVersion: "policy-v1",
-  commitSha: BASE_SHA,
+  commitSha: HEAD_SHA,
 };
 
 const APPROVAL = createHumanApproval({
@@ -125,6 +124,22 @@ class FakeCodeRabbit implements CodeRabbitClientPort {
   reviews: Awaited<ReturnType<CodeRabbitClientPort["listReviews"]>> = [];
   comments: Awaited<ReturnType<CodeRabbitClientPort["listReviewComments"]>> = [];
   checks: Awaited<ReturnType<CodeRabbitClientPort["listChecksForRef"]>> = [];
+  pullHeadSha = HEAD_SHA;
+  pullHeadSequence: string[] = [];
+  pullReadCount = 0;
+
+  async getPullRequest() {
+    const headSha = this.pullHeadSequence[this.pullReadCount] ?? this.pullHeadSha;
+    this.pullReadCount += 1;
+    return {
+      number: 42,
+      headSha,
+      baseRef: "main",
+      state: "open" as const,
+      merged: false,
+      url: "https://github.com/safeflash-demo/public-firmware/pull/42",
+    };
+  }
 
   async listReviews() {
     return this.reviews;
@@ -148,6 +163,30 @@ describe("GitHub mutation and CodeRabbit exact-head gates", () => {
       }),
     ).rejects.toBeInstanceOf(ProviderResponseError);
     expect(fake.calls).toEqual([]);
+  });
+
+  it("binds candidate, evidence, and approved commit to the requested PR head", async () => {
+    const mutations = [
+      { candidateId: "candidate-other" },
+      {
+        description: {
+          ...createRequest().description,
+          evidenceDigest: "different-evidence",
+        },
+      },
+      { expectedHeadSha: OLD_HEAD_SHA },
+    ];
+
+    for (const mutation of mutations) {
+      const fake = new FakeGitHub();
+      await expect(
+        new GitHubAdapter(GITHUB_CONFIG, fake).createOrGetPullRequest({
+          ...createRequest(),
+          ...mutation,
+        }),
+      ).rejects.toBeInstanceOf(ProviderResponseError);
+      expect(fake.calls).toEqual([]);
+    }
   });
 
   it("creates only an open unmerged PR at the exact approved head", async () => {
@@ -241,6 +280,102 @@ describe("GitHub mutation and CodeRabbit exact-head gates", () => {
     expect(result.data.staleEvidenceIds).toContain("review:review-old");
   });
 
+  it("marks the request stale before reading review evidence when the PR head changed", async () => {
+    const fake = new FakeCodeRabbit();
+    fake.pullHeadSha = OLD_HEAD_SHA;
+    fake.checks = [
+      {
+        id: "forged-success",
+        appSlug: "coderabbitai",
+        name: "CodeRabbit Review",
+        headSha: HEAD_SHA,
+        status: "completed",
+        conclusion: "success",
+        url: "https://github.com/safeflash-demo/public-firmware/runs/forged",
+      },
+    ];
+    const result = await new CodeRabbitAdapter(
+      CODERABBIT_CONFIG,
+      fake,
+    ).inspectReview({
+      sessionId: "session-github",
+      pullNumber: 42,
+      headSha: HEAD_SHA,
+    });
+    expect(result.data).toMatchObject({ status: "stale", passed: false });
+    expect(result.data.staleEvidenceIds).toEqual([
+      `pull-request-head:${OLD_HEAD_SHA}`,
+    ]);
+    expect(result.data.exactHeadEvidenceIds).toEqual([]);
+  });
+
+  it("accepts only the official CodeRabbit bot login and app slug", async () => {
+    const fake = new FakeCodeRabbit();
+    fake.reviews = [
+      {
+        id: "lookalike-review",
+        actorLogin: "code-rabbit-ai[bot]",
+        state: "APPROVED",
+        body: "Review completed",
+        commitId: HEAD_SHA,
+        url: "https://github.com/safeflash-demo/public-firmware/pull/42#lookalike",
+      },
+    ];
+    fake.checks = [
+      {
+        id: "lookalike-check",
+        appSlug: "untrusted-reviewer",
+        name: "CodeRabbit Review",
+        headSha: HEAD_SHA,
+        status: "completed",
+        conclusion: "success",
+        url: "https://github.com/safeflash-demo/public-firmware/runs/lookalike",
+      },
+    ];
+    const result = await new CodeRabbitAdapter(
+      CODERABBIT_CONFIG,
+      fake,
+    ).inspectReview({
+      sessionId: "session-github",
+      pullNumber: 42,
+      headSha: HEAD_SHA,
+    });
+    expect(result.data).toMatchObject({ status: "pending", passed: false });
+    expect(result.data.exactHeadEvidenceIds).toEqual([]);
+  });
+
+  it("fails closed when the PR head changes during review evaluation", async () => {
+    const fake = new FakeCodeRabbit();
+    fake.pullHeadSequence = [HEAD_SHA, OLD_HEAD_SHA];
+    fake.checks = [
+      {
+        id: "initial-success",
+        appSlug: "coderabbitai",
+        name: "CodeRabbit Review",
+        headSha: HEAD_SHA,
+        status: "completed",
+        conclusion: "success",
+        url: "https://github.com/safeflash-demo/public-firmware/runs/initial",
+      },
+    ];
+
+    const result = await new CodeRabbitAdapter(
+      CODERABBIT_CONFIG,
+      fake,
+    ).inspectReview({
+      sessionId: "session-github",
+      pullNumber: 42,
+      headSha: HEAD_SHA,
+    });
+
+    expect(result.data).toMatchObject({
+      status: "stale",
+      passed: false,
+      observedPrHeadSha: OLD_HEAD_SHA,
+    });
+    expect(result.data.exactHeadEvidenceIds).toEqual([]);
+  });
+
   it("blocks Major findings and passes exact-head success without blockers", async () => {
     const blockedFake = new FakeCodeRabbit();
     blockedFake.comments = [
@@ -306,6 +441,8 @@ describe("GitHub mutation and CodeRabbit exact-head gates", () => {
   it("supports verifiable structured manual fallback without losing raw severity", () => {
     const result = createManualVerifiedCodeRabbitFinding({
       sessionId: "session-github",
+      repository: CODERABBIT_CONFIG,
+      pullNumber: 42,
       headSha: HEAD_SHA,
       externalId: "manual-review-42",
       reviewUrl:
@@ -322,5 +459,30 @@ describe("GitHub mutation and CodeRabbit exact-head gates", () => {
       headSha: HEAD_SHA,
       finding: { provider: "manual_verified", severity: "high" },
     });
+    expect(result.provider).toBe("coderabbit");
+    expect(result.provenance).toMatchObject({
+      mode: "manual-verified",
+      kind: "manual-verified",
+      attestedBy: "demo-operator",
+    });
+  });
+
+  it("rejects a manual attestation URL for another repository or PR", () => {
+    expect(() =>
+      createManualVerifiedCodeRabbitFinding({
+        sessionId: "session-github",
+        repository: CODERABBIT_CONFIG,
+        pullNumber: 42,
+        headSha: HEAD_SHA,
+        externalId: "manual-review-evil",
+        reviewUrl:
+          "https://github.com/attacker/public-firmware/pull/42#pullrequestreview-42",
+        rawSeverity: "major",
+        title: "Unbound review",
+        body: "This URL belongs to another repository.",
+        attestedBy: "demo-operator",
+        attestedAt: "2026-07-22T13:00:00.000Z",
+      }),
+    ).toThrow(ProviderResponseError);
   });
 });

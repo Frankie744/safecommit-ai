@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { CandidatePatchSchema } from "../../packages/domain/src/index";
 import { LOCAL_TOURNAMENT_CANDIDATES } from "../../demo/candidate-patches/index";
 import {
+  buildLocalChildEnvironment,
   JsonlEventStore,
   LiveTournamentProviderRequiredError,
   runLocalTournament,
@@ -122,6 +123,43 @@ describe("Phase 3 local safety tournament", () => {
         mode: "live",
         sessionId: `live-missing-${randomUUID().slice(0, 8)}`,
         workspaceRoot: resolve(process.cwd()),
+      }),
+    ).rejects.toBeInstanceOf(LiveTournamentProviderRequiredError);
+  });
+
+  it("does not expose provider secrets to repository-owned local test binaries", () => {
+    const environment = buildLocalChildEnvironment({
+      PATH: "C:/trusted-tools",
+      SYSTEMROOT: "C:/Windows",
+      DAYTONA_API_KEY: "daytona-secret",
+      FIREWORKS_API_KEY: "fireworks-secret",
+      BRAINTRUST_API_KEY: "braintrust-secret",
+      GITHUB_TOKEN: "github-secret",
+    });
+
+    expect(environment.PATH).toBe("C:/trusted-tools");
+    expect(environment.SYSTEMROOT).toBe("C:/Windows");
+    expect(environment.DAYTONA_API_KEY).toBeUndefined();
+    expect(environment.FIREWORKS_API_KEY).toBeUndefined();
+    expect(environment.BRAINTRUST_API_KEY).toBeUndefined();
+    expect(environment.GITHUB_TOKEN).toBeUndefined();
+  });
+
+  it("rejects an external provider that self-reports inconsistent provenance", async () => {
+    await expect(
+      runSafetyTournament({
+        mode: "live",
+        sessionId: "live-forged-provenance",
+        provider: {
+          run: async () =>
+            ({
+              provenance: {
+                mode: "live",
+                kind: "recorded-live",
+                provider: "forged-provider",
+              },
+            }) as never,
+        },
       }),
     ).rejects.toBeInstanceOf(LiveTournamentProviderRequiredError);
   });

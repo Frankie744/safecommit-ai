@@ -28,19 +28,25 @@ afterEach(async () => {
 describe("append-only hash-chain event store", () => {
   it("serializes concurrent appends and replays verified local evidence", async () => {
     const store = await temporaryStore();
+    await store.append({
+      sessionId: "session-event-store",
+      eventType: "TOURNAMENT_STARTED",
+      occurredAt: "2026-07-22T12:00:00.000Z",
+      payload: { candidateCount: 3 },
+    });
     await Promise.all(
-      ["STARTED", "CANDIDATE_DONE", "COMPLETED"].map((eventType, index) =>
+      ["candidate-a", "candidate-b", "candidate-c"].map((candidateId, index) =>
         store.append({
           sessionId: "session-event-store",
-          eventType,
-          occurredAt: `2026-07-22T12:00:0${index}.000Z`,
-          payload: { index },
+          eventType: "CANDIDATE_VALIDATION_STARTED",
+          occurredAt: `2026-07-22T12:00:0${index + 1}.000Z`,
+          payload: { candidateId, sandboxId: `sandbox-${index}` },
         }),
       ),
     );
 
     const events = await store.readAll();
-    expect(events.map((event) => event.sequence)).toEqual([1, 2, 3]);
+    expect(events.map((event) => event.sequence)).toEqual([1, 2, 3, 4]);
     expect(events[0]?.previousEventHash).toBeNull();
     expect(events[1]?.previousEventHash).toBe(events[0]?.eventHash);
     expect(events.every((event) => event.provenance.mode === "mock")).toBe(true);
@@ -50,21 +56,45 @@ describe("append-only hash-chain event store", () => {
       ...state,
       event.eventType,
     ]);
-    expect(replayed).toEqual(["STARTED", "CANDIDATE_DONE", "COMPLETED"]);
+    expect(replayed).toEqual([
+      "TOURNAMENT_STARTED",
+      "CANDIDATE_VALIDATION_STARTED",
+      "CANDIDATE_VALIDATION_STARTED",
+      "CANDIDATE_VALIDATION_STARTED",
+    ]);
   });
 
   it("rejects a modified historical event", async () => {
     const store = await temporaryStore();
     await store.append({
       sessionId: "session-tamper",
-      eventType: "SAFE_RESULT",
+      eventType: "TOURNAMENT_STARTED",
       occurredAt: "2026-07-22T12:00:00.000Z",
-      payload: { eligible: false },
+      payload: { candidateCount: 3 },
     });
 
     const original = await readFile(store.filePath, "utf8");
-    await writeFile(store.filePath, original.replace("false", "true"), "utf8");
+    await writeFile(store.filePath, original.replace("candidateCount\":3", "candidateCount\":2"), "utf8");
 
     await expect(store.readAll()).rejects.toBeInstanceOf(EventChainIntegrityError);
+  });
+
+  it("rejects a hash-valid completion that skips candidate evidence", async () => {
+    const store = await temporaryStore();
+    await store.append({
+      sessionId: "session-semantic-forgery",
+      eventType: "TOURNAMENT_STARTED",
+      occurredAt: "2026-07-22T12:00:00.000Z",
+      payload: { candidateCount: 3 },
+    });
+
+    await expect(
+      store.append({
+        sessionId: "session-semantic-forgery",
+        eventType: "TOURNAMENT_COMPLETED",
+        occurredAt: "2026-07-22T12:00:01.000Z",
+        payload: { winnerCandidateId: "candidate-never-validated" },
+      }),
+    ).rejects.toBeInstanceOf(EventChainIntegrityError);
   });
 });

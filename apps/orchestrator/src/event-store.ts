@@ -47,6 +47,24 @@ function eventHashInput(event: Omit<StoredEvent, "eventHash">): JsonObject {
   return event as unknown as JsonObject;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function requirePayloadString(
+  payload: JsonObject,
+  name: string,
+  sequence: number,
+): string {
+  const value = payload[name];
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new EventChainIntegrityError(
+      `Event ${sequence} payload.${name} must be a non-empty string`,
+    );
+  }
+  return value;
+}
+
 function parseJsonLine(line: string, lineNumber: number): StoredEvent {
   let decoded: unknown;
   try {
@@ -56,15 +74,39 @@ function parseJsonLine(line: string, lineNumber: number): StoredEvent {
       `Event log line ${lineNumber} is not valid JSON: ${error instanceof Error ? error.message : "unknown parse error"}`,
     );
   }
-  if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
+  if (!isRecord(decoded)) {
     throw new EventChainIntegrityError(`Event log line ${lineNumber} is not an object`);
   }
-  return decoded as StoredEvent;
+  if (
+    decoded.schemaVersion !== 1 ||
+    !Number.isSafeInteger(decoded.sequence) ||
+    typeof decoded.sessionId !== "string" ||
+    typeof decoded.eventType !== "string" ||
+    typeof decoded.occurredAt !== "string" ||
+    Number.isNaN(Date.parse(decoded.occurredAt)) ||
+    !isRecord(decoded.payload) ||
+    !isRecord(decoded.provenance) ||
+    (decoded.previousEventHash !== null &&
+      (typeof decoded.previousEventHash !== "string" ||
+        !/^[0-9a-f]{64}$/u.test(decoded.previousEventHash))) ||
+    typeof decoded.eventHash !== "string" ||
+    !/^[0-9a-f]{64}$/u.test(decoded.eventHash)
+  ) {
+    throw new EventChainIntegrityError(
+      `Event log line ${lineNumber} does not match the stored-event schema`,
+    );
+  }
+  return decoded as unknown as StoredEvent;
 }
 
 export function verifyEventChain(events: readonly StoredEvent[]): void {
   let previousEventHash: string | null = null;
   let sessionId: string | undefined;
+  let declaredCandidateCount: number | undefined;
+  let terminal = false;
+  const startedCandidates = new Map<string, string>();
+  const startedSandboxes = new Set<string>();
+  const completedCandidates = new Map<string, boolean>();
   for (const [index, event] of events.entries()) {
     const expectedSequence = index + 1;
     if (event.schemaVersion !== 1 || event.sequence !== expectedSequence) {
@@ -98,6 +140,131 @@ export function verifyEventChain(events: readonly StoredEvent[]): void {
       );
     }
     previousEventHash = eventHash;
+
+    if (terminal) {
+      throw new EventChainIntegrityError(
+        `Event ${expectedSequence} appears after a terminal tournament event`,
+      );
+    }
+    switch (event.eventType) {
+      case "TOURNAMENT_STARTED": {
+        if (index !== 0 || declaredCandidateCount !== undefined) {
+          throw new EventChainIntegrityError(
+            "TOURNAMENT_STARTED must be the first and only start event",
+          );
+        }
+        const candidateCount = event.payload.candidateCount;
+        if (!Number.isSafeInteger(candidateCount) || candidateCount !== 3) {
+          throw new EventChainIntegrityError(
+            "Local tournament evidence must declare exactly three candidates",
+          );
+        }
+        declaredCandidateCount = candidateCount;
+        break;
+      }
+      case "CANDIDATE_VALIDATION_STARTED": {
+        if (declaredCandidateCount === undefined) {
+          throw new EventChainIntegrityError(
+            "Candidate validation started before tournament start",
+          );
+        }
+        const candidateId = requirePayloadString(
+          event.payload,
+          "candidateId",
+          expectedSequence,
+        );
+        const sandboxId = requirePayloadString(
+          event.payload,
+          "sandboxId",
+          expectedSequence,
+        );
+        if (
+          startedCandidates.has(candidateId) ||
+          startedSandboxes.has(sandboxId) ||
+          startedCandidates.size >= declaredCandidateCount
+        ) {
+          throw new EventChainIntegrityError(
+            "Candidate IDs and sandbox IDs must be unique and within the declared count",
+          );
+        }
+        startedCandidates.set(candidateId, sandboxId);
+        startedSandboxes.add(sandboxId);
+        break;
+      }
+      case "COMMAND_COMPLETED": {
+        const candidateId = requirePayloadString(
+          event.payload,
+          "candidateId",
+          expectedSequence,
+        );
+        const sandboxId = requirePayloadString(
+          event.payload,
+          "sandboxId",
+          expectedSequence,
+        );
+        requirePayloadString(event.payload, "commandId", expectedSequence);
+        if (startedCandidates.get(candidateId) !== sandboxId) {
+          throw new EventChainIntegrityError(
+            "Command evidence does not match a started candidate sandbox",
+          );
+        }
+        break;
+      }
+      case "CANDIDATE_VALIDATION_COMPLETED": {
+        const candidateId = requirePayloadString(
+          event.payload,
+          "candidateId",
+          expectedSequence,
+        );
+        const sandboxId = requirePayloadString(
+          event.payload,
+          "sandboxId",
+          expectedSequence,
+        );
+        if (
+          startedCandidates.get(candidateId) !== sandboxId ||
+          completedCandidates.has(candidateId) ||
+          typeof event.payload.eligible !== "boolean"
+        ) {
+          throw new EventChainIntegrityError(
+            "Completed candidate evidence is duplicate or not bound to its sandbox",
+          );
+        }
+        completedCandidates.set(candidateId, event.payload.eligible);
+        break;
+      }
+      case "TOURNAMENT_COMPLETED": {
+        const winnerCandidateId = requirePayloadString(
+          event.payload,
+          "winnerCandidateId",
+          expectedSequence,
+        );
+        if (
+          declaredCandidateCount === undefined ||
+          startedCandidates.size !== declaredCandidateCount ||
+          completedCandidates.size !== declaredCandidateCount ||
+          completedCandidates.get(winnerCandidateId) !== true
+        ) {
+          throw new EventChainIntegrityError(
+            "A completed tournament requires three completed candidates and an eligible winner",
+          );
+        }
+        terminal = true;
+        break;
+      }
+      case "TOURNAMENT_FAILED":
+        if (declaredCandidateCount === undefined) {
+          throw new EventChainIntegrityError(
+            "Tournament failure appeared before tournament start",
+          );
+        }
+        terminal = true;
+        break;
+      default:
+        throw new EventChainIntegrityError(
+          `Event ${expectedSequence} has unsupported type ${event.eventType}`,
+        );
+    }
   }
 }
 
@@ -159,6 +326,7 @@ export class JsonlEventStore {
           ...unsigned,
           eventHash: computeEvidenceDigest(eventHashInput(unsigned)),
         };
+        verifyEventChain([...current, event]);
         await mkdir(dirname(this.filePath), { recursive: true });
         await appendFile(this.filePath, `${canonicalJson(event)}\n`, "utf8");
         resolveResult(event);
