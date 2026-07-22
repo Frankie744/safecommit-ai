@@ -335,6 +335,7 @@ async function installSessionApi(
 ) {
   let current = structuredClone(initial);
   const decisions: unknown[] = [];
+  let detailRequests = 0;
 
   await page.route("**/api/sessions**", async (route) => {
     const request = route.request();
@@ -359,6 +360,7 @@ async function installSessionApi(
     }
 
     if (url.pathname === detailPath && method === "GET") {
+      detailRequests += 1;
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({ session: current }),
@@ -383,7 +385,7 @@ async function installSessionApi(
     });
   });
 
-  return { decisions };
+  return { decisions, detailRequests: () => detailRequests };
 }
 
 test("renders danger, three persistent candidates, provenance, and a closed PR gate", async ({
@@ -423,12 +425,38 @@ test("marks mock mode and every visible provider result as not verified", async 
   await expect(page.getByTestId("mode-badge")).toHaveText(
     "MOCK • NOT PROVIDER-VERIFIED",
   );
+  await expect(page.getByText("Local evaluation score")).toHaveCount(3);
+  await expect(page.getByText("Braintrust score")).toHaveCount(0);
+  await expect(page.getByTestId("approve-decision")).toHaveText(
+    "Approve evidence (no live PR)",
+  );
   const badges = page.getByTestId("provenance-badge");
   const badgeCount = await badges.count();
   expect(badgeCount).toBeGreaterThan(10);
   for (let index = 0; index < badgeCount; index += 1) {
     await expect(badges.nth(index)).toContainText("NOT PROVIDER-VERIFIED");
   }
+});
+
+test("does not poll or permit a duplicate decision after bound approval", async ({
+  page,
+}) => {
+  const approved = asMockSession();
+  approved.approval = {
+    decision: "approved",
+    approverDisplayName: "Local operator",
+    evidenceDigest: approved.currentEvidenceDigest ?? "",
+    bindingDigest: "sha256:test-binding",
+  };
+  const api = await installSessionApi(page, approved);
+
+  await page.goto("/");
+  await expect(page.getByTestId("approve-decision")).toBeDisabled();
+  await expect(page.getByText("Approval recorded — live publish remains blocked")).toBeVisible();
+  await page.waitForTimeout(2_200);
+
+  expect(api.detailRequests()).toBe(1);
+  expect(api.decisions).toHaveLength(0);
 });
 
 test("submits bound evidence to the decision API and only then shows ready for human merge", async ({
@@ -458,6 +486,7 @@ test("submits bound evidence to the decision API and only then shows ready for h
   );
   await expect(page.getByTestId("candidate-card")).toHaveCount(3);
   await expect(page.getByTestId("rejection-evidence")).toHaveCount(2);
+  await expect(page.getByTestId("approve-decision")).toBeDisabled();
 
   await expect.poll(() => api.decisions.length).toBe(1);
   expect(api.decisions[0]).toMatchObject({

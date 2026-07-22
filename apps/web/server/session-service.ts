@@ -135,6 +135,7 @@ function evidenceView(
 function mapCandidate(
   result: LocalCandidateResult,
   winnerCandidateId: string | null,
+  index: number,
 ): CandidateView {
   const buildCommand = candidateCommand(result, "build");
   const unitCommand = candidateCommand(result, "unit-tests");
@@ -145,7 +146,7 @@ function mapCandidate(
 
   return {
     id: result.candidate.candidateId,
-    label: result.candidate.candidateId,
+    label: `Candidate ${String.fromCharCode("A".charCodeAt(0) + index)}`,
     strategy: result.candidate.strategy,
     hypothesis: result.candidate.hypothesis,
     selected: result.candidate.candidateId === winnerCandidateId,
@@ -600,8 +601,8 @@ export class SessionService {
           ],
           provenance: { ...LOCAL_PROVENANCE },
         },
-        candidates: tournament.candidates.map((candidate) =>
-          mapCandidate(candidate, winnerId),
+        candidates: tournament.candidates.map((candidate, index) =>
+          mapCandidate(candidate, winnerId, index),
         ),
         selectedCandidateId: winnerId,
         currentPatchDigest: patchDigest,

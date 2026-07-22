@@ -208,6 +208,12 @@ function CandidateCard({ candidate }: { candidate: CandidateView }) {
     : candidate.eliminatedReason
       ? "eliminated"
       : "running";
+  const hasVerifiedBraintrustScore =
+    candidate.score.provenance.provider.toLowerCase() === "braintrust" &&
+    candidate.score.provenance.verified &&
+    !["mock", "local-test", "unknown"].includes(
+      candidate.score.provenance.kind,
+    );
 
   return (
     <article
@@ -270,7 +276,11 @@ function CandidateCard({ candidate }: { candidate: CandidateView }) {
 
       <div className="candidate-score">
         <div>
-          <span>Braintrust score</span>
+          <span>
+            {hasVerifiedBraintrustScore
+              ? "Braintrust score"
+              : "Local evaluation score"}
+          </span>
           <strong>{score === "—" ? score : score + "%"}</strong>
         </div>
         <span
@@ -455,14 +465,15 @@ function ApprovalGate({
   const selected = session.candidates.find(
     (candidate) => candidate.id === session.selectedCandidateId,
   );
-  const canDecide =
-    session.state === "AWAITING_HUMAN_APPROVAL" &&
-    selected !== undefined &&
-    session.currentEvidenceDigest !== undefined;
   const approvalIsCurrent =
     session.approval?.decision === "approved" &&
     !session.approval.invalidatedAt &&
     session.approval.evidenceDigest === session.currentEvidenceDigest;
+  const canDecide =
+    session.state === "AWAITING_HUMAN_APPROVAL" &&
+    selected !== undefined &&
+    session.currentEvidenceDigest !== undefined &&
+    !approvalIsCurrent;
   const ready = session.state === "READY_TO_MERGE";
   const pullRequestIsContractOnly =
     session.pullRequest?.provenance.kind === "mock" ||
@@ -481,7 +492,9 @@ function ApprovalGate({
               {ready
                 ? "Ready for human merge"
                 : approvalIsCurrent
-                  ? "Approval recorded — backend owns PR transition"
+                  ? session.mode === "live"
+                    ? "Approval recorded — backend owns PR transition"
+                    : "Approval recorded — live publish remains blocked"
                   : "The agent cannot cross this boundary"}
             </strong>
           </div>
@@ -545,7 +558,9 @@ function ApprovalGate({
           >
             {busyDecision === "approved"
               ? "Recording…"
-              : "Approve PR creation"}
+              : session.mode === "live"
+                ? "Approve PR creation"
+                : "Approve evidence (no live PR)"}
           </button>
         </div>
         {session.pullRequest?.url ? (
@@ -749,6 +764,11 @@ export function SafeFlashConsole() {
 
   useEffect(() => {
     if (!session || TERMINAL_STATES.has(session.state)) return;
+    const approvalIsCurrent =
+      session.approval?.decision === "approved" &&
+      !session.approval.invalidatedAt &&
+      session.approval.evidenceDigest === session.currentEvidenceDigest;
+    if (approvalIsCurrent) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void getSession(session.id)

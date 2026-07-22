@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SafeFlash">
+  <rect width="64" height="64" rx="14" fill="#07120e"/>
+  <path d="M32 8 52 16v15c0 13-8 21-20 25C20 52 12 44 12 31V16l20-8Z" fill="#18d58b"/>
+  <path d="m34 17-12 19h9l-2 12 13-21h-9l1-10Z" fill="#07120e"/>
+</svg>
