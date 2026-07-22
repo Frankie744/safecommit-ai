@@ -14,6 +14,7 @@ test-results/
 # Raw provider output can contain secrets. Commit only redacted summaries.
 artifacts/evidence/**/raw/
 artifacts/evidence/**/*.raw.*
+artifacts/evidence/latest-vitest.json
 
 # Native build outputs.
 fixtures/**/build/
@@ -21,6 +22,7 @@ fixtures/**/out/
 *.obj
 *.pdb
 *.exe
+*.tsbuildinfo
 
 # Editor and OS noise.
 .DS_Store

@@ -17,6 +17,7 @@
     "test:adversarial": "vitest run tests/adversarial",
     "test:firmware": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-firmware.ps1",
     "test:e2e": "playwright test",
+    "demo:local": "tsx scripts/run-local-tournament.ts",
     "smoke:external": "tsx scripts/smoke-external.ts",
     "verify": "npm run typecheck && npm run test && npm run build && npm run test:e2e"
   },
@@ -31,5 +32,19 @@
     "tsx": "4.23.1",
     "typescript": "7.0.2",
     "vitest": "4.1.10"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "4.0.18",
+    "@copilotkit/react-core": "1.63.1",
+    "@copilotkit/react-ui": "1.63.1",
+    "@copilotkit/runtime": "1.63.1",
+    "@daytona/sdk": "0.200.1",
+    "braintrust": "3.24.0",
+    "next": "16.2.11",
+    "octokit": "5.0.5",
+    "openai": "6.48.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "4.4.3"
   }
 }
