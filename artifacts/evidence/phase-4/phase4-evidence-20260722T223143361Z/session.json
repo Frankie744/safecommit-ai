@@ -1,0 +1,684 @@
+{
+  "storeVersion": 1,
+  "session": {
+    "id": "web-79465da6-c2fc-4869-b816-91d535feec62",
+    "sessionId": "web-79465da6-c2fc-4869-b816-91d535feec62",
+    "createdAt": "2026-07-22T22:30:54.489Z",
+    "updatedAt": "2026-07-22T22:31:03.978Z",
+    "source": "orchestrator",
+    "sourceVersion": "web-session-service-v1",
+    "mode": "mock",
+    "runKind": "tournament",
+    "state": "AWAITING_HUMAN_APPROVAL",
+    "incidentId": "battery-sensor-disconnect",
+    "policyId": "battery-controller-safety-policy",
+    "policyVersion": "battery-safety-v1",
+    "repository": {
+      "repoUrl": "local-workspace",
+      "commitSha": "ea43ad660b7ad15c37235809cab03455c26edc90"
+    },
+    "candidateIds": [
+      "candidate-a-range-clamp",
+      "candidate-b-retry-latch",
+      "candidate-c-fail-closed"
+    ],
+    "sandboxIdsByCandidate": {
+      "candidate-a-range-clamp": "localtest-candidate-a-range-clamp-eeae4e9e",
+      "candidate-b-retry-latch": "localtest-candidate-b-retry-latch-892e7895",
+      "candidate-c-fail-closed": "localtest-candidate-c-fail-closed-098e95b4"
+    },
+    "reviewFindings": [],
+    "validationRound": 1,
+    "selectedCandidateId": "candidate-c-fail-closed",
+    "currentPatchDigest": "e282a3559687d66af67ce0b7f3834bf8fcdf55aff797f2adeaa142288f566818",
+    "currentEvidenceDigest": "69407c506f46e3f36cc7ad74b2528515a7a55fc0a3d7383c31e2af4be0d5e209",
+    "approval": {
+      "id": "approval-9fe838a0-d34c-46bc-ae64-1b27de88e3f4",
+      "sessionId": "web-79465da6-c2fc-4869-b816-91d535feec62",
+      "createdAt": "2026-07-22T22:31:03.978Z",
+      "updatedAt": "2026-07-22T22:31:03.978Z",
+      "source": "web-api-local",
+      "sourceVersion": "web-session-service-v1",
+      "candidateId": "candidate-c-fail-closed",
+      "approverId": "local-web-operator",
+      "approverDisplayName": "Local operator",
+      "decision": "approved",
+      "actedAt": "2026-07-22T22:31:03.978Z",
+      "evidenceDigest": "69407c506f46e3f36cc7ad74b2528515a7a55fc0a3d7383c31e2af4be0d5e209",
+      "patchDigest": "e282a3559687d66af67ce0b7f3834bf8fcdf55aff797f2adeaa142288f566818",
+      "policyVersion": "battery-safety-v1",
+      "commitSha": "ea43ad660b7ad15c37235809cab03455c26edc90",
+      "bindingDigest": "4d3bc4f1c1ea652c29797437c4712c290819c7c001ddcf16ba4bb20985452778"
+    }
+  },
+  "view": {
+    "id": "web-79465da6-c2fc-4869-b816-91d535feec62",
+    "mode": "mock",
+    "state": "AWAITING_HUMAN_APPROVAL",
+    "createdAt": "2026-07-22T22:30:54.489Z",
+    "updatedAt": "2026-07-22T22:31:03.978Z",
+    "repository": {
+      "repoUrl": "local-workspace",
+      "commitSha": "ea43ad660b7ad15c37235809cab03455c26edc90"
+    },
+    "incident": {
+      "title": "Battery temperature sensor disconnected while charging",
+      "summary": "The baseline firmware continues charging after a sensor disconnect; local safety tests reproduce the fault.",
+      "severity": "critical",
+      "temperatureC": 0,
+      "sensorFault": true,
+      "chargingEnabled": true,
+      "evidence": [
+        "baseline_build=passed",
+        "sensor_disconnect_safety_test=failed",
+        "fault_latch_safety_test=failed"
+      ],
+      "provenance": {
+        "kind": "local-test",
+        "provider": "local-process",
+        "verified": false
+      }
+    },
+    "policy": {
+      "name": "Battery Controller Fail-Closed Safety Policy",
+      "version": "battery-safety-v1",
+      "invariants": [
+        {
+          "id": "sensor-disconnect-fail-closed",
+          "description": "A disconnected sensor disables charging in the same update cycle.",
+          "hardGate": true
+        },
+        {
+          "id": "stale-sample-fail-closed",
+          "description": "A stale sensor stream disables charging at the configured cycle limit.",
+          "hardGate": true
+        },
+        {
+          "id": "fault-remains-latched",
+          "description": "A safety fault remains latched until an explicit reset.",
+          "hardGate": true
+        }
+      ],
+      "provenance": {
+        "kind": "local-test",
+        "provider": "local-process",
+        "verified": false
+      }
+    },
+    "candidates": [
+      {
+        "id": "candidate-a-range-clamp",
+        "label": "Candidate A",
+        "strategy": "range-validation",
+        "hypothesis": "Clamp implausible temperatures into the configured range before normal control.",
+        "selected": false,
+        "eliminatedReason": "SafetyInvariant hard gate failed",
+        "sandbox": {
+          "id": "localtest-candidate-a-range-clamp-eeae4e9e",
+          "status": "failed",
+          "isolated": true,
+          "provenance": {
+            "kind": "local-test",
+            "provider": "local-process",
+            "verified": false
+          }
+        },
+        "build": {
+          "status": "passed",
+          "summary": "Real local CMake build passed.",
+          "exitCode": 0,
+          "artifactHash": "246e5eb6e9754f6821b68406213d9e1cada1bb8b3a3e6c4b8ee602f39e2eab8c",
+          "provenance": {
+            "kind": "local-test",
+            "provider": "local-process",
+            "verified": false
+          }
+        },
+        "tests": {
+          "status": "passed",
+          "summary": "5/5 local unit tests passed.",
+          "exitCode": 0,
+          "artifactHash": "246e5eb6e9754f6821b68406213d9e1cada1bb8b3a3e6c4b8ee602f39e2eab8c",
+          "provenance": {
+            "kind": "local-test",
+            "provider": "local-process",
+            "verified": false
+          },
+          "passed": 5,
+          "total": 5
+        },
+        "safetyGate": {
+          "status": "failed",
+          "summary": "0/6 local safety tests passed.",
+          "exitCode": 8,
+          "artifactHash": "246e5eb6e9754f6821b68406213d9e1cada1bb8b3a3e6c4b8ee602f39e2eab8c",
+          "provenance": {
+            "kind": "local-test",
+            "provider": "local-process",
+            "verified": false
+          },
+          "hardGatePassed": false,
+          "failures": [
+            "SafetyInvariant hard gate failed"
+          ]
+        },
+        "score": {
+          "weighted": 0.897,
+          "eligible": false,
+          "provenance": {
+            "kind": "local-test",
+            "provider": "local-process",
+            "verified": false
+          }
+        },
+        "diff": "diff --git a/fixtures/battery-controller/src/battery_controller.c b/fixtures/battery-controller/src/battery_controller.c\n--- a/fixtures/battery-controller/src/battery_controller.c\n+++ b/fixtures/battery-controller/src/battery_controller.c\n@@ -26,6 +26,12 @@ void battery_controller_update(\n     } else {\n         controller->cycles_without_update += 1U;\n     }\n+\n+    if (sample.temperature_c < BATTERY_TEMP_VALID_MIN_C) {\n+        sample.temperature_c = BATTERY_TEMP_VALID_MIN_C;\n+    } else if (sample.temperature_c > BATTERY_TEMP_VALID_MAX_C) {\n+        sample.temperature_c = BATTERY_TEMP_VALID_MAX_C;\n+    }\n \n     /*\n      * INTENTIONAL BASELINE DEFECTS FOR THE SAFEFLASH FIXTURE:\n"
+      },
+      {
+        "id": "candidate-b-retry-latch",
+        "label": "Candidate B",
+        "strategy": "retry-and-latch",
+        "hypothesis": "Immediately latch an explicit disconnect fault before processing temperature.",
+        "selected": false,
+        "eliminatedReason": "BuildSuccess must equal 1; SafetyInvariant hard gate failed; UnitTestPassRate is below 0.95",
+        "sandbox": {
+          "id": "localtest-candidate-b-retry-latch-892e7895",
+          "status": "failed",
+          "isolated": true,
+          "provenance": {
+            "kind": "local-test",
+            "provider": "local-process",
+            "verified": false
+          }
+        },
+        "build": {
+          "status": "failed",
+          "summary": "Real local CMake build failed.",
+          "exitCode": 1,
+          "artifactHash": "4e79831eb62343662a0810debc722a9510095ddf200a5bd8e93691977b125ce5",
+          "provenance": {
+            "kind": "local-test",
+            "provider": "local-process",
+            "verified": false
+          }
+        },
+        "tests": {
+          "status": "not-run",
+          "summary": "0/0 local unit tests passed.",
+          "provenance": {
+            "kind": "local-test",
+            "provider": "local-process",
+            "verified": false
+          },
+          "passed": 0,
+          "total": 0
+        },
+        "safetyGate": {
+          "status": "not-run",
+          "summary": "0/0 local safety tests passed.",
+          "provenance": {
+            "kind": "local-test",
+            "provider": "local-process",
+            "verified": false
+          },
+          "hardGatePassed": false,
+          "failures": [
+            "BuildSuccess must equal 1",
+            "SafetyInvariant hard gate failed",
+            "UnitTestPassRate is below 0.95"
+          ]
+        },
+        "score": {
+          "weighted": 0.3465,
+          "eligible": false,
+          "provenance": {
+            "kind": "local-test",
+            "provider": "local-process",
+            "verified": false
+          }
+        },
+        "diff": "diff --git a/fixtures/battery-controller/src/battery_controller.c b/fixtures/battery-controller/src/battery_controller.c\n--- a/fixtures/battery-controller/src/battery_controller.c\n+++ b/fixtures/battery-controller/src/battery_controller.c\n@@ -26,6 +26,13 @@ void battery_controller_update(\n     } else {\n         controller->cycles_without_update += 1U;\n     }\n+\n+    if (sample.sensor_fault) {\n+        controller->charging_enabled = false;\n+        controller->fault_latched = true;\n+        controller->fault_code = BATTERY_FAULT_SENSOR_DISCONNECTED\n+        return;\n+    }\n \n     /*\n      * INTENTIONAL BASELINE DEFECTS FOR THE SAFEFLASH FIXTURE:\n"
+      },
+      {
+        "id": "candidate-c-fail-closed",
+        "label": "Candidate C",
+        "strategy": "fail-closed",
+        "hypothesis": "Fail closed on explicit sensor faults and stale data, while preserving every latched fault until reset.",
+        "selected": true,
+        "sandbox": {
+          "id": "localtest-candidate-c-fail-closed-098e95b4",
+          "status": "passed",
+          "isolated": true,
+          "provenance": {
+            "kind": "local-test",
+            "provider": "local-process",
+            "verified": false
+          }
+        },
+        "build": {
+          "status": "passed",
+          "summary": "Real local CMake build passed.",
+          "exitCode": 0,
+          "artifactHash": "1dcbd407ebbaf75384bfe53bb8c0487ceafd82a76afed458cab93bcbbbfcd9bd",
+          "provenance": {
+            "kind": "local-test",
+            "provider": "local-process",
+            "verified": false
+          }
+        },
+        "tests": {
+          "status": "passed",
+          "summary": "5/5 local unit tests passed.",
+          "exitCode": 0,
+          "artifactHash": "1dcbd407ebbaf75384bfe53bb8c0487ceafd82a76afed458cab93bcbbbfcd9bd",
+          "provenance": {
+            "kind": "local-test",
+            "provider": "local-process",
+            "verified": false
+          },
+          "passed": 5,
+          "total": 5
+        },
+        "safetyGate": {
+          "status": "passed",
+          "summary": "6/6 local safety tests passed.",
+          "exitCode": 0,
+          "artifactHash": "1dcbd407ebbaf75384bfe53bb8c0487ceafd82a76afed458cab93bcbbbfcd9bd",
+          "provenance": {
+            "kind": "local-test",
+            "provider": "local-process",
+            "verified": false
+          },
+          "hardGatePassed": true,
+          "failures": []
+        },
+        "score": {
+          "weighted": 0.89,
+          "eligible": true,
+          "provenance": {
+            "kind": "local-test",
+            "provider": "local-process",
+            "verified": false
+          }
+        },
+        "diff": "diff --git a/fixtures/battery-controller/src/battery_controller.c b/fixtures/battery-controller/src/battery_controller.c\n--- a/fixtures/battery-controller/src/battery_controller.c\n+++ b/fixtures/battery-controller/src/battery_controller.c\n@@ -26,6 +26,26 @@ void battery_controller_update(\n     } else {\n         controller->cycles_without_update += 1U;\n     }\n+\n+    if (controller->fault_latched) {\n+        controller->charging_enabled = false;\n+        return;\n+    }\n+\n+    if (sample.sensor_fault) {\n+        controller->charging_enabled = false;\n+        controller->fault_latched = true;\n+        controller->fault_code = BATTERY_FAULT_SENSOR_DISCONNECTED;\n+        return;\n+    }\n+\n+    if ((!sample.sample_fresh) &&\n+        (controller->cycles_without_update >= BATTERY_STALE_LIMIT_CYCLES)) {\n+        controller->charging_enabled = false;\n+        controller->fault_latched = true;\n+        controller->fault_code = BATTERY_FAULT_STALE_SAMPLE;\n+        return;\n+    }\n \n     /*\n      * INTENTIONAL BASELINE DEFECTS FOR THE SAFEFLASH FIXTURE:\n"
+      }
+    ],
+    "selectedCandidateId": "candidate-c-fail-closed",
+    "currentPatchDigest": "e282a3559687d66af67ce0b7f3834bf8fcdf55aff797f2adeaa142288f566818",
+    "currentEvidenceDigest": "69407c506f46e3f36cc7ad74b2528515a7a55fc0a3d7383c31e2af4be0d5e209",
+    "events": [
+      {
+        "id": "fa6f4dba2e83271b6cb00a0761ddc33ff1c457b0e766775d44dbe12a25b84ac8",
+        "sequence": 1,
+        "state": "TOURNAMENT_STARTED",
+        "title": "TOURNAMENT STARTED",
+        "summary": "Three deterministic candidates entered isolated local filesystem copies.",
+        "occurredAt": "2026-07-22T22:30:47.018Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "284dfc0debc16a9a9e183f9ae6ac727ec402cedd7d04f195e6166ab9c1905463",
+        "sequence": 2,
+        "state": "CANDIDATE_VALIDATION_STARTED",
+        "title": "CANDIDATE VALIDATION STARTED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:47.048Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "ab9975571320ffb82a761a3230fd7663b39a8c22132891e842529c7f251ee332",
+        "sequence": 3,
+        "state": "CANDIDATE_VALIDATION_STARTED",
+        "title": "CANDIDATE VALIDATION STARTED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:47.050Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "1e1532a62622b7cbb0023960fe96ddb1162a1c175b7a1e5310416eba7964ac2f",
+        "sequence": 4,
+        "state": "CANDIDATE_VALIDATION_STARTED",
+        "title": "CANDIDATE VALIDATION STARTED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:47.050Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "279eff5e8609fd1c6c5fa44cae57644038f25d0123b6141274031073cb77adee",
+        "sequence": 5,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:47.172Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "dab8ddc21865f7f2c05b7fb0daf7a6b807bab623aa7faa16f376c21d637933d9",
+        "sequence": 6,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:47.173Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "ee49ede52b78206bfdbaa8f7bf861678f4d713aeb263db92ab01d277c8ef5178",
+        "sequence": 7,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:47.175Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "7d230974f5c618313aeb0927104b80893e569aabe53be7b4c2d94d3d183695f6",
+        "sequence": 8,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:47.271Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "dc327ca9811bdcab15afde7c6e3475e2f63f8597be518f51f83250e4487f4532",
+        "sequence": 9,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:47.271Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "fd958160dab05d0fe49985664e2b28df1063ec14ec329653c9fa1dc031e9cd3a",
+        "sequence": 10,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:47.274Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "ea0c96da98b99fa7630dc5c2d4a5c74f16d54a45bf45fde60935833287e49c26",
+        "sequence": 11,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:47.360Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "035a8f7a24f5b8658c27073f4a555bec7ae3a0ea81b0dd70b9279882f7116cf2",
+        "sequence": 12,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:47.361Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "ca8badf789a31695f0647cae07cb7d6d59bea5ee0ebedf1da0f03bea4da556ef",
+        "sequence": 13,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:47.361Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "071a081fedc1c9abcab9c8ca8ed039bd2556ff3edf9f6ff8e858abaf2775c6d4",
+        "sequence": 14,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:50.841Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "850ab90360b464d8380defd0eb6a7ed4deef0c26f10d9538880313012429791a",
+        "sequence": 15,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:50.905Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "85a2ac5e999a8ffb1c0549f4291b1df22a34d76cb16f45c52ecca79305edeb52",
+        "sequence": 16,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:50.970Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "8f6ed36560271ac5b8b91abc686b9d45fb92993adbd40a9e85f23f1340e6fb6c",
+        "sequence": 17,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:52.555Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "0dd0605ce333a9b04b01f91d45e231ea261df1f1d880b9d964d350b0b953dc08",
+        "sequence": 18,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:54.012Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "e2fba816fe973628ac2cb1500c97a03846eb000fb31e072e7d2e8d97b7912914",
+        "sequence": 19,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:54.172Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "6f553de985f96dca0efb01a69ffb99e4222f78e0014e57b58487a4e776b5c9f2",
+        "sequence": 20,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:54.232Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "520b7870bceb0b9b7ea9a939def83e36b419baa74d81bc2db4313f95f8c82052",
+        "sequence": 21,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:54.334Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "8ed4bf6ea7680ef02e8bae7ce7740894d3eb54cf2bb47b9d1c29a71df3106025",
+        "sequence": 22,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:54.397Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "95b7e2f10b01ed7dbbe13400b53010d8c396dc2bec9a80dcd1d6f1055e62ed3f",
+        "sequence": 23,
+        "state": "COMMAND_COMPLETED",
+        "title": "COMMAND COMPLETED",
+        "summary": "Local validation evidence was recorded.",
+        "occurredAt": "2026-07-22T22:30:54.473Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "6ea35e0d85e544f1b2e76d75212d570f035279e256db1641adbb4e2671608c65",
+        "sequence": 24,
+        "state": "CANDIDATE_VALIDATION_COMPLETED",
+        "title": "CANDIDATE VALIDATION COMPLETED",
+        "summary": "Candidate candidate-a-range-clamp completed local validation.",
+        "occurredAt": "2026-07-22T22:30:54.476Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "4d721f9dd2f5271367900b2951a3a0b2a7e494dfd89b77df59c80786f0d01ab8",
+        "sequence": 25,
+        "state": "CANDIDATE_VALIDATION_COMPLETED",
+        "title": "CANDIDATE VALIDATION COMPLETED",
+        "summary": "Candidate candidate-b-retry-latch completed local validation.",
+        "occurredAt": "2026-07-22T22:30:54.476Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "75258acc4dce912793937e5f497f90a8fc098312828ef6ad2d103e164b8fca18",
+        "sequence": 26,
+        "state": "CANDIDATE_VALIDATION_COMPLETED",
+        "title": "CANDIDATE VALIDATION COMPLETED",
+        "summary": "Candidate candidate-c-fail-closed completed local validation.",
+        "occurredAt": "2026-07-22T22:30:54.476Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "0619e54f0ed168b07407cf626c33c17ef0406a8a3453500890781ede1cf2610b",
+        "sequence": 27,
+        "state": "AWAITING_HUMAN_APPROVAL",
+        "title": "TOURNAMENT COMPLETED",
+        "summary": "Local selector chose candidate-c-fail-closed.",
+        "occurredAt": "2026-07-22T22:30:54.485Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      },
+      {
+        "id": "2b8feaa867cc489139d3f39841982b9c8eef3dd08e427b3f3ebaeb55307c0706",
+        "sequence": 28,
+        "state": "AWAITING_HUMAN_APPROVAL",
+        "title": "APPROVAL RECORDED - EXTERNAL PUBLISH BLOCKED",
+        "summary": "Approval is bound to this exact local patch and evidence. This local-test API does not claim GitHub or CodeRabbit execution; no pull request was created.",
+        "occurredAt": "2026-07-22T22:31:03.978Z",
+        "provenance": {
+          "kind": "local-test",
+          "provider": "local-process",
+          "verified": false
+        }
+      }
+    ],
+    "approval": {
+      "decision": "approved",
+      "approverDisplayName": "Local operator",
+      "evidenceDigest": "69407c506f46e3f36cc7ad74b2528515a7a55fc0a3d7383c31e2af4be0d5e209",
+      "bindingDigest": "4d3bc4f1c1ea652c29797437c4712c290819c7c001ddcf16ba4bb20985452778"
+    }
+  },
+  "tournamentEventLogPath": "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-web-79465da6-c2fc-4869-b816-91d535feec62.events.jsonl",
+  "persistedAt": "2026-07-22T22:31:03.978Z"
+}

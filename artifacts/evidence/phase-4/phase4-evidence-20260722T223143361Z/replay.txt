@@ -1,0 +1,10 @@
+Independent replay of the copied events.jsonl with JsonlEventStore.readAll,
+replayEvents, EMPTY_TOURNAMENT_REPLAY, and reduceTournamentEvent:
+
+eventChainVerified=true
+eventCount=27
+status=completed
+winnerCandidateId=candidate-c-fail-closed
+candidateCount=3
+provider=local-process
+kind=local-test

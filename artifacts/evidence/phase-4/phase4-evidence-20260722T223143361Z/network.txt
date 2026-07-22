@@ -1,0 +1,6 @@
+Playwright non-static requests after reopening the production page:
+GET http://127.0.0.1:38777/api/sessions -> 200 OK
+GET http://127.0.0.1:38777/api/sessions/web-79465da6-c2fc-4869-b816-91d535feec62 -> 200 OK
+
+The detail-request count remained 1 before and after a 2200 ms wait, proving
+that the UI stopped polling once the bound approval was current.

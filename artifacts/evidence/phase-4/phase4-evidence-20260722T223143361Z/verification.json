@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-22T22:31:43.361Z",
+  "sourceCommit": "ea43ad660b7ad15c37235809cab03455c26edc90",
+  "server": {
+    "url": "http://127.0.0.1:38777",
+    "healthStatus": 200,
+    "framework": "Next.js production build"
+  },
+  "session": {
+    "id": "web-79465da6-c2fc-4869-b816-91d535feec62",
+    "createStatus": 201,
+    "mode": "mock",
+    "provenance": "local-test/local-process/not-provider-verified",
+    "state": "AWAITING_HUMAN_APPROVAL",
+    "candidateLabels": ["Candidate A", "Candidate B", "Candidate C"],
+    "uniqueSandboxIds": [
+      "localtest-candidate-a-range-clamp-eeae4e9e",
+      "localtest-candidate-b-retry-latch-892e7895",
+      "localtest-candidate-c-fail-closed-098e95b4"
+    ],
+    "selectedCandidateId": "candidate-c-fail-closed",
+    "selectedScore": 0.89,
+    "selectedBuild": "passed",
+    "selectedTests": "5/5",
+    "selectedSafetyGate": true,
+    "tournamentEventLogCount": 27,
+    "eventChainVerified": true,
+    "replayedStatus": "completed",
+    "replayedCandidateCount": 3,
+    "uiEventCountAfterApproval": 28,
+    "patchDigest": "e282a3559687d66af67ce0b7f3834bf8fcdf55aff797f2adeaa142288f566818",
+    "evidenceDigest": "69407c506f46e3f36cc7ad74b2528515a7a55fc0a3d7383c31e2af4be0d5e209",
+    "approvalBindingDigest": "4d3bc4f1c1ea652c29797437c4712c290819c7c001ddcf16ba4bb20985452778",
+    "pullRequestCreated": false
+  },
+  "browser": {
+    "engine": "Playwright Chromium",
+    "viewport": "1440x900",
+    "modeLabel": "MOCK - NOT PROVIDER-VERIFIED",
+    "scoreLabel": "Local evaluation score",
+    "approvalButtonLabel": "Approve evidence (no live PR)",
+    "approvalDisabledAfterDecision": true,
+    "approvalPersistedAfterNewPage": true,
+    "detailRequestsBeforeWait": 1,
+    "detailRequestsAfter2200ms": 1,
+    "pollingStoppedAfterApproval": true,
+    "consoleErrors": 0,
+    "consoleWarnings": 0,
+    "networkRequests": [
+      "GET /api/sessions -> 200",
+      "GET /api/sessions/web-79465da6-c2fc-4869-b816-91d535feec62 -> 200"
+    ]
+  },
+  "automatedVerification": {
+    "typecheck": "passed",
+    "sessionAndSecretTests": "6/6 passed",
+    "productionBuild": "passed",
+    "chrome1440x900E2E": "4/4 passed",
+    "copiedEventLogReplay": "27 events; hash chain valid; completed; 3 candidates; Candidate C winner"
+  },
+  "claimBoundary": "This package proves the local production UI, real local CMake/CTest tournament, persistence, replayable event evidence, and evidence-bound local approval. It does not claim Daytona, Braintrust, Fireworks, GitHub, or CodeRabbit live execution."
+}

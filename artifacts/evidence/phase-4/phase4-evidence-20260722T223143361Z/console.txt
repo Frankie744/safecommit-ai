@@ -1,0 +1,2 @@
+Playwright console inspection after reopening the production page:
+Total messages: 0 (Errors: 0, Warnings: 0)
