@@ -1,0 +1,17 @@
+COMMAND: D:\visual_studio\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe --build F:\desktop\hackthon\artifacts\build\phase-1\20260722T192339273Z --config Debug --parallel
+EXIT_CODE: 0
+DURATION_MS: 2653.802
+
+适用于 .NET Framework MSBuild 版本 18.0.5+e22287bf1
+
+  1>Checking Build System
+  Building Custom Rule F:/desktop/hackthon/fixtures/battery-controller/CMakeLists.txt
+  battery_controller.c
+  battery_controller.vcxproj -> F:\desktop\hackthon\artifacts\build\phase-1\20260722T192339273Z\Debug\battery_controller.lib
+  Building Custom Rule F:/desktop/hackthon/fixtures/battery-controller/CMakeLists.txt
+  Building Custom Rule F:/desktop/hackthon/fixtures/battery-controller/CMakeLists.txt
+  test_safety.c
+  test_unit.c
+  battery_safety_tests.vcxproj -> F:\desktop\hackthon\artifacts\build\phase-1\20260722T192339273Z\Debug\battery_safety_tests.exe
+  battery_unit_tests.vcxproj -> F:\desktop\hackthon\artifacts\build\phase-1\20260722T192339273Z\Debug\battery_unit_tests.exe
+  Building Custom Rule F:/desktop/hackthon/fixtures/battery-controller/CMakeLists.txt

@@ -1,0 +1,56 @@
+{
+    "schemaVersion":  1,
+    "runId":  "20260722T192339273Z",
+    "capturedAt":  "2026-07-22T19:23:45.5164341Z",
+    "result":  "EXPECTED_UNSAFE_BASELINE_CONFIRMED",
+    "fixture":  "F:\\desktop\\hackthon\\fixtures\\battery-controller",
+    "buildDirectory":  "F:\\desktop\\hackthon\\artifacts\\build\\phase-1\\20260722T192339273Z",
+    "toolchain":  {
+                      "capturedAt":  "2026-07-22T19:23:39.3536122Z",
+                      "visualStudioRoot":  "D:\\visual_studio",
+                      "cmakePath":  "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+                      "cmakeVersion":  "cmake version 4.1.1-msvc1",
+                      "ctestPath":  "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\ctest.exe",
+                      "compilerPath":  "D:\\visual_studio\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64\\cl.exe",
+                      "compilerFileVersion":  "19.50.35720.0",
+                      "msbuildPath":  "D:\\visual_studio\\MSBuild\\Current\\Bin\\MSBuild.exe",
+                      "generator":  "Visual Studio 18 2026",
+                      "architecture":  "x64"
+                  },
+    "configure":  {
+                      "exitCode":  0,
+                      "durationMs":  3121.73,
+                      "passed":  true,
+                      "log":  "configure.log"
+                  },
+    "build":  {
+                  "exitCode":  0,
+                  "durationMs":  2653.802,
+                  "passed":  true,
+                  "log":  "build.log"
+              },
+    "unitTests":  {
+                      "exitCode":  0,
+                      "durationMs":  113.675,
+                      "passed":  true,
+                      "expected":  "all unit tests pass",
+                      "log":  "unit-tests.log"
+                  },
+    "safetyTests":  {
+                        "exitCode":  8,
+                        "durationMs":  130.64,
+                        "passed":  false,
+                        "expectedFailureObserved":  true,
+                        "expectedFailingTests":  [
+                                                     "sensor_disconnect_enters_safe_state",
+                                                     "stale_sample_limit_enters_safe_state",
+                                                     "normal_sample_cannot_clear_latched_fault"
+                                                 ],
+                        "expectedPassingTests":  [
+                                                     "below_minimum_temperature_enters_safe_state",
+                                                     "above_maximum_temperature_enters_safe_state",
+                                                     "explicit_reset_allows_controlled_recovery"
+                                                 ],
+                        "log":  "safety-tests.log"
+                    }
+}

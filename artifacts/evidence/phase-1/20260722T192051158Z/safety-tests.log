@@ -1,0 +1,42 @@
+COMMAND: D:\visual_studio\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe --test-dir F:\desktop\hackthon\artifacts\build\phase-1\20260722T192051158Z -C Debug -V -L safety
+EXIT_CODE: 8
+DURATION_MS: 104.973
+
+UpdateCTestConfiguration  from :F:/desktop/hackthon/artifacts/build/phase-1/20260722T192051158Z/DartConfiguration.tcl
+Test project F:/desktop/hackthon/artifacts/build/phase-1/20260722T192051158Z
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 2
+    Start 2: battery_safety_tests
+
+2: Test command: F:\desktop\hackthon\artifacts\build\phase-1\20260722T192051158Z\Debug\battery_safety_tests.exe
+2: Working Directory: F:/desktop/hackthon/artifacts/build/phase-1/20260722T192051158Z
+2: Test timeout computed to be: 5
+2:   expected charging=OFF latched=true fault=SENSOR_DISCONNECTED; observed charging=ON latched=false fault=0
+2: [FAIL] sensor_disconnect_enters_safe_state
+2: [PASS] below_minimum_temperature_enters_safe_state
+2: [PASS] above_maximum_temperature_enters_safe_state
+2:   expected charging=OFF latched=true fault=STALE_SAMPLE after 3 cycles; observed charging=ON latched=false fault=0 cycles=3
+2: [FAIL] stale_sample_limit_enters_safe_state
+2:   expected previous fault to remain latched until reset; observed charging=ON latched=false fault=0
+2: [FAIL] normal_sample_cannot_clear_latched_fault
+2: [PASS] explicit_reset_allows_controlled_recovery
+2: [SUMMARY] 3 passed, 3 failed
+1/1 Test #2: battery_safety_tests .............***Failed    0.01 sec
+
+0% tests passed, 1 tests failed out of 1
+
+Label Time Summary:
+safety    =   0.01 sec*proc (1 test)
+
+Total Test time (real) =   0.02 sec
+
+The following tests FAILED:
+	  2 - battery_safety_tests (Failed)                     safety
+Errors while running CTest
+Output from these tests are in: F:/desktop/hackthon/artifacts/build/phase-1/20260722T192051158Z/Testing/Temporary/LastTest.log
+Use "--rerun-failed --output-on-failure" to re-run the failed cases verbosely.

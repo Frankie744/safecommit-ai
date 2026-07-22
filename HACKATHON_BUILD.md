@@ -7,7 +7,7 @@
 | Phase | New capability | Verification status | Evidence |
 |---|---|---|---|
 | 0 | Workspace/Git audit, decision log, environment contract | in progress | `artifacts/evidence/phase-0/` |
-| 1 | Battery Sentinel compiled fixture and deterministic safety tests | not verified | `artifacts/evidence/phase-1/` |
+| 1 | Battery Sentinel compiled fixture and deterministic safety tests | verified locally | `artifacts/evidence/phase-1/20260722T192339273Z/summary.json` |
 | 2 | Domain state machine, integrity gates, scoring and approval digest | not verified | `artifacts/evidence/phase-2/` |
 | 3 | Three-candidate isolated safety tournament | not verified | `artifacts/evidence/phase-3/` |
 | 4 | CopilotKit console and human approval gate | not verified | `artifacts/evidence/phase-4/` |

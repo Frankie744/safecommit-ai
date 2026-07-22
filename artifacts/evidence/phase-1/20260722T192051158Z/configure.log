@@ -1,0 +1,14 @@
+COMMAND: D:\visual_studio\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe -S F:\desktop\hackthon\fixtures\battery-controller -B F:\desktop\hackthon\artifacts\build\phase-1\20260722T192051158Z -G "Visual Studio 18 2026" -A x64 -DCMAKE_GENERATOR_INSTANCE=D:\visual_studio
+EXIT_CODE: 0
+DURATION_MS: 2964.253
+
+-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26200.
+-- The C compiler identification is MSVC 19.50.35720.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: D:/visual_studio/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Configuring done (2.7s)
+-- Generating done (0.1s)
+-- Build files have been written to: F:/desktop/hackthon/artifacts/build/phase-1/20260722T192051158Z
