@@ -1,0 +1,82 @@
+# SafeFlash decisions
+
+This log records decisions that affect safety, evidence, or hackathon scope.
+
+## D-001 — Honest empty-workspace baseline
+
+- Date: 2026-07-22
+- Status: accepted
+- Decision: preserve the supplied specification as commit
+  `29378c54ec2d349ac5494bf454f967579876413c`, tag it
+  `pre-hackathon-baseline`, and implement on
+  `hackathon/safety-tournament`.
+- Reason: the audited directory contained no prior repository or application.
+  Treating generated code as pre-hackathon work would be inaccurate.
+
+## D-002 — TypeScript control plane with a Next.js server boundary
+
+- Date: 2026-07-22
+- Status: accepted
+- Decision: use npm workspaces, a Next.js full-stack application, and isolated
+  domain/integration packages. `npm run dev` starts both UI and server routes.
+- Reason: one deployable process minimizes demo failure modes while preserving
+  explicit server-only provider boundaries. Provider secrets never enter
+  client modules.
+
+## D-003 — Deterministic native firmware fixture
+
+- Date: 2026-07-22
+- Status: accepted
+- Decision: use CMake/CTest and the already installed Visual Studio C++ tools.
+  Project scripts discover the toolchain without changing the machine PATH.
+- Reason: the fixture remains real compiled C, fast, and independent of real
+  hardware or Docker.
+
+## D-004 — Provenance is part of every event and evidence object
+
+- Date: 2026-07-22
+- Status: accepted
+- Decision: `live`, `recorded-live`, `mock`, and `local-test` are distinct
+  provenance values. Live mode fails closed when credentials or providers are
+  unavailable; it never silently becomes mock mode.
+- Reason: sponsor evidence must be verifiable and fallback playback must not
+  impersonate a current live run.
+
+## D-005 — Hard gates run outside the model
+
+- Date: 2026-07-22
+- Status: accepted
+- Decision: build success, safety invariants, patch integrity, and a 95% unit
+  pass rate are non-compensable deterministic gates. Only eligible candidates
+  participate in weighted selection. Candidate names are never inputs.
+- Reason: an LLM explanation or high average score cannot make unsafe firmware
+  eligible.
+
+## D-006 — Approval is evidence-bound and PR creation is separate from merge
+
+- Date: 2026-07-22
+- Status: accepted
+- Decision: approval binds an approver and timestamp to an evidence digest.
+  Patch, policy, test, score, or review changes invalidate it. SafeFlash may
+  create/update a PR after approval but never merges it.
+- Reason: this is the human deployment boundary required by the product.
+
+## D-007 — CodeRabbit P0/P1 boundary
+
+- Date: 2026-07-22
+- Status: accepted
+- Decision: P0 enforces and tests that a Critical/High review finding blocks
+  readiness and that every repair re-enters the complete validation pipeline.
+  A repeatable two-round live CodeRabbit demonstration is treated as P1 until
+  repository installation and review timing are verified.
+- Reason: this resolves the specification's P0 test requirement and P1 live
+  demo wording without weakening the gate.
+
+## D-008 — Evidence retention and redaction
+
+- Date: 2026-07-22
+- Status: accepted
+- Decision: raw provider logs live only under ignored `raw/` directories.
+  Committed evidence is structured, hash-addressed, and redacted.
+- Reason: API keys and private response content must not enter Git or the
+  frontend bundle.

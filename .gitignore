@@ -1,0 +1,29 @@
+node_modules/
+.next/
+dist/
+coverage/
+playwright-report/
+test-results/
+.safeflash/
+
+# Secrets. Only the example file is committed.
+.env
+.env.*
+!.env.example
+
+# Raw provider output can contain secrets. Commit only redacted summaries.
+artifacts/evidence/**/raw/
+artifacts/evidence/**/*.raw.*
+
+# Native build outputs.
+fixtures/**/build/
+fixtures/**/out/
+*.obj
+*.pdb
+*.exe
+
+# Editor and OS noise.
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

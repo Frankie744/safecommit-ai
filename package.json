@@ -1,0 +1,35 @@
+{
+  "name": "safeflash",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The safety gate for AI-generated firmware.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @safeflash/web",
+    "build": "npm run build --workspace @safeflash/web",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:adversarial": "vitest run tests/adversarial",
+    "test:firmware": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-firmware.ps1",
+    "test:e2e": "playwright test",
+    "smoke:external": "tsx scripts/smoke-external.ts",
+    "verify": "npm run typecheck && npm run test && npm run build && npm run test:e2e"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1",
+    "@types/node": "26.1.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "tsx": "4.23.1",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}

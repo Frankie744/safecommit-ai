@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-22T12:12:20.8882604-07:00",
+  "provenance": "local-test",
+  "workspace": "F:\\desktop\\hackthon",
+  "initialState": {
+    "files": ["SafeFlash_Codex_First_Prize_Goal.md"],
+    "wasGitRepository": false,
+    "uncommittedChanges": "not-applicable"
+  },
+  "baseline": {
+    "commitSha": "29378c54ec2d349ac5494bf454f967579876413c",
+    "tag": "pre-hackathon-baseline",
+    "implementationBranch": "hackathon/safety-tournament"
+  },
+  "toolchain": {
+    "git": "2.51.0.windows.1",
+    "node": "22.18.0",
+    "npm": "10.9.3",
+    "python": "3.12.3",
+    "visualStudioRoot": "D:\\visual_studio",
+    "cmakePath": "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe"
+  }
+}

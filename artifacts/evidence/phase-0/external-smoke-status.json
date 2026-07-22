@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-22T12:12:20.8882604-07:00",
+  "provenance": "local-test",
+  "result": "blocked",
+  "services": {
+    "fireworks": {"status": "blocked", "reason": "FIREWORKS_API_KEY is not set"},
+    "daytona": {"status": "blocked", "reason": "DAYTONA_API_KEY is not set"},
+    "braintrust": {"status": "blocked", "reason": "BRAINTRUST_API_KEY is not set"},
+    "github": {"status": "blocked", "reason": "GITHUB_TOKEN and a public repository are not configured"},
+    "coderabbit": {"status": "blocked", "reason": "CodeRabbit GitHub App installation and a public PR are required"}
+  },
+  "networkProbe": {
+    "npmRegistry": "reachable",
+    "braintrustApiUnauthenticated": "HTTP 403",
+    "fireworksApiRootUnauthenticated": "HTTP 404"
+  },
+  "claim": "No external integration is marked successful by this artifact."
+}
