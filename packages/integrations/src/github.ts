@@ -66,6 +66,13 @@ export interface GitHubClientPort {
     base: string;
     draft: boolean;
   }): Promise<GitHubPullRequestInfo>;
+  updatePullRequest(request: {
+    owner: string;
+    repository: string;
+    pullNumber: number;
+    title: string;
+    body: string;
+  }): Promise<GitHubPullRequestInfo>;
 }
 
 export interface GitHubSmokeEvidence {
@@ -75,6 +82,8 @@ export interface GitHubSmokeEvidence {
   public: true;
   pushPermission: true;
   defaultBranch: string;
+  configuredBaseBranch: string;
+  baseHeadSha: string;
 }
 
 export interface PullRequestDescription {
@@ -98,6 +107,34 @@ export interface CreatePullRequestRequest {
   draft?: boolean;
 }
 
+export function isSafeGitHubOwner(value: string): boolean {
+  return (
+    /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u.test(value) &&
+    !value.endsWith("-") &&
+    !value.includes("--")
+  );
+}
+
+export function isSafeGitHubRepository(value: string): boolean {
+  return (
+    /^[A-Za-z0-9_.-]{1,100}$/u.test(value) &&
+    value !== "." &&
+    value !== ".."
+  );
+}
+
+export function isSafeGitRef(value: string): boolean {
+  return (
+    /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/u.test(value) &&
+    !value.includes("..") &&
+    !value.includes("//") &&
+    !value.includes("@{") &&
+    !value.endsWith("/") &&
+    !value.endsWith(".") &&
+    !value.endsWith(".lock")
+  );
+}
+
 export function readGitHubConfig(
   environment: Environment = process.env,
   mode: OperatingMode = "live",
@@ -108,12 +145,24 @@ export function readGitHubConfig(
     environment,
     ["GITHUB_TOKEN", "GITHUB_OWNER", "GITHUB_REPO"] as const,
   );
+  const baseBranch = environment.GITHUB_BASE_BRANCH?.trim() || "main";
+  if (
+    !isSafeGitHubOwner(values.GITHUB_OWNER) ||
+    !isSafeGitHubRepository(values.GITHUB_REPO) ||
+    !isSafeGitRef(baseBranch)
+  ) {
+    throw new ProviderResponseError(
+      "github",
+      "GitHub owner, repository, or base branch is not a safe repository coordinate",
+      false,
+    );
+  }
   return {
     mode: "live",
     token: values.GITHUB_TOKEN,
     owner: values.GITHUB_OWNER,
     repository: values.GITHUB_REPO,
-    baseBranch: environment.GITHUB_BASE_BRANCH?.trim() || "main",
+    baseBranch,
     apiVersion: GITHUB_API_VERSION,
   };
 }
@@ -195,6 +244,17 @@ export function createGitHubClient(config: GitHubConfig): GitHubClientPort {
       });
       return mapPullRequest(response.data);
     },
+    async updatePullRequest(request) {
+      const octokit = await octokitPromise;
+      const response = await octokit.rest.pulls.update({
+        owner: request.owner,
+        repo: request.repository,
+        pull_number: request.pullNumber,
+        title: request.title,
+        body: request.body,
+      });
+      return mapPullRequest(response.data);
+    },
   };
 }
 
@@ -233,15 +293,24 @@ function validateCreateRequest(
       false,
     );
   }
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/u.test(request.sessionId)) {
+    throw new ProviderResponseError(
+      "github",
+      "SafeFlash session ID cannot be represented as a stable PR branch",
+      false,
+    );
+  }
+  const stableSessionBranch = `safeflash/${request.sessionId}`;
   if (
     !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/u.test(request.headBranch) ||
     request.headBranch.includes("..") ||
     request.headBranch.endsWith("/") ||
-    request.headBranch === config.baseBranch
+    request.headBranch === config.baseBranch ||
+    request.headBranch !== stableSessionBranch
   ) {
     throw new ProviderResponseError(
       "github",
-      "Pull request head branch is invalid or equals the base branch",
+      "Pull request head must use the stable safeflash/<session-id> branch so review repairs update the same PR",
       false,
     );
   }
@@ -258,6 +327,13 @@ function validateCreateRequest(
     throw new ProviderResponseError(
       "github",
       "PR description requires at least one verified test",
+      false,
+    );
+  }
+  if (request.description.tests.some((test) => test.trim() === "")) {
+    throw new ProviderResponseError(
+      "github",
+      "PR description test evidence must not contain blank entries",
       false,
     );
   }
@@ -316,6 +392,18 @@ export class GitHubAdapter {
           false,
         );
       }
+      const baseHead = await this.client.getCommit(
+        this.config.owner,
+        this.config.repository,
+        this.config.baseBranch,
+      );
+      if (!/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/iu.test(baseHead.sha)) {
+        throw new ProviderResponseError(
+          "github",
+          "The configured base branch did not resolve to a full immutable commit SHA",
+          false,
+        );
+      }
       return transportEnvelope("github", this.client.transport, {
         authenticatedLogin: identity.login,
         owner: this.config.owner,
@@ -323,6 +411,8 @@ export class GitHubAdapter {
         public: true,
         pushPermission: true,
         defaultBranch: repository.defaultBranch,
+        configuredBaseBranch: this.config.baseBranch,
+        baseHeadSha: baseHead.sha,
       });
     } catch (error) {
       if (error instanceof ProviderResponseError) throw error;
@@ -393,6 +483,16 @@ export class GitHubAdapter {
             false,
           );
         }
+        // A repair keeps the deterministic PR but changes its approved
+        // evidence. Always refresh the title/body so the PR never advertises
+        // stale Daytona or Braintrust results from an earlier validation round.
+        pullRequest = await this.client.updatePullRequest({
+          owner: this.config.owner,
+          repository: this.config.repository,
+          pullNumber: pullRequest.number,
+          title: request.title,
+          body: buildPullRequestBody(request.description),
+        });
       } else {
         pullRequest = await this.client.createPullRequest({
           owner: this.config.owner,
@@ -408,7 +508,8 @@ export class GitHubAdapter {
       if (
         pullRequest.merged ||
         pullRequest.state !== "open" ||
-        pullRequest.headSha.toLowerCase() !== request.expectedHeadSha.toLowerCase()
+        pullRequest.headSha.toLowerCase() !== request.expectedHeadSha.toLowerCase() ||
+        pullRequest.baseRef !== this.config.baseBranch
       ) {
         throw new ProviderResponseError(
           "github",

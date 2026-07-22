@@ -196,12 +196,33 @@ export function readDaytonaConfig(
     ["DAYTONA_API_KEY"] as const,
   );
   const apiUrl = environment.DAYTONA_API_URL?.trim() || undefined;
-  if (apiUrl !== undefined && new URL(apiUrl).protocol !== "https:") {
-    throw new ProviderResponseError(
-      "daytona",
-      "DAYTONA_API_URL must use HTTPS",
-      false,
-    );
+  if (apiUrl !== undefined) {
+    let parsed: URL;
+    try {
+      parsed = new URL(apiUrl);
+    } catch {
+      throw new ProviderResponseError(
+        "daytona",
+        "DAYTONA_API_URL must be the official https://app.daytona.io/api endpoint",
+        false,
+      );
+    }
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.hostname.toLowerCase() !== "app.daytona.io" ||
+      parsed.port !== "" ||
+      parsed.username !== "" ||
+      parsed.password !== "" ||
+      !["/api", "/api/"].includes(parsed.pathname) ||
+      parsed.search !== "" ||
+      parsed.hash !== ""
+    ) {
+      throw new ProviderResponseError(
+        "daytona",
+        "DAYTONA_API_URL must be the official https://app.daytona.io/api endpoint",
+        false,
+      );
+    }
   }
   return {
     mode: "live",

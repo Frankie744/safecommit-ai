@@ -113,6 +113,23 @@ describe("Fireworks structured candidate contract", () => {
         FIREWORKS_BASE_URL: "https://credential-collector.example/v1",
       }),
     ).toThrow(ProviderResponseError);
+    expect(() =>
+      readFireworksConfig({
+        SAFEFLASH_ALLOW_LIVE: "true",
+        FIREWORKS_API_KEY: "configured-for-contract-test",
+        FIREWORKS_MODEL: CONFIG.model,
+        FIREWORKS_BASE_URL:
+          "https://embedded:credential@api.fireworks.ai/inference/v1",
+      }),
+    ).toThrow(ProviderResponseError);
+    expect(() =>
+      readFireworksConfig({
+        SAFEFLASH_ALLOW_LIVE: "true",
+        FIREWORKS_API_KEY: "configured-for-contract-test",
+        FIREWORKS_MODEL: CONFIG.model,
+        FIREWORKS_BASE_URL: "https://api.fireworks.ai/not-the-inference-api",
+      }),
+    ).toThrow(ProviderResponseError);
   });
 
   it("uses JSON schema and validates the response locally", async () => {

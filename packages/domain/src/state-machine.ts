@@ -5,7 +5,9 @@ import {
 } from "./approval";
 import { evaluateCodeRabbitGate } from "./review-gate";
 import type {
+  FullRevalidationReceipt,
   HumanApproval,
+  IndependentReviewReceipt,
   OperatingMode,
   PullRequestRecord,
   ReviewFinding,
@@ -47,6 +49,7 @@ export type WorkflowEvent =
       candidateId: string;
       patchDigest: string;
       evidenceDigest: string;
+      commitSha: string;
     }
   | { type: "APPROVAL_RECORDED"; at: string; approval: HumanApproval }
   | { type: "PR_CREATION_REQUESTED"; at: string }
@@ -55,6 +58,7 @@ export type WorkflowEvent =
       type: "REVIEW_FINDINGS_RECEIVED";
       at: string;
       findings: readonly ReviewFinding[];
+      receipt: IndependentReviewReceipt;
     }
   | { type: "REPAIR_STARTED"; at: string }
   | {
@@ -66,8 +70,7 @@ export type WorkflowEvent =
   | {
       type: "REVALIDATION_PASSED";
       at: string;
-      evidenceDigest: string;
-      patchDigest: string;
+      receipt: FullRevalidationReceipt;
     }
   | { type: "MARK_READY_TO_MERGE"; at: string }
   | { type: "COMPLETE"; at: string }
@@ -132,6 +135,7 @@ export function createValidationSession(
     policyId: input.policyId,
     policyVersion: input.policyVersion,
     repository: { ...input.repository },
+    currentCommitSha: input.repository.commitSha,
     candidateIds: [],
     sandboxIdsByCandidate: {},
     reviewFindings: [],
@@ -143,7 +147,8 @@ function currentBinding(session: ValidationSession): ApprovalBinding | undefined
   if (
     session.selectedCandidateId === undefined ||
     session.currentPatchDigest === undefined ||
-    session.currentEvidenceDigest === undefined
+    session.currentEvidenceDigest === undefined ||
+    session.currentCommitSha === undefined
   ) {
     return undefined;
   }
@@ -153,7 +158,7 @@ function currentBinding(session: ValidationSession): ApprovalBinding | undefined
     patchDigest: session.currentPatchDigest,
     evidenceDigest: session.currentEvidenceDigest,
     policyVersion: session.policyVersion,
-    commitSha: session.repository.commitSha,
+    commitSha: session.currentCommitSha,
   };
 }
 
@@ -183,6 +188,19 @@ export function canEnterReadyToMerge(session: ValidationSession): {
   }
   const review = evaluateCodeRabbitGate(session.reviewFindings);
   if (!review.passed) return { allowed: false, reason: review.reason };
+  if (
+    session.pullRequest === undefined ||
+    session.reviewReceipt === undefined ||
+    session.reviewReceipt.status !== "passed" ||
+    session.reviewReceipt.pullNumber !== session.pullRequest.number ||
+    session.reviewReceipt.headSha.toLowerCase() !==
+      session.pullRequest.headSha.toLowerCase()
+  ) {
+    return {
+      allowed: false,
+      reason: "A passing independent-review receipt for the exact current PR head is required.",
+    };
+  }
   const binding = currentBinding(session);
   if (binding === undefined || !isApprovalValid(session.approval, binding)) {
     return {
@@ -190,7 +208,177 @@ export function canEnterReadyToMerge(session: ValidationSession): {
       reason: "Human approval is absent or stale for the current evidence.",
     };
   }
+  if (
+    session.pullRequest.status !== "open" ||
+    session.pullRequest.headSha.toLowerCase() !== binding.commitSha.toLowerCase()
+  ) {
+    return {
+      allowed: false,
+      reason: "The open pull request head no longer matches the approved commit.",
+    };
+  }
   return { allowed: true, reason: "Review and approval gates passed." };
+}
+
+function isFullGitObjectId(value: string): boolean {
+  return /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/iu.test(value);
+}
+
+function isCanonicalGitHubPullRequest(
+  pullRequest: PullRequestRecord,
+): boolean {
+  try {
+    const url = new URL(pullRequest.url);
+    const expectedPath = `/${encodeURIComponent(
+      pullRequest.owner,
+    )}/${encodeURIComponent(pullRequest.repository)}/pull/${pullRequest.number}`;
+    return (
+      pullRequest.owner.trim() !== "" &&
+      pullRequest.repository.trim() !== "" &&
+      pullRequest.baseBranch.trim() !== "" &&
+      url.protocol === "https:" &&
+      url.hostname.toLowerCase() === "github.com" &&
+      url.port === "" &&
+      url.username === "" &&
+      url.password === "" &&
+      url.pathname.toLowerCase() === expectedPath.toLowerCase() &&
+      url.search === "" &&
+      url.hash === ""
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isReviewUrlForPullRequest(
+  reviewUrl: string,
+  pullRequestUrl: string,
+): boolean {
+  try {
+    const review = new URL(reviewUrl);
+    const pullRequest = new URL(pullRequestUrl);
+    const pullPath = pullRequest.pathname.replace(/\/+$/u, "");
+    return (
+      review.protocol === "https:" &&
+      review.username === "" &&
+      review.password === "" &&
+      review.origin.toLowerCase() === pullRequest.origin.toLowerCase() &&
+      (review.pathname === pullPath || review.pathname.startsWith(`${pullPath}/`))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isEvidenceUrlForPullRequestRepository(
+  evidenceUrl: string,
+  pullRequestUrl: string,
+): boolean {
+  try {
+    const evidence = new URL(evidenceUrl);
+    const pullRequest = new URL(pullRequestUrl);
+    const pathParts = pullRequest.pathname.split("/").filter(Boolean);
+    if (pathParts.length < 4 || pathParts[2] !== "pull") return false;
+    const repositoryPath = `/${pathParts[0]}/${pathParts[1]}`;
+    return (
+      evidence.protocol === "https:" &&
+      evidence.username === "" &&
+      evidence.password === "" &&
+      evidence.origin.toLowerCase() === pullRequest.origin.toLowerCase() &&
+      (evidence.pathname === repositoryPath ||
+        evidence.pathname.startsWith(`${repositoryPath}/`))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function requireIndependentReviewReceipt(
+  session: ValidationSession,
+  receipt: IndependentReviewReceipt,
+  findings: readonly ReviewFinding[],
+): void {
+  const pullRequest = session.pullRequest;
+  const gate = evaluateCodeRabbitGate(findings);
+  const sourceIsConsistent =
+    (receipt.provider === "coderabbit" && receipt.sourceKind === "live-api") ||
+    (receipt.provider === "manual_verified" &&
+      receipt.sourceKind === "manual-attestation" &&
+      receipt.attestedBy?.trim() !== "");
+  const findingsAreBound = findings.every(
+    (finding) =>
+      finding.sessionId === session.sessionId &&
+      finding.provider === receipt.provider &&
+      finding.sourceVersion.toLowerCase() === receipt.headSha.toLowerCase() &&
+      (receipt.provider === "manual_verified"
+        ? isReviewUrlForPullRequest(finding.reviewUrl, pullRequest?.url ?? "")
+        : isEvidenceUrlForPullRequestRepository(
+            finding.reviewUrl,
+            pullRequest?.url ?? "",
+          )),
+  );
+  if (
+    pullRequest === undefined ||
+    receipt.pullNumber !== pullRequest.number ||
+    receipt.headSha.toLowerCase() !== pullRequest.headSha.toLowerCase() ||
+    !isFullGitObjectId(receipt.headSha) ||
+    !isReviewUrlForPullRequest(receipt.reviewUrl, pullRequest.url) ||
+    Number.isNaN(Date.parse(receipt.capturedAt)) ||
+    receipt.evidenceIds.length === 0 ||
+    new Set(receipt.evidenceIds).size !== receipt.evidenceIds.length ||
+    receipt.evidenceIds.some((id) => id.trim() === "") ||
+    !sourceIsConsistent ||
+    !findingsAreBound ||
+    (receipt.status === "passed") !== gate.passed
+  ) {
+    throw new InvalidWorkflowTransitionError(
+      session.state,
+      "REVIEW_FINDINGS_RECEIVED",
+      "Independent review evidence must be non-empty, internally consistent, and bound to the exact current PR head.",
+    );
+  }
+}
+
+function requireFullRevalidationReceipt(
+  session: ValidationSession,
+  receipt: FullRevalidationReceipt,
+): void {
+  const everyGatePassed =
+    receipt.buildPassed &&
+    receipt.unitTestsPassed &&
+    receipt.safetyTestsPassed &&
+    receipt.integrityChecksPassed &&
+    receipt.braintrustScored &&
+    receipt.candidateEligible;
+  const referencesPresent =
+    receipt.sandboxId.trim() !== "" &&
+    receipt.daytonaEvidenceRef.trim() !== "" &&
+    receipt.braintrustExperimentRef.trim() !== "" &&
+    receipt.evidenceDigest.trim() !== "";
+  const freshSandbox = !Object.values(session.sandboxIdsByCandidate).includes(
+    receipt.sandboxId,
+  ) && receipt.sandboxId !== session.lastRevalidation?.sandboxId;
+  const repairedHeadChanged =
+    session.pullRequest === undefined ||
+    receipt.commitSha.toLowerCase() !== session.pullRequest.headSha.toLowerCase();
+  if (
+    receipt.candidateId !== session.selectedCandidateId ||
+    receipt.patchDigest !== session.currentPatchDigest ||
+    receipt.evidenceDigest === session.currentEvidenceDigest ||
+    !isFullGitObjectId(receipt.commitSha) ||
+    receipt.executionProvider !== "daytona" ||
+    receipt.evaluationProvider !== "braintrust" ||
+    !referencesPresent ||
+    !freshSandbox ||
+    !repairedHeadChanged ||
+    !everyGatePassed
+  ) {
+    throw new InvalidWorkflowTransitionError(
+      session.state,
+      "REVALIDATION_PASSED",
+      "Review repair must pass build, unit, safety, integrity, and Braintrust eligibility in a fresh Daytona sandbox.",
+    );
+  }
 }
 
 function requireExpectedEvent(session: ValidationSession, event: WorkflowEvent): void {
@@ -263,11 +451,14 @@ export function transitionValidationSession(
       throw new InvalidWorkflowTransitionError(session.state, event.type);
     }
     const gate = evaluateCodeRabbitGate(event.findings);
+    requireIndependentReviewReceipt(session, event.receipt, event.findings);
     return withState(
       session,
-      gate.passed ? "REVIEW_PASSED" : "REVIEW_BLOCKED",
+      event.receipt.status === "passed" && gate.passed
+        ? "REVIEW_PASSED"
+        : "REVIEW_BLOCKED",
       event.at,
-      { reviewFindings: event.findings },
+      { reviewFindings: event.findings, reviewReceipt: event.receipt },
     );
   }
 
@@ -328,27 +519,45 @@ export function transitionValidationSession(
           "Selected candidate was not evaluated in this session",
         );
       }
+      if (!isFullGitObjectId(event.commitSha)) {
+        throw new InvalidWorkflowTransitionError(
+          session.state,
+          event.type,
+          "Selected candidate must be bound to a full Git commit SHA",
+        );
+      }
       return withState(session, "AWAITING_HUMAN_APPROVAL", event.at, {
         selectedCandidateId: event.candidateId,
         currentPatchDigest: event.patchDigest,
         currentEvidenceDigest: event.evidenceDigest,
+        currentCommitSha: event.commitSha,
         validationRound: session.validationRound + 1,
       });
-    case "PR_CREATED_OR_UPDATED":
+    case "PR_CREATED_OR_UPDATED": {
+      const binding = currentBinding(session);
       if (
         event.pullRequest.sessionId !== session.sessionId ||
-        event.pullRequest.candidateId !== session.selectedCandidateId
+        event.pullRequest.candidateId !== session.selectedCandidateId ||
+        event.pullRequest.provider !== "github" ||
+        event.pullRequest.status !== "open" ||
+        event.pullRequest.number <= 0 ||
+        !isCanonicalGitHubPullRequest(event.pullRequest) ||
+        binding === undefined ||
+        !isApprovalValid(session.approval, binding) ||
+        event.pullRequest.headSha.toLowerCase() !== binding.commitSha.toLowerCase()
       ) {
         throw new InvalidWorkflowTransitionError(
           session.state,
           event.type,
-          "Pull request record belongs to a different session or candidate",
+          "Pull request must be an open GitHub PR at the exact approval-bound head",
         );
       }
       return withState(session, "AWAITING_CODERABBIT", event.at, {
         pullRequest: event.pullRequest,
         reviewFindings: [],
+        reviewReceipt: undefined,
       });
+    }
     case "REPAIR_STARTED":
       return withState(session, "REPAIRING_REVIEW_FINDINGS", event.at);
     case "REPAIR_GENERATED": {
@@ -366,12 +575,14 @@ export function transitionValidationSession(
             patchDigest: event.patchDigest,
             evidenceDigest: session.currentEvidenceDigest ?? "pending-revalidation",
             policyVersion: session.policyVersion,
-            commitSha: session.repository.commitSha,
+            commitSha:
+              session.currentCommitSha ?? session.repository.commitSha,
           }
         : undefined;
       return withState(session, "REVALIDATING", event.at, {
         selectedCandidateId: event.candidateId,
         currentPatchDigest: event.patchDigest,
+        currentCommitSha: undefined,
         approval: invalidationBinding
           ? invalidateApprovalWhenEvidenceChanges(
               existingApproval,
@@ -382,31 +593,27 @@ export function transitionValidationSession(
       });
     }
     case "REVALIDATION_PASSED": {
-      if (event.patchDigest !== session.currentPatchDigest) {
-        throw new InvalidWorkflowTransitionError(
-          session.state,
-          event.type,
-          "Revalidation evidence does not match the repaired patch",
-        );
-      }
+      requireFullRevalidationReceipt(session, event.receipt);
       const existingApproval = session.approval;
       const binding: ApprovalBinding | undefined =
         existingApproval && session.selectedCandidateId
           ? {
               candidateId: session.selectedCandidateId,
-              patchDigest: event.patchDigest,
-              evidenceDigest: event.evidenceDigest,
+              patchDigest: event.receipt.patchDigest,
+              evidenceDigest: event.receipt.evidenceDigest,
               policyVersion: session.policyVersion,
-              commitSha: session.repository.commitSha,
+              commitSha: event.receipt.commitSha,
             }
           : undefined;
       return withState(session, "AWAITING_HUMAN_APPROVAL", event.at, {
-        currentEvidenceDigest: event.evidenceDigest,
-        currentPatchDigest: event.patchDigest,
+        currentEvidenceDigest: event.receipt.evidenceDigest,
+        currentPatchDigest: event.receipt.patchDigest,
+        currentCommitSha: event.receipt.commitSha,
         approval: binding
           ? invalidateApprovalWhenEvidenceChanges(existingApproval, binding, event.at)
           : existingApproval,
         validationRound: session.validationRound + 1,
+        lastRevalidation: event.receipt,
       });
     }
     case "MARK_READY_TO_MERGE": {

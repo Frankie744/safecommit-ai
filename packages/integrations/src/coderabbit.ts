@@ -1,5 +1,6 @@
 import {
   evaluateCodeRabbitGate,
+  type IndependentReviewReceipt,
   type OperatingMode,
   type ReviewFinding,
   type Severity,
@@ -7,6 +8,9 @@ import {
 
 import {
   GITHUB_API_VERSION,
+  isSafeGitHubOwner,
+  isSafeGitHubRepository,
+  isSafeGitRef,
   type GitHubConfig,
 } from "./github";
 import {
@@ -128,6 +132,53 @@ export interface CodeRabbitInspectionRequest {
   headSha: string;
 }
 
+/**
+ * Converts only authentic live adapter output into the receipt accepted by the
+ * workflow state machine. Local-test, mock, cached, stale and timed-out
+ * envelopes deliberately cannot cross the live independent-review gate.
+ */
+export function createLiveIndependentReviewReceipt(
+  inspection: ProviderEnvelope<CodeRabbitInspectionEvidence>,
+  repository: Pick<CodeRabbitConfig, "owner" | "repository">,
+): IndependentReviewReceipt {
+  const { data, provenance } = inspection;
+  const terminal = data.status === "passed" || data.status === "blocked";
+  const statusConsistent =
+    (data.status === "passed" && data.passed) ||
+    (data.status === "blocked" && !data.passed);
+  if (
+    inspection.provider !== "coderabbit" ||
+    provenance.kind !== "live" ||
+    !terminal ||
+    !statusConsistent ||
+    data.timedOut ||
+    data.headSha.toLowerCase() !== data.observedPrHeadSha.toLowerCase() ||
+    data.exactHeadEvidenceIds.length === 0
+  ) {
+    throw new ProviderResponseError(
+      "coderabbit",
+      "Only terminal live CodeRabbit evidence for the exact current PR head can create a workflow review receipt",
+      false,
+    );
+  }
+  // Findings may legitimately point to a GitHub check run rather than a PR
+  // discussion. Keep the receipt itself on the canonical PR URL; individual
+  // findings retain their same-repository evidence URLs and exact head SHA.
+  const reviewUrl = `https://github.com/${encodeURIComponent(
+    repository.owner,
+  )}/${encodeURIComponent(repository.repository)}/pull/${data.pullNumber}`;
+  return {
+    provider: "coderabbit",
+    sourceKind: "live-api",
+    status: data.status === "passed" ? "passed" : "blocked",
+    pullNumber: data.pullNumber,
+    headSha: data.headSha,
+    reviewUrl,
+    evidenceIds: [...data.exactHeadEvidenceIds],
+    capturedAt: provenance.capturedAt,
+  };
+}
+
 export function readCodeRabbitConfig(
   environment: Environment = process.env,
   mode: OperatingMode = "live",
@@ -144,7 +195,11 @@ export function readCodeRabbitConfig(
   const pollIntervalMs = Number(
     environment.CODERABBIT_POLL_INTERVAL_MS ?? 5_000,
   );
+  const baseBranch = environment.GITHUB_BASE_BRANCH?.trim() || "main";
   if (
+    !isSafeGitHubOwner(values.GITHUB_OWNER) ||
+    !isSafeGitHubRepository(values.GITHUB_REPO) ||
+    !isSafeGitRef(baseBranch) ||
     !Number.isInteger(reviewTimeoutMs) ||
     reviewTimeoutMs < 1_000 ||
     reviewTimeoutMs > 900_000 ||
@@ -155,7 +210,7 @@ export function readCodeRabbitConfig(
   ) {
     throw new ProviderResponseError(
       "coderabbit",
-      "Invalid CodeRabbit polling timeout or interval",
+      "Invalid CodeRabbit repository coordinate, base branch, polling timeout, or interval",
       false,
     );
   }
@@ -164,7 +219,7 @@ export function readCodeRabbitConfig(
     token: values.GITHUB_TOKEN,
     owner: values.GITHUB_OWNER,
     repository: values.GITHUB_REPO,
-    baseBranch: environment.GITHUB_BASE_BRANCH?.trim() || "main",
+    baseBranch,
     apiVersion: GITHUB_API_VERSION,
     reviewTimeoutMs,
     pollIntervalMs,
@@ -313,6 +368,13 @@ function isOfficialCodeRabbitBot(login: string | undefined): boolean {
 
 function isOfficialCodeRabbitApp(slug: string | undefined): boolean {
   return slug?.toLowerCase() === "coderabbitai";
+}
+
+function isOfficialCodeRabbitCheck(check: CodeRabbitCheckArtifact): boolean {
+  return (
+    isOfficialCodeRabbitApp(check.appSlug) &&
+    /code\s*[-_]?\s*rabbit/iu.test(check.name)
+  );
 }
 
 function findingTitle(body: string, fallback: string): string {
@@ -464,7 +526,7 @@ export class CodeRabbitAdapter {
         isOfficialCodeRabbitBot(comment.actorLogin),
       );
       const botChecks = checks.filter(
-        (check) => isOfficialCodeRabbitApp(check.appSlug),
+        isOfficialCodeRabbitCheck,
       );
       const exactReviews = botReviews.filter(
         (review) => review.commitId?.toLowerCase() === request.headSha.toLowerCase(),
@@ -681,6 +743,84 @@ export class CodeRabbitAdapter {
   }
 }
 
+function assertManualReviewUrl(input: {
+  repository: Pick<CodeRabbitConfig, "owner" | "repository">;
+  pullNumber: number;
+  reviewUrl: string;
+}): void {
+  const url = new URL(input.reviewUrl);
+  const expectedPullPath = `/${encodeURIComponent(input.repository.owner)}/${encodeURIComponent(
+    input.repository.repository,
+  )}/pull/${input.pullNumber}`;
+  if (
+    url.protocol !== "https:" ||
+    url.hostname.toLowerCase() !== "github.com" ||
+    url.port !== "" ||
+    url.username !== "" ||
+    url.password !== "" ||
+    (url.pathname !== expectedPullPath &&
+      !url.pathname.startsWith(`${expectedPullPath}/`)) ||
+    input.repository.owner.trim() === "" ||
+    input.repository.repository.trim() === ""
+  ) {
+    throw new ProviderResponseError(
+      "coderabbit",
+      "Manual CodeRabbit attestation URL must match the configured repository and pull request",
+      false,
+    );
+  }
+}
+
+export function createManualVerifiedIndependentReviewReceipt(input: {
+  repository: Pick<CodeRabbitConfig, "owner" | "repository">;
+  pullNumber: number;
+  headSha: string;
+  reviewUrl: string;
+  status: IndependentReviewReceipt["status"];
+  evidenceIds: readonly string[];
+  attestedBy: string;
+  attestedAt: string;
+}): ProviderEnvelope<IndependentReviewReceipt> {
+  validateInspectionRequest({
+    sessionId: "manual-attestation",
+    pullNumber: input.pullNumber,
+    headSha: input.headSha,
+  });
+  assertManualReviewUrl(input);
+  if (
+    (input.status !== "passed" && input.status !== "blocked") ||
+    input.evidenceIds.length === 0 ||
+    input.evidenceIds.some((id) => id.trim() === "") ||
+    new Set(input.evidenceIds).size !== input.evidenceIds.length ||
+    input.attestedBy.trim() === "" ||
+    Number.isNaN(Date.parse(input.attestedAt))
+  ) {
+    throw new ProviderResponseError(
+      "coderabbit",
+      "Manual review receipt requires a valid actor, timestamp, status, and non-empty unique evidence IDs",
+      false,
+    );
+  }
+  return manualVerifiedEnvelope(
+    {
+      provider: "manual_verified",
+      sourceKind: "manual-attestation",
+      status: input.status,
+      pullNumber: input.pullNumber,
+      headSha: input.headSha,
+      reviewUrl: input.reviewUrl,
+      evidenceIds: [...input.evidenceIds],
+      capturedAt: input.attestedAt,
+      attestedBy: input.attestedBy,
+    },
+    {
+      attestedAt: input.attestedAt,
+      attestedBy: input.attestedBy,
+      evidenceRef: input.reviewUrl,
+    },
+  );
+}
+
 export function createManualVerifiedCodeRabbitFinding(input: {
   sessionId: string;
   repository: Pick<CodeRabbitConfig, "owner" | "repository">;
@@ -701,24 +841,7 @@ export function createManualVerifiedCodeRabbitFinding(input: {
     pullNumber: input.pullNumber,
     headSha: input.headSha,
   });
-  const url = new URL(input.reviewUrl);
-  const expectedPullPath = `/${encodeURIComponent(input.repository.owner)}/${encodeURIComponent(
-    input.repository.repository,
-  )}/pull/${input.pullNumber}`;
-  if (
-    url.protocol !== "https:" ||
-    url.hostname.toLowerCase() !== "github.com" ||
-    (url.pathname !== expectedPullPath &&
-      !url.pathname.startsWith(`${expectedPullPath}/`)) ||
-    input.repository.owner.trim() === "" ||
-    input.repository.repository.trim() === ""
-  ) {
-    throw new ProviderResponseError(
-      "coderabbit",
-      "Manual CodeRabbit attestation URL must match the configured repository and pull request",
-      false,
-    );
-  }
+  assertManualReviewUrl(input);
   if (input.attestedBy.trim() === "") {
     throw new ProviderResponseError(
       "coderabbit",

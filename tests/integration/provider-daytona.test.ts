@@ -5,6 +5,7 @@ import {
   DEFAULT_DAYTONA_COMMAND_POLICY,
   DaytonaAdapter,
   ProviderResponseError,
+  readDaytonaConfig,
   type DaytonaClientPort,
   type DaytonaConfig,
   type DaytonaSandboxPort,
@@ -94,6 +95,30 @@ class FakeDaytona implements DaytonaClientPort {
 }
 
 describe("Daytona isolation contract", () => {
+  it("rejects a credential-bearing API endpoint during configuration", () => {
+    expect(() =>
+      readDaytonaConfig({
+        SAFEFLASH_ALLOW_LIVE: "true",
+        DAYTONA_API_KEY: "configured-for-contract-test",
+        DAYTONA_API_URL: "https://embedded:credential@daytona.example/api",
+      }),
+    ).toThrow(ProviderResponseError);
+    expect(() =>
+      readDaytonaConfig({
+        SAFEFLASH_ALLOW_LIVE: "true",
+        DAYTONA_API_KEY: "configured-for-contract-test",
+        DAYTONA_API_URL: "https://credential-collector.example/api",
+      }),
+    ).toThrow(ProviderResponseError);
+    expect(
+      readDaytonaConfig({
+        SAFEFLASH_ALLOW_LIVE: "true",
+        DAYTONA_API_KEY: "configured-for-contract-test",
+        DAYTONA_API_URL: "https://app.daytona.io/api",
+      }).apiUrl,
+    ).toBe("https://app.daytona.io/api");
+  });
+
   it("clones an exact commit, blocks network, runs only trusted commands, and destroys", async () => {
     const fake = new FakeDaytona();
     let time = 0;

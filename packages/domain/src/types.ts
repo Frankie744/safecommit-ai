@@ -192,6 +192,46 @@ export interface ReviewFinding extends DomainEntity {
   resolved: boolean;
 }
 
+/**
+ * Server-normalized receipt for the independent review of one exact PR head.
+ * The state machine does not accept a bare, empty findings array as proof that
+ * CodeRabbit ran: a pass or block must be tied to concrete review evidence.
+ */
+export interface IndependentReviewReceipt {
+  provider: "coderabbit" | "manual_verified";
+  sourceKind: "live-api" | "manual-attestation";
+  status: "passed" | "blocked";
+  pullNumber: number;
+  headSha: string;
+  reviewUrl: string;
+  evidenceIds: readonly string[];
+  capturedAt: IsoTimestamp;
+  attestedBy?: string;
+}
+
+/**
+ * Fail-closed proof that a review repair re-entered every required validation
+ * stage. Provider adapters create this receipt only after their own evidence
+ * and provenance checks have succeeded.
+ */
+export interface FullRevalidationReceipt {
+  candidateId: string;
+  patchDigest: string;
+  commitSha: string;
+  evidenceDigest: string;
+  executionProvider: "daytona";
+  evaluationProvider: "braintrust";
+  sandboxId: string;
+  daytonaEvidenceRef: string;
+  braintrustExperimentRef: string;
+  buildPassed: boolean;
+  unitTestsPassed: boolean;
+  safetyTestsPassed: boolean;
+  integrityChecksPassed: boolean;
+  braintrustScored: boolean;
+  candidateEligible: boolean;
+}
+
 export type ValidationState =
   | "IDLE"
   | "INGESTING_REPOSITORY"
@@ -234,9 +274,13 @@ export interface ValidationSession extends DomainEntity {
   selectedCandidateId?: string;
   currentPatchDigest?: string;
   currentEvidenceDigest?: string;
+  /** Commit at the current approved/validated PR head; repository.commitSha is the ingested base. */
+  currentCommitSha?: string;
   approval?: HumanApproval;
   pullRequest?: PullRequestRecord;
   reviewFindings: readonly ReviewFinding[];
+  reviewReceipt?: IndependentReviewReceipt;
+  lastRevalidation?: FullRevalidationReceipt;
   validationRound: number;
   failure?: WorkflowFailure;
 }

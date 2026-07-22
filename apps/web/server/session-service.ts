@@ -56,7 +56,7 @@ export const DecisionRequestSchema = z
     candidateId: z.string().min(1).max(96),
     evidenceDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     patchDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-    commitSha: z.string().min(7).max(64),
+    commitSha: z.string().regex(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u),
     policyVersion: z.string().min(1).max(128),
     approverDisplayName: z.string().trim().min(1).max(160).optional(),
   })
@@ -391,6 +391,7 @@ export class SessionService {
       record.session.currentPatchDigest !== patchDigest ||
       record.view.currentPatchDigest !== patchDigest ||
       record.session.repository.commitSha !== started.payload.sourceCommitSha ||
+      record.session.currentCommitSha !== started.payload.sourceCommitSha ||
       record.view.repository.commitSha !== started.payload.sourceCommitSha ||
       record.session.policyVersion !== record.view.policy.version ||
       record.view.pullRequest !== undefined ||
@@ -428,7 +429,7 @@ export class SessionService {
           patchDigest,
           evidenceDigest: winnerCompletion.payload.evidenceDigest,
           policyVersion: record.session.policyVersion,
-          commitSha: record.session.repository.commitSha,
+          commitSha: record.session.currentCommitSha,
         })
       ) {
         throw new SessionServiceError(
@@ -553,6 +554,7 @@ export class SessionService {
           candidateId: winnerId,
           patchDigest,
           evidenceDigest: winner.evidenceDigest,
+          commitSha,
         },
       ]);
 
@@ -656,7 +658,7 @@ export class SessionService {
         candidateId: current.selectedCandidateId,
         patchDigest: current.currentPatchDigest,
         evidenceDigest: current.currentEvidenceDigest,
-        commitSha: current.repository.commitSha,
+        commitSha: current.currentCommitSha,
         policyVersion: current.policyVersion,
       };
       if (

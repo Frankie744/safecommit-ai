@@ -160,11 +160,17 @@ export function readFireworksConfig(
   const parsed = new URL(baseURL);
   if (
     parsed.protocol !== "https:" ||
-    parsed.hostname.toLowerCase() !== "api.fireworks.ai"
+    parsed.hostname.toLowerCase() !== "api.fireworks.ai" ||
+    parsed.port !== "" ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    !["/inference/v1", "/inference/v1/"].includes(parsed.pathname) ||
+    parsed.search !== "" ||
+    parsed.hash !== ""
   ) {
     throw new ProviderResponseError(
       "fireworks",
-      "FIREWORKS_BASE_URL must be the official HTTPS api.fireworks.ai endpoint",
+      "FIREWORKS_BASE_URL must be the official https://api.fireworks.ai/inference/v1 endpoint",
       false,
     );
   }
