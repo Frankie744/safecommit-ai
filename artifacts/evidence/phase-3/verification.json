@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-22T22:06:15.0452521Z",
+  "sourceCommitSha": "7aa1629b90f8e832072e9c2ecedb9bd7e77dc04d",
+  "scope": "local-test",
+  "claim": "Verified local Git/CMake/CTest tournament evidence only; not Daytona, Fireworks, Braintrust, GitHub, CodeRabbit, or recorded-live evidence.",
+  "checks": [
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0,
+      "result": "pass"
+    },
+    {
+      "command": "npm run test",
+      "exitCode": 0,
+      "result": "pass",
+      "testFiles": 14,
+      "testsPassed": 57,
+      "durationSeconds": 11.08
+    },
+    {
+      "command": "npx vitest run tests/unit/event-store.test.ts tests/integration/tournament.local.test.ts tests/integration/provider-daytona.test.ts tests/integration/provider-github-coderabbit.test.ts",
+      "exitCode": 0,
+      "result": "pass",
+      "testFiles": 4,
+      "testsPassed": 25,
+      "durationSeconds": 8.48
+    },
+    {
+      "command": "git diff --exit-code -- fixtures/battery-controller",
+      "exitCode": 0,
+      "result": "pass"
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0,
+      "result": "pass"
+    },
+    {
+      "command": "phase-3 artifact secret-pattern scan",
+      "exitCode": 0,
+      "result": "pass-no-matches"
+    }
+  ],
+  "tournament": {
+    "sessionId": "phase3-evidence-20260722T220559152Z",
+    "winnerCandidateId": "candidate-c-fail-closed",
+    "eventCount": 27,
+    "lastEventHash": "ce8628f7627deefbdd4503988743b902b803af1c07358ad87600ae20341ef397",
+    "summary": "phase3-evidence-20260722T220559152Z/summary.json",
+    "events": "phase3-evidence-20260722T220559152Z/events.jsonl"
+  }
+}

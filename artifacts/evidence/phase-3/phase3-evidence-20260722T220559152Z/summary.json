@@ -1,0 +1,542 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-22T22:05:59.152Z",
+  "sessionId": "phase3-evidence-20260722T220559152Z",
+  "mode": "mock",
+  "provenance": {
+    "mode": "mock",
+    "kind": "local-test",
+    "provider": "local-process",
+    "notice": "LOCAL TEST EVIDENCE - NOT DAYTONA OR RECORDED LIVE"
+  },
+  "claim": "Real local Git/CMake/CTest evidence. This is not Daytona, Fireworks, Braintrust, GitHub, CodeRabbit, or recorded-live evidence.",
+  "sourceCommitSha": "7aa1629b90f8e832072e9c2ecedb9bd7e77dc04d",
+  "toolchain": {
+    "cmakePath": "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+    "ctestPath": "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\ctest.exe",
+    "generator": "Visual Studio 18 2026",
+    "visualStudioRoot": "D:/visual_studio",
+    "multiConfig": true
+  },
+  "eventChain": {
+    "eventCount": 27,
+    "eventLogSha256": "dfba007f48d5de07b21b6f363e8437b00b94898f9f24d99edef07847897eb873",
+    "lastEventHash": "ce8628f7627deefbdd4503988743b902b803af1c07358ad87600ae20341ef397",
+    "replayStatus": "completed",
+    "replayWinnerCandidateId": "candidate-c-fail-closed"
+  },
+  "decision": {
+    "id": "localtest-decision-phase3-evidence-20260722T220559152Z",
+    "sessionId": "phase3-evidence-20260722T220559152Z",
+    "createdAt": "2026-07-22T22:06:06.726Z",
+    "updatedAt": "2026-07-22T22:06:06.726Z",
+    "source": "local-test",
+    "sourceVersion": "local-tournament-v1",
+    "winnerCandidateId": "candidate-c-fail-closed",
+    "rankings": [
+      {
+        "candidateId": "candidate-c-fail-closed",
+        "eligible": true,
+        "weightedScore": 0.89,
+        "hardGateFailures": [],
+        "evidenceDigest": "ee3fa7a9a315988c1a07af16461ed3da225fb16a7308c07acb7443504165d409"
+      },
+      {
+        "candidateId": "candidate-a-range-clamp",
+        "eligible": false,
+        "weightedScore": 0.897,
+        "hardGateFailures": [
+          "SafetyInvariant hard gate failed"
+        ],
+        "evidenceDigest": "95e8985f502c28916aaadb0b9b4b2f75689dbf522136868b48532aa3558abe5f"
+      },
+      {
+        "candidateId": "candidate-b-retry-latch",
+        "eligible": false,
+        "weightedScore": 0.3465,
+        "hardGateFailures": [
+          "BuildSuccess must equal 1",
+          "SafetyInvariant hard gate failed",
+          "UnitTestPassRate is below 0.95"
+        ],
+        "evidenceDigest": "b0b532ee71875665aadc5838f71dbe511341716b334b5b83997169aae0355be4"
+      }
+    ],
+    "rationale": "candidate-c-fail-closed is the highest-scoring candidate that passed every non-negotiable gate.",
+    "selectionPolicyVersion": "safety-tournament-v1"
+  },
+  "candidates": [
+    {
+      "candidateId": "candidate-a-range-clamp",
+      "strategy": "range-validation",
+      "patchSha256": "a645538725627829fd08426ffed97bc3c082f1c9f306262feccdfecc9fd1af93",
+      "sandboxId": "localtest-candidate-a-range-clamp-48f2b4db",
+      "fixtureHashBeforePatch": "3ff642b4fd35f1db4661d1b9feedd8d39de9fb225804a26c996986319a310ce6",
+      "fixtureHashAfterPatch": "30b3b2d80358804898dbb0c5e636182daecb4862f2f0e94ee6dc9d2c5c49c92a",
+      "buildPassed": true,
+      "unitTests": {
+        "executed": true,
+        "passed": 5,
+        "total": 5,
+        "exitCode": 0
+      },
+      "safetyTests": {
+        "executed": true,
+        "passed": 0,
+        "total": 6,
+        "exitCode": 8
+      },
+      "scores": {
+        "buildSuccess": 1,
+        "unitTestPassRate": 1,
+        "safetyInvariant": 0,
+        "regressionProtection": 1,
+        "patchIntegrity": 1,
+        "patchMinimality": 0.985,
+        "explanationGroundedness": 1,
+        "reproducibility": 0
+      },
+      "eligible": false,
+      "weightedScore": 0.897,
+      "hardGateFailures": [
+        "SafetyInvariant hard gate failed"
+      ],
+      "evidenceDigest": "95e8985f502c28916aaadb0b9b4b2f75689dbf522136868b48532aa3558abe5f",
+      "commands": [
+        {
+          "commandId": "git-init",
+          "argv": [
+            "C:\\Program Files\\Git\\cmd\\git.exe",
+            "init",
+            "--quiet"
+          ],
+          "commandHash": "c96d235df43c12cdcae7cd03d46e3bfdde3867051147b13485c91a255e090a66",
+          "exitCode": 0,
+          "durationMs": 125,
+          "timedOut": false,
+          "artifactHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "stdoutHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "commandId": "patch-check",
+          "argv": [
+            "C:\\Program Files\\Git\\cmd\\git.exe",
+            "apply",
+            "--check",
+            "--whitespace=error-all",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-a-range-clamp-48f2b4db\\candidate.patch"
+          ],
+          "commandHash": "f5e632977b12572e3b9c9464d5f3ff6900fbaf0c012be5a86814bcfe018ff0d8",
+          "exitCode": 0,
+          "durationMs": 92,
+          "timedOut": false,
+          "artifactHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "stdoutHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "commandId": "patch-apply",
+          "argv": [
+            "C:\\Program Files\\Git\\cmd\\git.exe",
+            "apply",
+            "--whitespace=error-all",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-a-range-clamp-48f2b4db\\candidate.patch"
+          ],
+          "commandHash": "6c68b2ad0391f167f6782287dfed34f8aceb839b953572f277ff0be87d2d699c",
+          "exitCode": 0,
+          "durationMs": 126,
+          "timedOut": false,
+          "artifactHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "stdoutHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "commandId": "configure",
+          "argv": [
+            "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+            "-S",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-a-range-clamp-48f2b4db\\repository\\fixtures\\battery-controller",
+            "-B",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-a-range-clamp-48f2b4db\\build",
+            "-G",
+            "Visual Studio 18 2026",
+            "-A",
+            "x64",
+            "-DCMAKE_GENERATOR_INSTANCE=D:/visual_studio"
+          ],
+          "commandHash": "6948ea4cfff3dea5703f52ed3dddd8d7e327b6be560ab03b25fd1670b1b99345",
+          "exitCode": 0,
+          "durationMs": 3264,
+          "timedOut": false,
+          "artifactHash": "d87fbae535de64ba47a909ab6750c38f102b1a641f59f85cc254ab8fa57385c5",
+          "stdoutHash": "830f7cfa8a8c3c2997a6d15bda6d76ba42fa2fa1b9f8f7c7b951ef1a0545e11b",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "commandId": "build",
+          "argv": [
+            "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+            "--build",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-a-range-clamp-48f2b4db\\build",
+            "--config",
+            "Debug",
+            "--parallel",
+            "2"
+          ],
+          "commandHash": "f12a8012d5ab40b60d49166898d2071fc7e6097727d3a098501c51b43bff5bab",
+          "exitCode": 0,
+          "durationMs": 2906,
+          "timedOut": false,
+          "artifactHash": "e8695d0cfd642f9609695c3493ae03ef80f0ba5e43b363f2022e07e12677fb1e",
+          "stdoutHash": "6508e9dc0233f7aa939ac05b8709933f218a4889d86d948564bf60deab7e16ad",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "commandId": "unit-tests",
+          "argv": [
+            "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\ctest.exe",
+            "--test-dir",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-a-range-clamp-48f2b4db\\build",
+            "-C",
+            "Debug",
+            "-V",
+            "-L",
+            "unit",
+            "--output-on-failure",
+            "--no-tests=error"
+          ],
+          "commandHash": "ecdf65a63a99ce3af84b17cf36e2a94e665fdd47fb8670c562ea635eb90093f0",
+          "exitCode": 0,
+          "durationMs": 153,
+          "timedOut": false,
+          "artifactHash": "e8695d0cfd642f9609695c3493ae03ef80f0ba5e43b363f2022e07e12677fb1e",
+          "stdoutHash": "01dc445e73bb0d9dcc3451f5091a0e4ede89f863212287acc9d157812bd5c986",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "commandId": "safety-tests",
+          "argv": [
+            "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\ctest.exe",
+            "--test-dir",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-a-range-clamp-48f2b4db\\build",
+            "-C",
+            "Debug",
+            "-V",
+            "-L",
+            "safety",
+            "--output-on-failure",
+            "--no-tests=error"
+          ],
+          "commandHash": "bc8eb5dc4efb1420d5c3fcefd38cbe49491309c9a952b5913b83943ba290bd91",
+          "exitCode": 8,
+          "durationMs": 160,
+          "timedOut": false,
+          "artifactHash": "e8695d0cfd642f9609695c3493ae03ef80f0ba5e43b363f2022e07e12677fb1e",
+          "stdoutHash": "5d3fb18591c08d9c61dc5a307bcc5df2cc1055edb9eca2152aa5edc1c9503cdd",
+          "stderrHash": "18e00877dc1071c85cd4f479d451bebeef8309022e46cf8c63b0bed5151984a4"
+        }
+      ]
+    },
+    {
+      "candidateId": "candidate-b-retry-latch",
+      "strategy": "retry-and-latch",
+      "patchSha256": "70ed45085174785e90dc816d3e519aaf847a9091142fa6aa223c6f43764a5d04",
+      "sandboxId": "localtest-candidate-b-retry-latch-e1befde9",
+      "fixtureHashBeforePatch": "3ff642b4fd35f1db4661d1b9feedd8d39de9fb225804a26c996986319a310ce6",
+      "fixtureHashAfterPatch": "b1da35c91f280775aa7fcc7fd591bf1f4ec8bf51a0946dd2dcd229afa930153a",
+      "buildPassed": false,
+      "unitTests": {
+        "executed": false,
+        "passed": 0,
+        "total": 0,
+        "exitCode": null
+      },
+      "safetyTests": {
+        "executed": false,
+        "passed": 0,
+        "total": 0,
+        "exitCode": null
+      },
+      "scores": {
+        "buildSuccess": 0,
+        "unitTestPassRate": 0,
+        "safetyInvariant": 0,
+        "regressionProtection": 0,
+        "patchIntegrity": 1,
+        "patchMinimality": 0.9825,
+        "explanationGroundedness": 1,
+        "reproducibility": 0
+      },
+      "eligible": false,
+      "weightedScore": 0.3465,
+      "hardGateFailures": [
+        "BuildSuccess must equal 1",
+        "SafetyInvariant hard gate failed",
+        "UnitTestPassRate is below 0.95"
+      ],
+      "evidenceDigest": "b0b532ee71875665aadc5838f71dbe511341716b334b5b83997169aae0355be4",
+      "commands": [
+        {
+          "commandId": "git-init",
+          "argv": [
+            "C:\\Program Files\\Git\\cmd\\git.exe",
+            "init",
+            "--quiet"
+          ],
+          "commandHash": "3f6c881d99db1f05d0cc7bcbe2f064ae140fd7c3ae7ddb48a277aef0019c1142",
+          "exitCode": 0,
+          "durationMs": 117,
+          "timedOut": false,
+          "artifactHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "stdoutHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "commandId": "patch-check",
+          "argv": [
+            "C:\\Program Files\\Git\\cmd\\git.exe",
+            "apply",
+            "--check",
+            "--whitespace=error-all",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-b-retry-latch-e1befde9\\candidate.patch"
+          ],
+          "commandHash": "9bddec5ccf4478c25b2aa4c1e3773deaaac9aa11bd40296638ac0cfa554b21b1",
+          "exitCode": 0,
+          "durationMs": 82,
+          "timedOut": false,
+          "artifactHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "stdoutHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "commandId": "patch-apply",
+          "argv": [
+            "C:\\Program Files\\Git\\cmd\\git.exe",
+            "apply",
+            "--whitespace=error-all",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-b-retry-latch-e1befde9\\candidate.patch"
+          ],
+          "commandHash": "2197c5ad656ec4fd43f1a1237def379ce98b715d09a25299fe8ea4b8e6e2d767",
+          "exitCode": 0,
+          "durationMs": 118,
+          "timedOut": false,
+          "artifactHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "stdoutHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "commandId": "configure",
+          "argv": [
+            "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+            "-S",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-b-retry-latch-e1befde9\\repository\\fixtures\\battery-controller",
+            "-B",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-b-retry-latch-e1befde9\\build",
+            "-G",
+            "Visual Studio 18 2026",
+            "-A",
+            "x64",
+            "-DCMAKE_GENERATOR_INSTANCE=D:/visual_studio"
+          ],
+          "commandHash": "66b09e7ebee0cc012b2d1a91de7e9b67a06882b946407330ab4f81b2f498974c",
+          "exitCode": 0,
+          "durationMs": 3414,
+          "timedOut": false,
+          "artifactHash": "d87fbae535de64ba47a909ab6750c38f102b1a641f59f85cc254ab8fa57385c5",
+          "stdoutHash": "c80380a982bdeaf0892b5dee8df2239f7a27c6cdc4014d791bbc618eb4d0735f",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "commandId": "build",
+          "argv": [
+            "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+            "--build",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-b-retry-latch-e1befde9\\build",
+            "--config",
+            "Debug",
+            "--parallel",
+            "2"
+          ],
+          "commandHash": "a6cb49ec8dfd257b1534a0da2e63728baaa1d3d35396921fb3eef5d14755c2a9",
+          "exitCode": 1,
+          "durationMs": 1562,
+          "timedOut": false,
+          "artifactHash": "d87fbae535de64ba47a909ab6750c38f102b1a641f59f85cc254ab8fa57385c5",
+          "stdoutHash": "3a4f4ada5e4c46bb32978448840d7f3a2e625d90d019fc3ca9def321012a5c16",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    },
+    {
+      "candidateId": "candidate-c-fail-closed",
+      "strategy": "fail-closed",
+      "patchSha256": "e282a3559687d66af67ce0b7f3834bf8fcdf55aff797f2adeaa142288f566818",
+      "sandboxId": "localtest-candidate-c-fail-closed-28038812",
+      "fixtureHashBeforePatch": "3ff642b4fd35f1db4661d1b9feedd8d39de9fb225804a26c996986319a310ce6",
+      "fixtureHashAfterPatch": "f9622b280eaf8f2d0fa64d57d10d86f81cc237e9f10fe3cdc2118ff3b3cdfa8f",
+      "buildPassed": true,
+      "unitTests": {
+        "executed": true,
+        "passed": 5,
+        "total": 5,
+        "exitCode": 0
+      },
+      "safetyTests": {
+        "executed": true,
+        "passed": 6,
+        "total": 6,
+        "exitCode": 0
+      },
+      "scores": {
+        "buildSuccess": 1,
+        "unitTestPassRate": 1,
+        "safetyInvariant": 1,
+        "regressionProtection": 1,
+        "patchIntegrity": 1,
+        "patchMinimality": 0.95,
+        "explanationGroundedness": 1,
+        "reproducibility": 0
+      },
+      "eligible": true,
+      "weightedScore": 0.89,
+      "hardGateFailures": [],
+      "evidenceDigest": "ee3fa7a9a315988c1a07af16461ed3da225fb16a7308c07acb7443504165d409",
+      "commands": [
+        {
+          "commandId": "git-init",
+          "argv": [
+            "C:\\Program Files\\Git\\cmd\\git.exe",
+            "init",
+            "--quiet"
+          ],
+          "commandHash": "6b0858fc402667032260ed72007a4ff4b960a2444b01819a4f8afebb85b20ca2",
+          "exitCode": 0,
+          "durationMs": 112,
+          "timedOut": false,
+          "artifactHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "stdoutHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "commandId": "patch-check",
+          "argv": [
+            "C:\\Program Files\\Git\\cmd\\git.exe",
+            "apply",
+            "--check",
+            "--whitespace=error-all",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-c-fail-closed-28038812\\candidate.patch"
+          ],
+          "commandHash": "f0aba76f38a571c3b76bfe9fa446a639eedbd0925af87a545ba65f404a235f36",
+          "exitCode": 0,
+          "durationMs": 84,
+          "timedOut": false,
+          "artifactHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "stdoutHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "commandId": "patch-apply",
+          "argv": [
+            "C:\\Program Files\\Git\\cmd\\git.exe",
+            "apply",
+            "--whitespace=error-all",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-c-fail-closed-28038812\\candidate.patch"
+          ],
+          "commandHash": "ea2388a5a1eca7f70e7541cc6dfa2857453ac819024c7ef352da22a1c41f7e16",
+          "exitCode": 0,
+          "durationMs": 93,
+          "timedOut": false,
+          "artifactHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "stdoutHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "commandId": "configure",
+          "argv": [
+            "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+            "-S",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-c-fail-closed-28038812\\repository\\fixtures\\battery-controller",
+            "-B",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-c-fail-closed-28038812\\build",
+            "-G",
+            "Visual Studio 18 2026",
+            "-A",
+            "x64",
+            "-DCMAKE_GENERATOR_INSTANCE=D:/visual_studio"
+          ],
+          "commandHash": "e7e6e2263608e6ff95ff83e1eaa146b09918eba720ab36f473e7134d2ee58a44",
+          "exitCode": 0,
+          "durationMs": 3358,
+          "timedOut": false,
+          "artifactHash": "d87fbae535de64ba47a909ab6750c38f102b1a641f59f85cc254ab8fa57385c5",
+          "stdoutHash": "f284b9d2083997d6ee7ab9ef36053246fea127e5bb740ec77ed4e3849aa21355",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "commandId": "build",
+          "argv": [
+            "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+            "--build",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-c-fail-closed-28038812\\build",
+            "--config",
+            "Debug",
+            "--parallel",
+            "2"
+          ],
+          "commandHash": "3c41c9dc1c43dcf1432d3ba1d5ed417100f71307647db750382063b0ceba43b2",
+          "exitCode": 0,
+          "durationMs": 3142,
+          "timedOut": false,
+          "artifactHash": "4ca6226aca1158e8e0adca6999296706189df0048d7380122313097f0b46deaf",
+          "stdoutHash": "b654014798b655c76af310617f84c809e841b4469caef47c0eb1d627da0ad337",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "commandId": "unit-tests",
+          "argv": [
+            "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\ctest.exe",
+            "--test-dir",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-c-fail-closed-28038812\\build",
+            "-C",
+            "Debug",
+            "-V",
+            "-L",
+            "unit",
+            "--output-on-failure",
+            "--no-tests=error"
+          ],
+          "commandHash": "8e51865a13f9bb0f8e9719aa6774525d75d7970714e9cb53382cc574c259af00",
+          "exitCode": 0,
+          "durationMs": 144,
+          "timedOut": false,
+          "artifactHash": "4ca6226aca1158e8e0adca6999296706189df0048d7380122313097f0b46deaf",
+          "stdoutHash": "341466ececf87a67a1a1c921872c268e50a621a64ee439c2a4810fa17cd2a883",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "commandId": "safety-tests",
+          "argv": [
+            "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\ctest.exe",
+            "--test-dir",
+            "F:\\desktop\\hackthon\\.safeflash\\local-sandboxes\\localtest-candidate-c-fail-closed-28038812\\build",
+            "-C",
+            "Debug",
+            "-V",
+            "-L",
+            "safety",
+            "--output-on-failure",
+            "--no-tests=error"
+          ],
+          "commandHash": "6ade16be2861ccde9f56cf7ef09074ca878bb13590bd3bda42ee8c5fa1d0542b",
+          "exitCode": 0,
+          "durationMs": 148,
+          "timedOut": false,
+          "artifactHash": "4ca6226aca1158e8e0adca6999296706189df0048d7380122313097f0b46deaf",
+          "stdoutHash": "ebf8e260048d8e362f9e82226564681a9f2d69f807a40e8a6b2b937033961e74",
+          "stderrHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    }
+  ]
+}
