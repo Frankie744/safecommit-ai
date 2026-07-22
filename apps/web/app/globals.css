@@ -911,10 +911,9 @@ button {
 }
 
 .approval-title strong {
-  overflow: hidden;
   font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.2;
+  white-space: normal;
 }
 
 .gate-icon {
