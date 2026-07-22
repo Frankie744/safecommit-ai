@@ -254,7 +254,14 @@ if ($build.ExitCode -ne 0) {
 $unitInvocation = @{
     Name = "unit-tests"
     FilePath = $ctestPath
-    Arguments = @("--test-dir", $buildDirectory, "-C", "Debug", "-V", "-L", "unit")
+    Arguments = @(
+        "--test-dir", $buildDirectory,
+        "-C", "Debug",
+        "-V",
+        "-L", "unit",
+        "--output-on-failure",
+        "--no-tests=error"
+    )
     EvidenceDirectory = $evidenceDirectory
 }
 $unit = Invoke-LoggedNative @unitInvocation
@@ -265,7 +272,14 @@ if ($unit.ExitCode -ne 0) {
 $safetyInvocation = @{
     Name = "safety-tests"
     FilePath = $ctestPath
-    Arguments = @("--test-dir", $buildDirectory, "-C", "Debug", "-V", "-L", "safety")
+    Arguments = @(
+        "--test-dir", $buildDirectory,
+        "-C", "Debug",
+        "-V",
+        "-L", "safety",
+        "--output-on-failure",
+        "--no-tests=error"
+    )
     EvidenceDirectory = $evidenceDirectory
 }
 $safety = Invoke-LoggedNative @safetyInvocation

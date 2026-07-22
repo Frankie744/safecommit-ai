@@ -19,6 +19,7 @@
     "test:e2e": "playwright test",
     "demo:local": "tsx scripts/run-local-tournament.ts",
     "smoke:external": "tsx scripts/smoke-external.ts",
+    "verify:p0": "tsx scripts/capture-p0-evidence.ts",
     "verify": "npm run typecheck && npm run test && npm run build && npm run test:e2e"
   },
   "engines": {
