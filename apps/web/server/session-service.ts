@@ -288,13 +288,14 @@ export class SessionService {
 
   constructor(options: SessionServiceOptions = {}) {
     this.workspaceRoot = resolve(
-      options.workspaceRoot ??
+      /* turbopackIgnore: true */ options.workspaceRoot ??
         process.env.SAFEFLASH_WORKSPACE_ROOT ??
         process.env.INIT_CWD ??
         /* turbopackIgnore: true */ process.cwd(),
     );
     this.storageDirectory = resolve(
-      options.storageDirectory ?? join(this.workspaceRoot, ".safeflash", "web-sessions"),
+      /* turbopackIgnore: true */ options.storageDirectory ??
+        join(this.workspaceRoot, ".safeflash", "web-sessions"),
     );
     this.now = options.now ?? (() => new Date());
     this.tournamentRunner = options.runTournament ?? runLocalTournament;
