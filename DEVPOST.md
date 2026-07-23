@@ -261,19 +261,16 @@ the successful diff.
 
 ## Hackathon-day new work
 
-This section is a pre-event placeholder and must be replaced only after the
-official hacking window opens and the resulting implementation is verified.
+The pre-event core already contains **Cross-Device Assurance Profiles**:
+executable simulated Battery and Motor controllers share the same server-owned
+command policy, deterministic hard gates, evidence binding, and no-auto-merge
+boundary. This must not be claimed as competition-day work.
 
-The selected day-of feature is **Cross-Device Assurance Profiles**:
-
-> One safety gate, multiple classes of physical devices.
-
-The intended proof adds an executable simulated Motor controller to the
-existing executable simulated Battery controller, while preserving the same
-server-owned patch boundaries, deterministic hard gates, evidence binding, and
-no-auto-merge semantics. Before that post-start commit and evidence exist, the
-project claims only one executable Battery reference and ten modeled incident
-definitions. See
+The reserved post-start feature is **Judge Challenge Mode**: a judge chooses
+one of those two physical faults and receives a sanitized, provenance-labelled
+receipt showing why a higher-scoring unsafe patch lost. It is intentionally
+not implemented before the official window. API-key entry is launch setup, not
+the new feature. See
 [`docs/hacksprint-new-feature-plan.md`](docs/hacksprint-new-feature-plan.md).
 
 ## Built with

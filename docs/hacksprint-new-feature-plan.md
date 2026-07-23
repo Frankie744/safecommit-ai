@@ -1,178 +1,90 @@
 # SafeFlash HackSprint day-of feature plan
 
-## Decision
+## Honest baseline
 
-The official competition-day feature is:
+Before the official hacking window, SafeFlash already includes:
 
-> **Cross-Device Assurance Profiles**
+- a server-owned `ExecutableIncidentProfile` registry;
+- real C/CMake/CTest fixtures for a simulated Battery charger and Motor drive;
+- three isolated candidate patches per profile;
+- the same non-compensable selector for both device classes;
+- profile/version/command-policy/source/test-count evidence binding;
+- `npm run demo:cross-device`;
+- a compact cross-device proof in Technical Evidence.
+
+This is pre-event core work. It must not be presented as work created during
+the official event.
+
+## Competition-day feature
+
+The small but real post-start feature is:
+
+> **Judge Challenge Mode**
 >
-> One safety gate, multiple classes of physical devices.
+> A judge chooses a physical fault and watches the existing safety gate prove
+> why the highest-scoring unsafe firmware cannot ship.
 
-**Pre-event status:** planned only. The executable Motor profile, generic
-profile-driven runner, Motor candidate patches, and UI evidence are not
-implemented in the pre-event branch. They must not be described as completed.
+**Pre-event status:** reserved and not implemented.
 
-Implementation may begin only after the official HackSprint hacking window
-opens. The resulting source commit, tests, evidence, and screenshots must all
-be captured after that boundary.
+API-key injection, configuration changes, provider smoke runs, and evidence
+capture are launch work, not the new feature.
 
-## Pre-event baseline
+## Bounded implementation
 
-The existing verified reference implementation is a simulated Battery
-controller backed by real compiled C:
+After the official hacking window opens:
 
-- incident: temperature-sensor disconnect while charging;
-- unsafe physical state: charging remains enabled;
-- hard-gate result: a higher-scoring unsafe candidate is ineligible;
-- safe result: charging is disabled and the fault remains latched;
-- device provenance: `SIMULATED DEVICE`;
-- firmware provenance: real compiled native C fixture;
-- Provider provenance: authoritative `LIVE`, `RECORDED_LIVE`, or `MOCK`
-  labels remain separate from device provenance.
+1. Add a disabled-by-default `SAFEFLASH_JUDGE_CHALLENGE_ENABLED` flag.
+2. Add a compact selector with exactly two server-owned choices:
+   `battery-sensor-disconnect` and `motor-command-nonfinite`.
+3. Add a server endpoint that accepts only that enum and maps it to the
+   existing immutable profile registry.
+4. Run the chosen simulated-device tournament with the existing fixed command
+   policy and hard-gate selector.
+5. Return a sanitized challenge receipt binding profile ID/version, source
+   commit, winner, rejected higher score, evidence digests, and local-test
+   provenance.
+6. Display `SIMULATED DEVICE` and `LOCAL-TEST · NOT LIVE` unless an entirely
+   separate authorized provider run supplies genuine Live evidence.
 
-The ten-row incident dataset models additional hardware classes, but only the
-Battery controller is executable before the HackSprint. Do not claim ten
-executable devices.
+The feature must not accept caller-supplied paths, commands, policies, test
+counts, candidates, or thresholds.
 
-## Day-of implementation
+## Day-of tests and commit
 
-### 1. Server-owned executable profile
+- feature flag off: no challenge controls or endpoint mutation;
+- invalid profile ID: `400`, no execution;
+- Battery challenge: higher unsafe score rejected;
+- Motor challenge: higher unsafe score rejected;
+- no provider calls, PR creation, push, merge, or real hardware requirement;
+- Playwright selector-to-receipt flow;
+- TypeScript, unit/integration, production build, secret scan, P0, rehearsal.
 
-Create a repository-owned profile contract similar to:
-
-```ts
-interface ExecutableIncidentProfile {
-  targetId: string;
-  hardwareClass: string;
-  incident: Incident;
-  safetyPolicy: ImmutableSafetyPolicy;
-  fixtureDirectory: string;
-  sourceContextPaths: readonly string[];
-  allowedPatchPaths: readonly string[];
-  protectedPaths: readonly string[];
-  commandPolicyId: string;
-  unitTestLabel: string;
-  safetyTestLabel: string;
-}
-```
-
-The model and browser must never provide shell commands. `commandPolicyId`
-selects a fixed, server-owned command sequence.
-
-### 2. Executable simulated Motor controller
-
-Add:
+Create a clearly post-start commit such as:
 
 ```text
-fixtures/motor-controller/
-  CMakeLists.txt
-  README.md
-  include/motor_controller.h
-  src/motor_controller.c
-  tests/test_unit.c
-  tests/test_safety.c
+feat: add judge-selected physical fault challenge
 ```
 
-The incident is `motor-command-nan`:
+Retain the commit time, test log, screenshots, and SHA-256 evidence manifest.
 
-```text
-non-finite torque command
--> unsafe baseline allows the value to reach PWM calculation
--> safe behavior commands zero torque, disables PWM, and latches a fault
-```
+## Allowed day-of claim
 
-Normal finite commands and boundary behavior must continue to pass unit tests.
-NaN and positive/negative infinity must fail closed.
+Only after the post-start implementation and tests pass:
 
-### 3. Same hard-gate path
-
-Run three Motor candidates through the same eligibility and ranking semantics:
-
-```text
-BuildSuccess == 1
-SafetyInvariant == 1
-PatchIntegrity == 1
-UnitTestPassRate >= 0.95
-```
-
-At least one candidate should demonstrate that a high weighted score cannot
-compensate for a failed Motor safety invariant. Device-specific code must not
-introduce a second selector or weaker thresholds.
-
-### 4. Evidence contract
-
-Motor evidence must bind:
-
-- `targetId` and profile version;
-- source commit and before/after tree identities;
-- patch and evidence digests;
-- fixed command-policy identity;
-- compiler, build, unit-test, and safety-test results;
-- separate sandbox identity;
-- provenance of `LOCAL TEST`, `LIVE`, or `RECORDED_LIVE`;
-- simulated-device status.
-
-### 5. Competition command and UI
-
-Add a bounded command such as:
-
-```text
-npm run demo:cross-device
-```
-
-Expected summary:
-
-```text
-EXECUTABLE_PROFILES=2
-BATTERY_PROFILE=PASS
-MOTOR_PROFILE=PASS
-SIMULATED_DEVICES=YES
-HARD_GATE_BYPASS=0
-```
-
-The website should add only a compact cross-device evidence comparison. The
-Battery incident remains the three-minute primary story. Detailed Motor diffs,
-tests, and provenance stay collapsed in Technical Evidence.
-
-## Required day-of verification
-
-After implementation:
-
-1. run the Motor native build and targeted unit/safety tests;
-2. run the profile-driven Battery and Motor integration path;
-3. run adversarial tests proving one profile cannot modify another profile's
-   protected paths or command policy;
-4. run TypeScript, full unit/integration tests, Playwright Chrome, production
-   build, secret scan, `npm audit`, `npm run verify:p0`, and `npm run rehearsal`;
-5. capture a new evidence directory and SHA-256 manifest;
-6. preserve the first post-start implementation commit and final verified head;
-7. update the Draft competition PR without merging it;
-8. update README, Devpost, slides, and the pitch only after the evidence exists.
-
-## Allowed claims after verification
-
-Only after the day-of evidence passes:
-
-```text
-Two executable simulated device profiles
-Ten modeled firmware-safety incidents
-One non-bypassable hard-gate architecture
-```
+> During this HackSprint we added Judge Challenge Mode, so a judge can choose
+> between Battery and Motor faults and see the same evidence-first safety gate
+> reject a higher-scoring unsafe patch.
 
 Do not claim:
 
-- ten executable devices;
 - physical hardware or HIL validation;
 - universal firmware safety;
-- live Provider evidence when the run is local or mock;
-- Motor support before the day-of implementation and evidence exist.
+- Live providers for a local/mock challenge;
+- that the pre-event cross-device engine was built during the event.
 
 ## Policy Composer
 
-Safety Policy Composer remains a disabled roadmap item. It is not the official
-day-of feature and must not be implemented or presented as an active converter
-for this submission.
-
-The product continues to rely on repository-owned, engineer-reviewed safety
-policies. An AI-generated policy draft could never activate itself, weaken an
-existing hard gate, replace executable tests, or authorize hardware access.
+Safety Policy Composer remains a disabled roadmap item. It is not an active
+natural-language-to-policy converter and cannot authorize a safety transition.
+SafeFlash continues to rely on repository-owned, engineer-reviewed executable
+policies.

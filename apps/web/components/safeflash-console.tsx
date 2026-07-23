@@ -1303,6 +1303,80 @@ function CopilotSessionBridge({
   return children;
 }
 
+const EXECUTABLE_ASSURANCE_PROFILES = [
+  {
+    id: "battery-sensor-disconnect",
+    device: "Battery charger",
+    incident: "Temperature sensor disconnected while charging",
+    unsafe: "Sensor fault ignored · charging ON",
+    safe: "Charging OFF · fault latched",
+    fixture: "fixtures/battery-controller",
+  },
+  {
+    id: "motor-command-nonfinite",
+    device: "Motor drive",
+    incident: "NaN torque command reaches the controller",
+    unsafe: "Range checks bypassed · PWM ON",
+    safe: "PWM OFF · zero torque · fault latched",
+    fixture: "fixtures/motor-controller",
+  },
+] as const;
+
+function CrossDeviceAssuranceProof() {
+  return (
+    <section
+      aria-labelledby="cross-device-proof-title"
+      className="panel cross-device-proof"
+      data-testid="cross-device-proof"
+    >
+      <div className="cross-device-proof__heading">
+        <div>
+          <span className="eyebrow">Cross-device executable proof</span>
+          <h3 id="cross-device-proof-title">
+            One safety gate, multiple physical device classes.
+          </h3>
+        </div>
+        <div className="cross-device-proof__badges">
+          <span>SIMULATED DEVICES</span>
+          <span>LOCAL-TEST · NOT LIVE</span>
+        </div>
+      </div>
+      <div className="cross-device-proof__grid">
+        {EXECUTABLE_ASSURANCE_PROFILES.map((profile) => (
+          <article data-profile-id={profile.id} key={profile.id}>
+            <header>
+              <strong>{profile.device}</strong>
+              <span>EXECUTABLE C / CTEST</span>
+            </header>
+            <p>{profile.incident}</p>
+            <dl>
+              <div>
+                <dt>Unsafe baseline</dt>
+                <dd>{profile.unsafe}</dd>
+              </div>
+              <div>
+                <dt>Hard-gate outcome</dt>
+                <dd>{profile.safe}</dd>
+              </div>
+              <div>
+                <dt>Server-owned fixture</dt>
+                <dd>
+                  <code>{profile.fixture}</code>
+                </dd>
+              </div>
+            </dl>
+          </article>
+        ))}
+      </div>
+      <p className="cross-device-proof__note">
+        Both profiles use the same non-compensable selector and fixed command
+        policy. Run <code>npm run demo:cross-device</code> to rebuild all six
+        isolated candidates without provider calls or hardware.
+      </p>
+    </section>
+  );
+}
+
 export function SafeFlashConsole() {
   const [session, setSession] = useState<SessionView | null>(null);
   const [activeMode, setActiveMode] = useState<SessionMode>("unknown");
@@ -1715,6 +1789,7 @@ export function SafeFlashConsole() {
               policy, audit events, and sanitized JSON remain available here.
             </p>
           </div>
+          <CrossDeviceAssuranceProof />
           {session ? (
             <>
               <CompetitionStatusRail device={device} session={session} />

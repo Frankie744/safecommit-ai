@@ -443,6 +443,13 @@ async function main(): Promise<void> {
     scenarioId: DEFAULT_DEMO_SCENARIO_ID,
     commandTimeoutMs: 90_000,
   });
+  const motorTournament = await runLocalTournament({
+    sessionId: `${sessionId}-motor`,
+    profileId: "motor-command-nonfinite",
+    workspaceRoot,
+    scenarioId: DEFAULT_DEMO_SCENARIO_ID,
+    commandTimeoutMs: 90_000,
+  });
   const unsafe = tournament.candidates.find(
     (candidate) => candidate.candidate.candidateId === "candidate-a-range-clamp",
   );
@@ -450,20 +457,36 @@ async function main(): Promise<void> {
     (candidate) =>
       candidate.candidate.candidateId === tournament.decision.winnerCandidateId,
   );
+  const unsafeMotor = motorTournament.candidates.find(
+    (candidate) => candidate.candidate.strategy === "range-validation",
+  );
+  const motorWinner = motorTournament.candidates.find(
+    (candidate) =>
+      candidate.candidate.candidateId ===
+      motorTournament.decision.winnerCandidateId,
+  );
   const fallbackPass =
     tournament.provenance.kind === "local-test" &&
+    tournament.profile.id === "battery-sensor-disconnect" &&
     unsafe !== undefined &&
     winner?.candidate.candidateId === "candidate-c-fail-closed" &&
     unsafe.weightedScore > winner.weightedScore &&
     !unsafe.eligible &&
-    winner.eligible;
+    winner.eligible &&
+    motorTournament.provenance.kind === "local-test" &&
+    motorTournament.profile.id === "motor-command-nonfinite" &&
+    unsafeMotor !== undefined &&
+    motorWinner?.candidate.strategy === "fail-closed" &&
+    unsafeMotor.weightedScore > motorWinner.weightedScore &&
+    !unsafeMotor.eligible &&
+    motorWinner.eligible;
   add(
     "software-fallback",
     fallbackPass,
     fallbackPass
-      ? "MOCK unsafe-high-score rejected the top soft score and selected the hard-gate-safe repair."
-      : "fallback tournament did not preserve the expected safety ordering",
-    "Run npm run test:firmware and inspect the selector evidence.",
+      ? "Battery and Motor MOCK profiles both rejected the top soft score and selected the hard-gate-safe repair."
+      : "cross-device fallback did not preserve the expected safety ordering",
+    "Run npm run demo:cross-device and inspect the selector evidence.",
   );
 
   let recorded: Awaited<ReturnType<typeof recordedLiveStatus>>;

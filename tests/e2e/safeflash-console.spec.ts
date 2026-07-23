@@ -858,6 +858,17 @@ test("renders danger, three persistent candidates, provenance, and a closed PR g
   );
   await expect(page.getByTestId("copilot-readable-state")).toBeVisible();
   await expect(page.getByTestId("copilot-hitl-registration")).toBeVisible();
+  const crossDeviceProof = page.getByTestId("cross-device-proof");
+  await expect(crossDeviceProof).toContainText(
+    "One safety gate, multiple physical device classes.",
+  );
+  await expect(
+    crossDeviceProof.locator('[data-profile-id="battery-sensor-disconnect"]'),
+  ).toContainText("Battery charger");
+  await expect(
+    crossDeviceProof.locator('[data-profile-id="motor-command-nonfinite"]'),
+  ).toContainText("Motor drive");
+  await expect(crossDeviceProof).toContainText("LOCAL-TEST · NOT LIVE");
 
   const pullRequest = page.getByTestId("pull-request-link");
   await expect(pullRequest).toHaveAttribute("aria-disabled", "true");

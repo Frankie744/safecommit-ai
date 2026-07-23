@@ -15,14 +15,14 @@ The product is the evidence and control plane around code generation.
 
 ### What did you build during the HackSprint?
 
-Pre-event answer: the selected day-of feature is **Cross-Device Assurance
-Profiles**, but it is not yet implemented and must not be claimed.
+Pre-event answer: Cross-Device Assurance Profiles are part of the existing
+baseline and must not be claimed as event-day work. The reserved, unimplemented
+feature is **Judge Challenge Mode**.
 
-After day-of evidence exists, answer: we made the safety gate profile-driven
-and added a second executable simulated device class. A Battery sensor
-disconnect and a Motor non-finite torque command use different physical
-invariants but the same non-compensable hard gates, evidence binding, and
-no-auto-merge boundary.
+After genuine post-start evidence exists, answer: we added a judge-selectable
+Battery/Motor fault challenge that routes only to server-owned profiles and
+returns a bound receipt showing why the higher-scoring unsafe patch lost. We
+did not change the hard gates or accept caller-defined commands.
 
 ### What is the Policy Composer?
 

@@ -12,14 +12,12 @@ physical-safety invariant cannot win on average score.
 > approval → review/revalidation. Replace only after the rehearsal is frozen.
 
 **Pre-event competition baseline for the Daytona HackSprint w/ Braintrust,
-July 2026.** The verified reference is the **Parallel Safety Tournament**:
-multiple strategies run separately while every rejection remains visible.
-The selected competition-day feature is **Cross-Device Assurance Profiles**,
-summarized as “One safety gate, multiple classes of physical devices.” Its
-Motor implementation must begin after the official hacking window opens and
-must not be claimed before fresh day-of evidence exists. Policy Composer
-remains a disabled roadmap surface, not a policy conversion or safety
-transition.
+July 2026.** The core now includes **Cross-Device Assurance Profiles**:
+executable simulated Battery and Motor controllers use the same hard-gate
+selector—one safety gate, multiple classes of physical devices. This is
+pre-event work, not a competition-day claim. The reserved post-start feature
+is the small **Judge Challenge Mode** described in the new-feature plan.
+Policy Composer remains a disabled roadmap surface.
 
 ## One-command demo
 
@@ -30,7 +28,14 @@ npm run dev:competition
 ```
 
 Open `http://127.0.0.1:3018`, click **Run Safety Tournament**, and keep
-`MOCK • NOT PROVIDER-VERIFIED` visible. CLI evidence: `npm run demo:local`.
+`MOCK • NOT PROVIDER-VERIFIED` visible. Battery-only CLI evidence remains
+available through `npm run demo:local`.
+
+For the two executable simulated device classes, run:
+
+```powershell
+npm run demo:cross-device
+```
 
 ## How the safety gate works
 

@@ -23,14 +23,14 @@ text is an operator cue, not spoken narration.
 > safety rule, and requires a human to approve the exact evidence before a pull
 > request can be published.
 
-Pre-event operator note: do not make a “built during this HackSprint” claim
-until the post-start feature commit and evidence exist.
+Pre-event operator note: Cross-Device Assurance Profiles are existing core
+work. Do not describe them as built during this HackSprint.
 
-After Cross-Device Assurance Profiles is verified, say:
+Only after the post-start Judge Challenge Mode commit and evidence exist, say:
 
-> Today we made this gate cross-device. The Battery controller and a Motor
-> controller have different physical hazards, but neither can bypass the same
-> evidence-first safety boundary.
+> During this HackSprint we added Judge Challenge Mode. You can choose the
+> Battery or Motor fault, and the same evidence-first gate proves why the
+> highest-scoring unsafe patch still cannot ship.
 
 ## 0:40–1:25 — The tournament
 
@@ -93,18 +93,20 @@ Operator cue: open
 > itself. Fireworks provides diverse strategies; CopilotKit keeps the human
 > decision explicit.
 
-> Today the fixture is a simulated battery controller, not a connected board.
-> The same evidence-first gate can protect medical devices, robots, vehicles,
-> and industrial controls before code reaches hardware. SafeFlash lets AI move
-> toward the physical world without asking us to trust it blindly.
+> Today these are executable simulated Battery and Motor controllers, not
+> connected boards. The same evidence-first gate can protect medical devices,
+> robots, vehicles, and industrial controls before code reaches hardware.
+> SafeFlash lets AI move toward the physical world without asking us to trust
+> it blindly.
 
 ## If interrupted
 
 Use these one-sentence answers, then return to the current screen:
 
 - **What is new?** Before day-of verification, do not claim the reserved
-  feature. After verification: “Cross-Device Assurance Profiles apply the same
-  non-bypassable gate to executable simulated Battery and Motor controllers.”
+  feature. After verification: “Judge Challenge Mode lets a judge choose a
+  Battery or Motor fault and receive a bound explanation of the hard-gate
+  decision.”
 - **Is this live?** “The current badge is authoritative: `MOCK` is local,
   `RECORDED_LIVE` is prior real evidence, and `LIVE` means a provider call in
   this run. The recorded-live mechanism exists, but no complete artifact is

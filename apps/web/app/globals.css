@@ -1323,6 +1323,116 @@ button {
   overflow: auto;
 }
 
+.cross-device-proof {
+  display: grid;
+  gap: 20px;
+  margin-bottom: 22px;
+  padding: 24px;
+}
+
+.cross-device-proof__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.cross-device-proof__heading h3 {
+  margin: 7px 0 0;
+  font-size: clamp(22px, 2.4vw, 32px);
+  letter-spacing: -0.035em;
+}
+
+.cross-device-proof__badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.cross-device-proof__badges span {
+  padding: 6px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--cyan);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.cross-device-proof__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cross-device-proof__grid article {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.cross-device-proof__grid header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cross-device-proof__grid header strong {
+  font-size: 18px;
+}
+
+.cross-device-proof__grid header span {
+  color: var(--green);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 9px;
+}
+
+.cross-device-proof__grid article > p,
+.cross-device-proof__note {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.cross-device-proof__grid dl {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 0;
+}
+
+.cross-device-proof__grid dl > div {
+  display: grid;
+  gap: 3px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.cross-device-proof__grid dt {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cross-device-proof__grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cross-device-proof__grid dl > div:nth-child(2) dd {
+  color: var(--green);
+}
+
+.cross-device-proof__note {
+  margin: 0;
+  font-size: 12px;
+}
+
 .evidence-drawer__body section {
   min-width: 0;
 }
@@ -2542,8 +2652,17 @@ input:focus-visible {
   }
 
   .candidate-grid,
-  .review-grid {
+  .review-grid,
+  .cross-device-proof__grid {
     grid-template-columns: 1fr;
+  }
+
+  .cross-device-proof__heading {
+    flex-direction: column;
+  }
+
+  .cross-device-proof__badges {
+    justify-content: flex-start;
   }
 
   .approval-gate {
