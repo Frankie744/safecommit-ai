@@ -9,5 +9,5 @@ export function canReviewRepository(
   repository: string,
   authorizedRepositories: ReadonlySet<string> | undefined,
 ): boolean {
-  return authorizedRepositories?.has(repository) ?? true;
+  return authorizedRepositories?.has(repository) ?? false;
 }
