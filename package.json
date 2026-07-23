@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace @safeflash/web",
+    "dev:competition": "npm run dev --workspace @safeflash/web -- --port 3018",
     "build": "npm run build --workspace @safeflash/web",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
@@ -23,6 +24,9 @@
     "smoke:external": "tsx scripts/smoke-external.ts",
     "day-of:check": "tsx scripts/day-of-check.ts",
     "prepare:demo-pr": "tsx scripts/prepare-demo-pr.ts",
+    "rehearsal": "tsx scripts/rehearsal.ts",
+    "evidence:verify": "tsx scripts/verify-evidence.ts",
+    "verify:phase8": "tsx scripts/capture-phase8-evidence.ts",
     "verify:p0": "tsx scripts/capture-p0-evidence.ts",
     "verify": "npm run typecheck && npm run test && npm run build && npm run test:e2e"
   },

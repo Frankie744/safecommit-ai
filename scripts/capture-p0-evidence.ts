@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   cp,
   mkdir,
@@ -7,7 +7,7 @@ import {
   readdir,
   writeFile,
 } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 
 const workspaceRoot = resolve(process.cwd());
 const requiredP0Tests = [
@@ -59,15 +59,36 @@ interface VitestReport {
 }
 
 const SENSITIVE_NAME =
-  /(?:^|_)(?:TOKEN|SECRET|PASSWORD|API_KEY|AUTHORIZATION|CREDENTIALS?|PAT)(?:$|_)/iu;
-const BUILD_SECRET_SENTINELS = {
-  FIREWORKS_API_KEY: "SAFEFLASH_BUILD_SENTINEL_FIREWORKS_1f4f3e35",
-  DAYTONA_API_KEY: "SAFEFLASH_BUILD_SENTINEL_DAYTONA_13aa934d",
-  BRAINTRUST_API_KEY: "SAFEFLASH_BUILD_SENTINEL_BRAINTRUST_2de891c4",
-  GITHUB_TOKEN: "SAFEFLASH_BUILD_SENTINEL_GITHUB_5683fa7b",
-  SAFEFLASH_PUBLISH_AUTH_SECRET:
-    "U0FGRUZMQVNIX1BVQkxJU0hfQVVUSF9TRU5USU5FTF8wMQ",
-} as const;
+  /(?:^|_)(?:TOKEN|SECRET|PASSWORD|API_KEY|SIGNING_KEY|AUTHORIZATION|CREDENTIALS?|PAT)(?:$|_)/iu;
+type BuildSecretSentinels = Readonly<
+  Record<
+    | "FIREWORKS_API_KEY"
+    | "DAYTONA_API_KEY"
+    | "BRAINTRUST_API_KEY"
+    | "GITHUB_TOKEN"
+    | "SAFEFLASH_PUBLISH_AUTH_SECRET"
+    | "SAFEFLASH_RECORDED_LIVE_SIGNING_KEY",
+    string
+  >
+>;
+
+function createBuildSecretSentinels(): BuildSecretSentinels {
+  const sentinel = (label: string) =>
+    `SAFEFLASH_${label}_${randomBytes(24).toString("hex")}`;
+  return Object.freeze({
+    FIREWORKS_API_KEY: sentinel("FIREWORKS"),
+    DAYTONA_API_KEY: sentinel("DAYTONA"),
+    BRAINTRUST_API_KEY: sentinel("BRAINTRUST"),
+    GITHUB_TOKEN: sentinel("GITHUB"),
+    // Canonical 32-byte base64url values also satisfy the real server-side
+    // capability/signing-key validators without persisting a reusable secret.
+    SAFEFLASH_PUBLISH_AUTH_SECRET: randomBytes(32).toString("base64url"),
+    SAFEFLASH_RECORDED_LIVE_SIGNING_KEY: randomBytes(32).toString("base64url"),
+  });
+}
+
+let buildSecretSentinels: BuildSecretSentinels =
+  createBuildSecretSentinels();
 let fileSensitiveValues: readonly string[] = [];
 
 async function loadLocalSensitiveValues(): Promise<readonly string[]> {
@@ -117,15 +138,18 @@ function sha256(value: string | Uint8Array): string {
 
 function redact(value: string): string {
   let redacted = value;
+  const secrets = new Set<string>(fileSensitiveValues);
   for (const [name, secret] of [
     ...Object.entries(process.env),
-    ...Object.entries(BUILD_SECRET_SENTINELS),
+    ...Object.entries(buildSecretSentinels),
   ]) {
     if (SENSITIVE_NAME.test(name) && secret !== undefined && secret.length >= 4) {
-      redacted = redacted.split(secret).join("[REDACTED]");
+      secrets.add(secret);
     }
   }
-  for (const secret of fileSensitiveValues) {
+  for (const secret of [...secrets].sort(
+    (left, right) => right.length - left.length,
+  )) {
     redacted = redacted.split(secret).join("[REDACTED]");
   }
   return redacted
@@ -284,7 +308,7 @@ async function assertNoSensitiveValues(
           SENSITIVE_NAME.test(name) && value !== undefined && value.length >= 4,
       )
       .map(([, value]) => value!),
-    ...Object.values(BUILD_SECRET_SENTINELS),
+    ...Object.values(buildSecretSentinels),
     ...fileSensitiveValues,
   ];
   for (const path of await filesBelow(directory)) {
@@ -330,6 +354,9 @@ async function assertNoSensitiveValuesInTrackedFiles(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // A fresh value set per capture makes a computed client-side projection
+  // detectable without committing the test secret itself.
+  buildSecretSentinels = createBuildSecretSentinels();
   // Next.js may load ignored .env files that the parent npm process did not.
   // Read only sensitive values for redaction/leak detection; never persist or
   // print their names or contents.
@@ -344,7 +371,25 @@ async function main(): Promise<void> {
   }
 
   const runId = `p0-verification-${utcStamp()}`;
-  const phaseDirectory = join(workspaceRoot, "artifacts", "evidence", "phase-6");
+  const configuredPhaseDirectory =
+    process.env.SAFEFLASH_P0_PHASE_DIRECTORY?.trim();
+  const phaseDirectory = resolve(
+    configuredPhaseDirectory ||
+      join(workspaceRoot, "artifacts", "evidence", "phase-6"),
+  );
+  const allowedCustomRoot = resolve(workspaceRoot, ".safeflash");
+  if (configuredPhaseDirectory) {
+    const customRelative = relative(allowedCustomRoot, phaseDirectory);
+    if (
+      customRelative === "" ||
+      customRelative.startsWith("..") ||
+      isAbsolute(customRelative)
+    ) {
+      throw new Error(
+        "SAFEFLASH_P0_PHASE_DIRECTORY must be a child of the ignored .safeflash runtime directory.",
+      );
+    }
+  }
   const evidenceDirectory = join(phaseDirectory, runId);
   const stagingDirectory = join(
     workspaceRoot,
@@ -362,15 +407,19 @@ async function main(): Promise<void> {
     {
       name: "build",
       args: ["run", "build"],
-      environment: BUILD_SECRET_SENTINELS,
+      environment: buildSecretSentinels,
     },
     { name: "vitest", args: ["run", "test"] },
     {
       name: "playwright",
       args: ["run", "test:e2e"],
-      environment: BUILD_SECRET_SENTINELS,
+      environment: buildSecretSentinels,
     },
-    { name: "secret-scan", args: ["run", "test:secrets"] },
+    {
+      name: "secret-scan",
+      args: ["run", "test:secrets"],
+      environment: buildSecretSentinels,
+    },
   ] as const;
   const results: CommandResult[] = [];
   for (const command of commands) {
