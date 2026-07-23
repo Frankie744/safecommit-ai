@@ -27,6 +27,7 @@ export {
   ProviderModeError,
   ProviderResponseError,
   cachedEnvelope,
+  isOfficialLiveEnvelope,
   localTestEnvelope,
   manualVerifiedEnvelope,
   mockEnvelope,

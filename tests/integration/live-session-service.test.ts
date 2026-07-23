@@ -145,6 +145,7 @@ function candidateSummary(
     },
     scoring: {
       provider: "braintrust",
+      resultId: `${experimentId}-${id}-eval-result`,
       eligible,
       weightedScore: eligible ? 0.91 : 0.79 - index / 100,
       hardGateFailures: eligible ? [] : ["safetyInvariant"],
@@ -154,6 +155,7 @@ function candidateSummary(
       experimentId,
       experimentName: `${SESSION_ID}-${experimentId}`,
       experimentUrl: `https://braintrust.test/experiments/${experimentId}`,
+      traceId: `${experimentId}-${id}-trace`,
       traceUrl: `https://braintrust.test/traces/${experimentId}-${id}`,
       validationRound: round,
       capturedAt: repaired ? LATER : AT,
@@ -371,9 +373,13 @@ function snapshot(
       selectionPolicyVersion: "safety-tournament-v1",
     },
     providerEvidence: {
+      braintrustDatasetId: "dataset-p0",
       braintrustDatasetUrl: "https://braintrust.test/datasets/p0",
+      braintrustExperimentId: selected.scoring.experimentId,
       braintrustExperimentUrl: selected.scoring.experimentUrl,
+      braintrustTraceId: selected.scoring.traceId,
       braintrustTraceUrl: selected.scoring.traceUrl,
+      stageTraceIds: [selected.scoring.traceId],
       stageTraceUrls: [selected.scoring.traceUrl],
       daytonaSandboxId: selected.validation.sandboxId,
       daytonaRunId: selected.validation.runId,
@@ -386,6 +392,35 @@ function snapshot(
 
 type PlannedResult = LiveWorkflowSnapshot | Error;
 
+function invalidatedReadySnapshot(): LiveWorkflowSnapshot {
+  const value = snapshot("READY_TO_MERGE", { approved: true });
+  return {
+    ...value,
+    session: {
+      ...value.session,
+      state: "FAILED",
+      updatedAt: LATER,
+      approval:
+        value.session.approval === undefined
+          ? undefined
+          : {
+              ...value.session.approval,
+              invalidatedAt: LATER,
+              invalidationReason:
+                "Remote PR head changed after the review passed.",
+            },
+      reviewReceipt: undefined,
+      reviewFindings: [],
+      failure: {
+        reason: "Remote PR head changed after the review passed.",
+        recoverable: false,
+        retryAction: "start-new-live-validation",
+        failedFrom: "READY_TO_MERGE",
+      },
+    },
+  };
+}
+
 class FakeLiveWorkflow implements LiveWorkflowPort {
   readonly start = new Deferred<LiveWorkflowSnapshot>();
   readonly decisions: LiveHumanDecisionInput[] = [];
@@ -393,9 +428,13 @@ class FakeLiveWorkflow implements LiveWorkflowPort {
   readonly listeners = new Set<(event: LiveWorkflowProgressEvent) => void>();
   publishPlan: PlannedResult[] = [snapshot("READY_TO_MERGE", { approved: true })];
   repairPlan: PlannedResult[] = [snapshot("AWAITING_HUMAN_APPROVAL", { repaired: true })];
+  refreshPlan: PlannedResult[] = [
+    snapshot("READY_TO_MERGE", { approved: true }),
+  ];
   validationGates?: readonly Deferred<void>[];
   publishCalls = 0;
   repairCalls = 0;
+  refreshCalls = 0;
 
   private emit(
     state: LiveWorkflowProgressEvent["state"],
@@ -513,6 +552,13 @@ class FakeLiveWorkflow implements LiveWorkflowPort {
       "braintrust",
     );
     return result;
+  }
+
+  async refreshReadyToMerge(): Promise<LiveWorkflowSnapshot> {
+    this.refreshCalls += 1;
+    const next = this.refreshPlan.shift();
+    if (next instanceof Error) throw next;
+    return next ?? snapshot("READY_TO_MERGE", { approved: true });
   }
 }
 
@@ -649,6 +695,22 @@ describe.sequential("live Web session service contract", () => {
       ready.events.find((event) => event.title === "PUBLICATION REQUESTED")
         ?.provenance.provider,
     ).toBe("safeflash-orchestrator");
+    expect(workflow.refreshCalls).toBe(1);
+  });
+
+  it("revokes a cached READY view when the read-only remote freshness check reports drift", async () => {
+    const workflow = new FakeLiveWorkflow();
+    workflow.refreshPlan = [invalidatedReadySnapshot()];
+    const { service, view } = await startedService(workflow);
+    await service.decide(SESSION_ID, decisionBody(view));
+    await expect.poll(async () => (await service.get(SESSION_ID)).state).toBe(
+      "FAILED",
+    );
+    const invalidated = await service.get(SESSION_ID);
+    expect(invalidated.failure?.reason).toContain("Remote PR head changed");
+    expect(invalidated.approval?.invalidatedAt).toBe(LATER);
+    expect(invalidated.review).toBeUndefined();
+    expect(workflow.refreshCalls).toBe(1);
   });
 
   it("repairs a blocked review, retains loser-round provenance, and requires fresh approval", async () => {
@@ -759,7 +821,9 @@ describe.sequential("live Web session service contract", () => {
     globalThis.__safeFlashLiveSessionService = undefined;
     process.env.SAFEFLASH_DEFAULT_MODE = "cached";
     expect(() => getActiveSessionService()).toThrowError(
-      expect.objectContaining({ code: "CACHED_MODE_NOT_CONFIGURED" }),
+      expect.objectContaining({
+        code: "RECORDED_LIVE_CONFIGURATION_UNAVAILABLE",
+      }),
     );
     process.env.SAFEFLASH_DEFAULT_MODE = "hybrid";
     expect(() => getActiveSessionService()).toThrowError(

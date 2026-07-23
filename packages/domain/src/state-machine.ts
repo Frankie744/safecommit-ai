@@ -215,6 +215,13 @@ export function canCreateOrUpdatePullRequest(session: ValidationSession): {
       reason: "A session-bound GitHub pull request target is required.",
     };
   }
+  if (!hasCleanLiveDaytonaHistory(session)) {
+    return {
+      allowed: false,
+      reason:
+        "Every Daytona attempt must have unique IDs and confirmed sandbox deletion before GitHub publication.",
+    };
+  }
   if (binding === undefined || !isApprovalValid(session.approval, binding)) {
     return {
       allowed: false,
@@ -222,6 +229,22 @@ export function canCreateOrUpdatePullRequest(session: ValidationSession): {
     };
   }
   return { allowed: true, reason: "Current evidence has valid human approval." };
+}
+
+function hasCleanLiveDaytonaHistory(session: ValidationSession): boolean {
+  if (session.mode !== "live") return true;
+  const attempts = session.sandboxAttemptHistory ?? [];
+  return (
+    attempts.length > 0 &&
+    attempts.every(
+      (attempt) =>
+        attempt.reservationStatus === "reserved" &&
+        !attempt.duplicateSandbox &&
+        !attempt.duplicateRun &&
+        (attempt.disposition === "completed" ||
+          (attempt.disposition === "failed-destroyed" && attempt.retryable)),
+    )
+  );
 }
 
 export function canEnterReadyToMerge(session: ValidationSession): {
@@ -269,6 +292,13 @@ export function canEnterReadyToMerge(session: ValidationSession): {
     return {
       allowed: false,
       reason: "The open pull request head no longer matches the approved commit.",
+    };
+  }
+  if (!hasCleanLiveDaytonaHistory(session)) {
+    return {
+      allowed: false,
+      reason:
+        "Every Daytona attempt must have unique IDs and confirmed sandbox deletion.",
     };
   }
   return { allowed: true, reason: "Review and approval gates passed." };
@@ -661,7 +691,11 @@ export function transitionValidationSession(
         "cleanup-failed",
       ].includes(attempt.disposition) &&
       typeof attempt.retryable === "boolean" &&
-      (attempt.disposition !== "completed" || attempt.retryable === false);
+      (attempt.disposition !== "completed" || attempt.retryable === false) &&
+      (!["cleanup-failed", "failed-retained"].includes(
+        attempt.disposition,
+      ) ||
+        attempt.retryable === false);
     const duplicateSandbox = history.some(
       (item) => item.sandboxId === attempt.sandboxId,
     );

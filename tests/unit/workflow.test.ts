@@ -43,6 +43,22 @@ function awaitingApproval(): ValidationSession {
     }),
     state: "AWAITING_HUMAN_APPROVAL",
     candidateIds: ["candidate-safe", "candidate-a", "candidate-b"],
+    sandboxAttemptHistory: [
+      "candidate-safe",
+      "candidate-a",
+      "candidate-b",
+    ].map((candidateId, index) => ({
+      candidateId,
+      sandboxId: `sandbox-${index + 1}`,
+      runId: `run-${index + 1}`,
+      purpose: "initial-candidate" as const,
+      capturedAt: t,
+      disposition: "completed" as const,
+      retryable: false,
+      reservationStatus: "reserved" as const,
+      duplicateSandbox: false,
+      duplicateRun: false,
+    })),
     selectedCandidateId: "candidate-safe",
     currentPatchDigest: PATCH_V1,
     currentEvidenceDigest: "evidence-v1",
@@ -306,6 +322,27 @@ describe("validation workflow guards", () => {
       at: t,
       approval: approvalFor(session),
     });
+    expect(() =>
+      transitionValidationSession(
+        {
+          ...approved,
+          sandboxAttemptHistory: [
+            ...approved.sandboxAttemptHistory,
+            {
+              ...approved.sandboxAttemptHistory[0]!,
+              sandboxId: "sandbox-cleanup-unconfirmed",
+              runId: "run-cleanup-unconfirmed",
+              disposition: "cleanup-failed",
+              retryable: false,
+            },
+          ],
+        },
+        {
+          type: "PR_CREATION_REQUESTED",
+          at: t,
+        },
+      ),
+    ).toThrow(/confirmed sandbox deletion/u);
     expect(
       transitionValidationSession(approved, {
         type: "PR_CREATION_REQUESTED",

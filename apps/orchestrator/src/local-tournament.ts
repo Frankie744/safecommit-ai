@@ -29,7 +29,10 @@ import {
   type PatchIntegrityResult,
 } from "../../../packages/safety-policy/src/index";
 
-import { LOCAL_TOURNAMENT_CANDIDATES } from "../../../demo/candidate-patches/index";
+import {
+  HAPPY_PATH_TOURNAMENT_CANDIDATES,
+  LOCAL_TOURNAMENT_CANDIDATES,
+} from "../../../demo/candidate-patches/index";
 import {
   EMPTY_TOURNAMENT_REPLAY,
   JsonlEventStore,
@@ -39,6 +42,10 @@ import {
   type LocalTestProvenance,
   type TournamentReplayState,
 } from "./event-store";
+import {
+  DEFAULT_DEMO_SCENARIO_ID,
+  type DemoScenarioId,
+} from "./demo-scenarios";
 
 const SOURCE_FILE = "fixtures/battery-controller/src/battery_controller.c";
 const FIXTURE_DIRECTORY = "fixtures/battery-controller";
@@ -107,6 +114,7 @@ export interface LocalTournamentOptions {
   workspaceRoot?: string;
   commandTimeoutMs?: number;
   now?: () => Date;
+  scenarioId?: DemoScenarioId;
 }
 
 export interface LiveTournamentProvider {
@@ -735,9 +743,19 @@ export async function runLocalTournament(
   const now = options.now ?? (() => new Date());
   const workspaceRoot = resolve(options.workspaceRoot ?? process.cwd());
   const sessionId = safeSegment(options.sessionId);
+  const scenarioId = options.scenarioId ?? DEFAULT_DEMO_SCENARIO_ID;
+  if (scenarioId === "provider-failure") {
+    throw new Error(
+      "The provider-failure scenario is a fail-closed API fixture and cannot execute a local tournament.",
+    );
+  }
   // This host runner deliberately accepts only repository-owned fixtures.
   // Fireworks/model-authored candidates must use Daytona live execution.
-  const candidates = LOCAL_TOURNAMENT_CANDIDATES.map((candidate) =>
+  const scenarioCandidates =
+    scenarioId === "happy-path"
+      ? HAPPY_PATH_TOURNAMENT_CANDIDATES
+      : LOCAL_TOURNAMENT_CANDIDATES;
+  const candidates = scenarioCandidates.map((candidate) =>
     CandidatePatchSchema.parse(candidate),
   );
   if (
@@ -766,6 +784,7 @@ export async function runLocalTournament(
       provider: "local-process",
       mode: "mock",
       warning: LOCAL_TEST_PROVENANCE.notice,
+      scenarioId,
       sourceCommitSha: commitSha,
       toolchain: {
         cmakePath: toolchain.cmakePath,

@@ -298,8 +298,7 @@ function assertDaytonaEvidence(
         !(session.revalidationSandboxIds ?? []).includes(data.sandboxId)
       : !usedSandboxes.has(data.sandboxId);
   const sandboxDispositionValid =
-    (data.retained === false && data.destroyed === true) ||
-    (data.retained === true && data.destroyed === false);
+    data.retained === false && data.destroyed === true;
   if (
     daytona.provider !== "daytona" ||
     !isOfficialLiveEnvelope(daytona) ||

@@ -59,14 +59,21 @@ class FakeBraintrustSdk implements BraintrustSdkPort {
   traces = 0;
   experiments = 0;
   lastExperimentCases: readonly BraintrustPreparedExperimentCase[] = [];
+  datasetId = "fake-contract-dataset-id";
+  traceId = "fake-contract-trace-id";
+  experimentId = "fake-contract-experiment-id";
+  resultIdPrefix = "fake-contract-eval-result";
+  malformedCandidateResult = false;
+  seedFailure: unknown;
 
   async seedDataset(
     _config: BraintrustConfig,
     cases: readonly unknown[],
   ) {
+    if (this.seedFailure !== undefined) throw this.seedFailure;
     this.seededCases = cases.length;
     return {
-      datasetId: "fake-contract-dataset-id",
+      datasetId: this.datasetId,
       datasetName: FIRMWARE_SAFETY_DATASET_NAME,
       datasetVersion: "fake-contract-version",
       datasetUrl: "https://www.braintrust.dev/app/fake-contract-dataset",
@@ -78,7 +85,7 @@ class FakeBraintrustSdk implements BraintrustSdkPort {
   async writeTrace() {
     this.traces += 1;
     return {
-      traceId: "fake-contract-trace-id",
+      traceId: this.traceId,
       spanId: "fake-contract-span-id",
       traceUrl: "https://www.braintrust.dev/app/fake-contract-trace",
     };
@@ -95,16 +102,19 @@ class FakeBraintrustSdk implements BraintrustSdkPort {
       projectName: CONFIG.projectName,
       experimentName,
       projectId: "fake-contract-project-id",
-      experimentId: "fake-contract-experiment-id",
+      experimentId: this.experimentId,
       experimentUrl: "https://www.braintrust.dev/app/fake-contract-experiment",
       resultCount: cases.length,
-      candidateResults: cases.map((testCase) => ({
-        candidateId: testCase.candidateId,
-        evidenceDigest: testCase.output.evidenceDigest,
-        evaluationEvidence: structuredClone(testCase.evaluationEvidence),
-        scores: [...testCase.output.scores],
-        metadata: { ...testCase.metadata },
-      })),
+      candidateResults: this.malformedCandidateResult
+        ? [null as never]
+        : cases.map((testCase, index) => ({
+            resultId: `${this.resultIdPrefix}-${index + 1}`,
+            candidateId: testCase.candidateId,
+            evidenceDigest: testCase.output.evidenceDigest,
+            evaluationEvidence: structuredClone(testCase.evaluationEvidence),
+            scores: [...testCase.output.scores],
+            metadata: { ...testCase.metadata },
+          })),
     };
   }
 }
@@ -185,9 +195,27 @@ describe("Braintrust dataset and deterministic scorers", () => {
         evaluated.scores.map((score) => [score.name, score.score]),
       ),
     };
+    const resultTraces = new Map([
+      [
+        testCase.candidateId,
+        {
+          object_type: "experiment",
+          object_id: "experiment-contract-id",
+          root_span_id: "eval-result-contract-id",
+        },
+      ],
+    ]);
 
-    expect(normalizeBraintrustReturnedResults([testCase], [returned])).toEqual([
+    expect(
+      normalizeBraintrustReturnedResults(
+        [testCase],
+        [returned],
+        "experiment-contract-id",
+        resultTraces,
+      ),
+    ).toEqual([
       {
+        resultId: "eval-result-contract-id",
         candidateId: testCase.candidateId,
         evidenceDigest: testCase.output.evidenceDigest,
         evaluationEvidence: testCase.evaluationEvidence,
@@ -200,6 +228,8 @@ describe("Braintrust dataset and deterministic scorers", () => {
       normalizeBraintrustReturnedResults(
         [testCase],
         [{ ...returned, error: new Error("remote scorer failed") }],
+        "experiment-contract-id",
+        resultTraces,
       ),
     ).toThrow(/errored/u);
 
@@ -212,8 +242,30 @@ describe("Braintrust dataset and deterministic scorers", () => {
             scores: { ...returned.scores, SafetyInvariant: 0 },
           },
         ],
+        "experiment-contract-id",
+        resultTraces,
       ),
     ).toThrow(/scorer results/u);
+
+    expect(() =>
+      normalizeBraintrustReturnedResults(
+        [testCase],
+        [
+          returned,
+        ],
+        "experiment-contract-id",
+        new Map([
+          [
+            testCase.candidateId,
+            {
+              object_type: "experiment",
+              object_id: "different-experiment-id",
+              root_span_id: "eval-result-contract-id",
+            },
+          ],
+        ]),
+      ),
+    ).toThrow(/belongs to another Experiment/u);
   });
 
   it("recomputes scores server-side instead of accepting caller output", async () => {
@@ -296,11 +348,131 @@ describe("Braintrust dataset and deterministic scorers", () => {
     expect(fake.experiments).toBe(1);
     expect(result.data.dataset.totalRecords).toBe(10);
     expect(result.data.experiment.resultCount).toBe(1);
+    expect(result.data.experiment.candidateResults[0]?.resultId).toBe(
+      "fake-contract-eval-result-1",
+    );
     expect(fake.lastExperimentCases[0]?.output.scores).toHaveLength(8);
     expect(
       fake.lastExperimentCases[0]?.output.scores.find(
         (score) => score.name === "SafetyInvariant",
       )?.score,
     ).toBe(1);
+  });
+
+  it("rejects malformed Dataset, Trace, Experiment, and Eval result identifiers", async () => {
+    const malformedDataset = new FakeBraintrustSdk();
+    malformedDataset.datasetId = " dataset-id-with-padding ";
+    await expect(
+      new BraintrustAdapter(CONFIG, malformedDataset).seedFirmwareSafetyDataset(),
+    ).rejects.toMatchObject({
+      provider: "braintrust",
+      retryable: false,
+    });
+
+    const malformedTrace = new FakeBraintrustSdk();
+    malformedTrace.traceId = "trace-id\u0000suffix";
+    await expect(
+      new BraintrustAdapter(CONFIG, malformedTrace).traceStage({
+        name: "contract-malformed-trace",
+        input: {},
+        output: {},
+        metadata: {},
+      }),
+    ).rejects.toMatchObject({
+      provider: "braintrust",
+      retryable: false,
+    });
+
+    const malformedExperiment = new FakeBraintrustSdk();
+    malformedExperiment.experimentId = "";
+    await expect(
+      new BraintrustAdapter(CONFIG, malformedExperiment).runCandidateExperiment(
+        "contract-malformed-experiment",
+        [
+          {
+            candidateId: "candidate-score",
+            input: {},
+            evaluationEvidence: evidence(),
+            evidenceDigest: "d".repeat(64),
+            metadata: {},
+          },
+        ],
+      ),
+    ).rejects.toMatchObject({
+      provider: "braintrust",
+      retryable: false,
+    });
+
+    const malformedResult = new FakeBraintrustSdk();
+    malformedResult.resultIdPrefix = " ";
+    await expect(
+      new BraintrustAdapter(CONFIG, malformedResult).runCandidateExperiment(
+        "contract-malformed-result",
+        [
+          {
+            candidateId: "candidate-score",
+            input: {},
+            evaluationEvidence: evidence(),
+            evidenceDigest: "e".repeat(64),
+            metadata: {},
+          },
+        ],
+      ),
+    ).rejects.toMatchObject({
+      provider: "braintrust",
+      retryable: false,
+    });
+
+    const malformedShape = new FakeBraintrustSdk();
+    malformedShape.malformedCandidateResult = true;
+    await expect(
+      new BraintrustAdapter(CONFIG, malformedShape).runCandidateExperiment(
+        "contract-malformed-result-shape",
+        [
+          {
+            candidateId: "candidate-score",
+            input: {},
+            evaluationEvidence: evidence(),
+            evidenceDigest: "f".repeat(64),
+            metadata: {},
+          },
+        ],
+      ),
+    ).rejects.toMatchObject({
+      provider: "braintrust",
+      retryable: false,
+    });
+  });
+
+  it.each([
+    { status: 401, retryable: false },
+    { status: 403, retryable: false },
+    { status: 422, retryable: false },
+    { status: 429, retryable: true },
+  ])(
+    "classifies Braintrust HTTP $status failures as retryable=$retryable",
+    async ({ status, retryable }) => {
+      const fake = new FakeBraintrustSdk();
+      fake.seedFailure = Object.assign(new Error(`HTTP ${status}`), { status });
+      await expect(
+        new BraintrustAdapter(CONFIG, fake).seedFirmwareSafetyDataset(),
+      ).rejects.toMatchObject({
+        provider: "braintrust",
+        retryable,
+      });
+    },
+  );
+
+  it("classifies Braintrust timeouts as retryable", async () => {
+    const fake = new FakeBraintrustSdk();
+    fake.seedFailure = Object.assign(new Error("request timed out"), {
+      code: "ETIMEDOUT",
+    });
+    await expect(
+      new BraintrustAdapter(CONFIG, fake).seedFirmwareSafetyDataset(),
+    ).rejects.toMatchObject({
+      provider: "braintrust",
+      retryable: true,
+    });
   });
 });

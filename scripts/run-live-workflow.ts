@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 
+import { serializeRecordedLiveArtifact } from "@safeflash/domain";
 import {
   createProductionLiveSafetyWorkflow,
   requireSafeLiveSessionId,
@@ -102,6 +103,16 @@ async function main(): Promise<void> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error(
       "Live workflow requires an interactive TTY for evidence-bound human approval",
+    );
+  }
+  const recordedLiveSigningKey =
+    process.env.SAFEFLASH_RECORDED_LIVE_SIGNING_KEY;
+  if (
+    recordedLiveSigningKey === undefined ||
+    recordedLiveSigningKey.length < 32
+  ) {
+    throw new Error(
+      "SAFEFLASH_RECORDED_LIVE_SIGNING_KEY must be configured before any Live provider call",
     );
   }
   const id = sessionId();
@@ -212,8 +223,34 @@ async function main(): Promise<void> {
       if (!completedReview) throw new Error("Review did not reach a terminal result");
 
       if (snapshot.session.state === "READY_TO_MERGE") {
+        const recordedArtifact = workflow.captureRecordedLiveArtifact(
+          id,
+          recordedLiveSigningKey,
+        );
+        const recordedPath = resolve(
+          process.cwd(),
+          ".safeflash",
+          "recorded-live",
+          `${id}.json`,
+        );
+        await mkdir(dirname(recordedPath), { recursive: true });
+        await writeFile(
+          recordedPath,
+          serializeRecordedLiveArtifact(
+            recordedArtifact,
+            recordedLiveSigningKey,
+          ),
+          {
+            encoding: "utf8",
+            mode: 0o600,
+            flag: "wx",
+          },
+        );
         console.log("\nCodeRabbit passed the exact PR head. READY_TO_MERGE; SafeFlash never merges automatically.");
         console.log(`Evidence saved to ${evidencePath}`);
+        console.log(
+          `Redacted immutable Recorded Live artifact saved to ${recordedPath}`,
+        );
         return;
       }
       if (snapshot.session.state !== "REVIEW_BLOCKED") {

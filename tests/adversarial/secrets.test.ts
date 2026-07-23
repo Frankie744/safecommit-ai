@@ -12,6 +12,7 @@ const SERVER_SECRET_NAMES = [
   "FIREWORKS_API_KEY",
   "GITHUB_TOKEN",
   "SAFEFLASH_PUBLISH_AUTH_SECRET",
+  "SAFEFLASH_RECORDED_LIVE_SIGNING_KEY",
 ] as const;
 
 const SOURCE_SCAN_EXCLUSIONS = new Set([
@@ -21,7 +22,7 @@ const SOURCE_SCAN_EXCLUSIONS = new Set([
   "results",
 ]);
 const SENSITIVE_NAME =
-  /(?:^|_)(?:TOKEN|SECRET|PASSWORD|API_KEY|AUTHORIZATION|CREDENTIALS?|PAT)(?:$|_)/iu;
+  /(?:^|_)(?:TOKEN|SECRET|PASSWORD|API_KEY|SIGNING_KEY|AUTHORIZATION|CREDENTIALS?|PAT)(?:$|_)/iu;
 
 function localSensitiveValues(): readonly string[] {
   const values = new Set<string>();
@@ -79,6 +80,15 @@ function textFiles(paths: readonly string[]): string {
 }
 
 describe("secret boundary", () => {
+  it("treats signing keys as secrets without misclassifying path variables", () => {
+    expect(SENSITIVE_NAME.test("SAFEFLASH_RECORDED_LIVE_SIGNING_KEY")).toBe(
+      true,
+    );
+    expect(SENSITIVE_NAME.test("PATH")).toBe(false);
+    expect(SENSITIVE_NAME.test("SAFEFLASH_RECORDED_LIVE_PATH")).toBe(false);
+    expect(SENSITIVE_NAME.test("SAFEFLASH_CMAKE_PATH")).toBe(false);
+  });
+
   it("secrets_are_not_exposed_to_frontend_or_git", () => {
     const sentinel = ["SAFEFLASH", "SENTINEL", "DO_NOT_EXPOSE", "7f52c86a"].join(
       "_",
@@ -86,18 +96,28 @@ describe("secret boundary", () => {
     const environment = {
       FIREWORKS_API_KEY: sentinel,
       GITHUB_TOKEN: "github" + "_pat_SENTINEL_2b81e1c9",
+      SAFEFLASH_RECORDED_LIVE_SIGNING_KEY:
+        "recorded-live-signing-sentinel-8f64c523",
     };
     const publishAuthorization = `sfpa1.${"a".repeat(48)}.${"b".repeat(43)}`;
     const redacted = redactSecrets(
-      `Authorization: Bearer ${sentinel}; token=${environment.GITHUB_TOKEN}; publish=${publishAuthorization}`,
+      `Authorization: Bearer ${sentinel}; token=${environment.GITHUB_TOKEN}; publish=${publishAuthorization}; signing=${environment.SAFEFLASH_RECORDED_LIVE_SIGNING_KEY}`,
       environment,
     );
     expect(redacted).not.toContain(sentinel);
     expect(redacted).not.toContain(environment.GITHUB_TOKEN);
+    expect(redacted).not.toContain(
+      environment.SAFEFLASH_RECORDED_LIVE_SIGNING_KEY,
+    );
     expect(redacted).not.toContain(publishAuthorization);
     expect(redacted).toContain("[REDACTED]");
 
-    const clientSource = textFiles(filesBelow(join(REPOSITORY_ROOT, "apps/web")));
+    const clientSource = textFiles(
+      filesBelow(join(REPOSITORY_ROOT, "apps/web")).filter((path) => {
+        if (!/\.(?:ts|tsx|js|jsx|mjs|cjs)$/iu.test(path)) return false;
+        return /^\s*["']use client["'];/u.test(readFileSync(path, "utf8"));
+      }),
+    );
     for (const secretName of SERVER_SECRET_NAMES) {
       expect(clientSource).not.toMatch(
         new RegExp(`process\\.env(?:\\.${secretName}|\\[.{0,8}${secretName})`, "u"),

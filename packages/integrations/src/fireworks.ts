@@ -122,7 +122,8 @@ export interface FireworksCandidateEvidence {
   candidate: CandidatePatch;
   sourceContextDigest: string;
   requestDigest: string;
-  requestId?: string;
+  /** Provider-owned Fireworks response/request ID; never a local digest. */
+  requestId: string;
   model: string;
   latencyMs: number;
   finishReason: string;
@@ -434,19 +435,79 @@ function promptForCandidate(
   });
 }
 
+function providerFailureStatus(error: unknown, depth = 0): number | undefined {
+  if (depth > 3 || typeof error !== "object" || error === null) {
+    return undefined;
+  }
+  const direct = Number((error as { status?: unknown }).status);
+  if (Number.isInteger(direct)) return direct;
+  const response = (error as { response?: unknown }).response;
+  const responseStatus =
+    typeof response === "object" && response !== null
+      ? Number((response as { status?: unknown }).status)
+      : Number.NaN;
+  if (Number.isInteger(responseStatus)) return responseStatus;
+  return providerFailureStatus((error as { cause?: unknown }).cause, depth + 1);
+}
+
 function isRetryableProviderFailure(error: unknown): boolean {
   if (error instanceof ProviderResponseError) return error.retryable;
-  const status =
-    typeof error === "object" && error !== null && "status" in error
-      ? Number((error as { status?: unknown }).status)
-      : undefined;
-  return (
-    status === 408 ||
-    status === 429 ||
-    status === 502 ||
-    status === 503 ||
-    status === 504
-  );
+  const status = providerFailureStatus(error);
+  if (status !== undefined) {
+    return status === 408 || status === 429 || status >= 500;
+  }
+  const code =
+    typeof error === "object" && error !== null
+      ? String((error as { code?: unknown }).code ?? "").toUpperCase()
+      : "";
+  if (
+    ["ECONNRESET", "ETIMEDOUT", "EAI_AGAIN", "ECONNREFUSED"].includes(code)
+  ) {
+    return true;
+  }
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" && error !== null
+        ? String((error as { message?: unknown }).message ?? "")
+        : "";
+  return /\b(?:timeout|timed out|temporar(?:y|ily))\b/iu.test(message);
+}
+
+function providerRequestId(response: FireworksChatResponse): string {
+  const normalize = (value: unknown): string | undefined => {
+    if (value === null || value === undefined) return undefined;
+    if (typeof value !== "string") {
+      throw new ProviderResponseError(
+        "fireworks",
+        "Fireworks returned a malformed provider request ID",
+        false,
+      );
+    }
+    const normalized = value.trim();
+    if (normalized === "") return undefined;
+    if (
+      normalized.length > 512 ||
+      /[\u0000-\u001f\u007f-\u009f]/u.test(normalized)
+    ) {
+      throw new ProviderResponseError(
+        "fireworks",
+        "Fireworks returned an unsafe provider request ID",
+        false,
+      );
+    }
+    return normalized;
+  };
+  const requestId =
+    normalize(response._request_id) ?? normalize(response.id);
+  if (requestId === undefined) {
+    throw new ProviderResponseError(
+      "fireworks",
+      "Fireworks response omitted the provider request ID required for live provenance",
+      false,
+    );
+  }
+  return requestId;
 }
 
 export class FireworksAdapter {
@@ -511,6 +572,7 @@ export class FireworksAdapter {
             },
           },
         });
+        const requestId = providerRequestId(response);
         const choice = response.choices[0];
         if (choice === undefined) {
           throw new ProviderResponseError(
@@ -631,7 +693,7 @@ export class FireworksAdapter {
             schemaVersion: 1,
             request,
           }),
-          requestId: response._request_id ?? response.id,
+          requestId,
           model: response.model,
           latencyMs: Math.max(0, this.now() - startedAt),
           finishReason: choice.finish_reason,

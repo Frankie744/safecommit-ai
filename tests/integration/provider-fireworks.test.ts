@@ -104,7 +104,11 @@ class FakeFireworksClient implements FireworksClient {
   readonly transport = "local-test" as const;
   readonly requests: FireworksChatRequest[] = [];
 
-  constructor(private readonly responses: FireworksChatResponse[]) {}
+  constructor(
+    private readonly responses: Array<
+      FireworksChatResponse | { readonly throw: unknown }
+    >,
+  ) {}
 
   async createChatCompletion(
     requestValue: FireworksChatRequest,
@@ -112,6 +116,7 @@ class FakeFireworksClient implements FireworksClient {
     this.requests.push(requestValue);
     const response = this.responses.shift();
     if (response === undefined) throw new Error("No fake response configured");
+    if ("throw" in response) throw response.throw;
     return response;
   }
 }
@@ -194,11 +199,40 @@ describe("Fireworks structured candidate contract", () => {
     );
     expect(result.data.sourceContextDigest).toBe(request().sourceContext.digest);
     expect(result.data.requestDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(result.data.requestId).toBe("provider-request-contract");
+  });
+
+  it("requires a safe provider-owned request ID and never substitutes a local digest", async () => {
+    const preferred = validResponse();
+    preferred._request_id = "  provider-header-request-id  ";
+    await expect(
+      new FireworksAdapter(
+        CONFIG,
+        new FakeFireworksClient([preferred]),
+      ).generateCandidate(request()),
+    ).resolves.toMatchObject({
+      data: { requestId: "provider-header-request-id" },
+    });
+
+    for (const invalidId of [undefined, "   ", "provider\u0001request"]) {
+      const invalid = validResponse();
+      invalid.id = invalidId;
+      delete invalid._request_id;
+      const client = new FakeFireworksClient([invalid, validResponse()]);
+      await expect(
+        new FireworksAdapter(CONFIG, client).generateCandidate(request()),
+      ).rejects.toMatchObject({
+        provider: "fireworks",
+        retryable: false,
+      });
+      expect(client.requests).toHaveLength(1);
+    }
   });
 
   it("retries a malformed structured response but rejects identity drift", async () => {
     const retryClient = new FakeFireworksClient([
       {
+        id: "provider-request-malformed-json",
         model: CONFIG.model,
         choices: [{ finish_reason: "stop", message: { content: "not-json" } }],
       },
@@ -219,6 +253,51 @@ describe("Fireworks structured candidate contract", () => {
     ).rejects.toBeInstanceOf(ProviderResponseError);
     expect(driftClient.requests).toHaveLength(2);
     expect(driftClient.requests.map((item) => item.seed)).toEqual([7, 8]);
+  });
+
+  it("injects 401, 403, and 422 as nonretryable failures without leaking bodies", async () => {
+    for (const status of [401, 403, 422]) {
+      const secret = `fireworks-sensitive-body-${status}`;
+      const client = new FakeFireworksClient([
+        {
+          throw: {
+            status,
+            message: secret,
+            response: { status, data: { authorization: secret } },
+          },
+        },
+        validResponse(),
+      ]);
+      let caught: unknown;
+      try {
+        await new FireworksAdapter(CONFIG, client).generateCandidate(request());
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(ProviderResponseError);
+      expect(caught).toMatchObject({ provider: "fireworks", retryable: false });
+      expect((caught as Error).message).not.toContain(secret);
+      expect(client.requests).toHaveLength(1);
+    }
+  });
+
+  it("retries 429 and timeout injections with a bounded fresh request", async () => {
+    for (const failure of [
+      { status: 429, message: "rate limited" },
+      Object.assign(new Error("request timed out"), { code: "ETIMEDOUT" }),
+    ]) {
+      const client = new FakeFireworksClient([
+        { throw: failure },
+        validResponse(),
+      ]);
+      const result = await new FireworksAdapter(
+        CONFIG,
+        client,
+      ).generateCandidate(request());
+      expect(result.data.candidate.candidateId).toBe("candidate-a");
+      expect(result.data.attemptCount).toBe(2);
+      expect(client.requests).toHaveLength(2);
+    }
   });
 
   it("fails closed when required token telemetry is missing or invalid", async () => {

@@ -20,6 +20,13 @@ const initialSession: SessionView = {
   id: "session-test-7f31",
   mode: "hybrid",
   state: "AWAITING_HUMAN_APPROVAL",
+  scenario: {
+    id: "unsafe-high-score",
+    label: "Unsafe high score",
+    summary:
+      "The highest soft score violates a hard safety invariant and is rejected.",
+    default: true,
+  },
   createdAt: "2026-07-22T19:29:40.000Z",
   updatedAt: "2026-07-22T19:30:05.000Z",
   repository: {
@@ -202,6 +209,35 @@ const initialSession: SessionView = {
   selectedCandidateId: "candidate-latch",
   currentPatchDigest: "sha256:test-patch-c",
   currentEvidenceDigest: "sha256:test-evidence-c",
+  providerEvidence: [
+    {
+      provider: "fireworks",
+      operation: "CandidatePatch structured generation",
+      status: "passed",
+      requestId: "fw-request-full-0001",
+      requestIds: ["fw-request-full-0001", "fw-request-full-0002"],
+      resourceIds: ["response:fw-response-full-0001"],
+      urls: [],
+      provenance: localTest("fireworks", "fw-request-full-0001"),
+    },
+    {
+      provider: "daytona",
+      operation: "ephemeral sandbox create, execute, delete",
+      status: "passed",
+      resourceIds: [
+        "sandbox:daytona-sandbox-full-0001",
+        "run:daytona-run-full-0001",
+      ],
+      urls: [],
+      provenance: localTest("daytona", "daytona-run-full-0001"),
+    },
+  ],
+  cleanup: {
+    status: "deleted",
+    sandboxIds: ["daytona-sandbox-full-0001"],
+    summary: "Deletion confirmed for every Daytona sandbox.",
+    provenance: localTest("daytona", "daytona-sandbox-full-0001"),
+  },
   events: [
     {
       id: "event-1",
@@ -257,6 +293,13 @@ const readySession: SessionView = {
     url: "https://github.test/safeflash/firmware/pull/17",
     status: "open",
     provenance: localTest("github", "test-pr-17"),
+  },
+  review: {
+    round: 1,
+    status: "passed",
+    headSha: initialSession.currentCommitSha,
+    findings: [],
+    provenance: localTest("coderabbit", "test-review-6"),
   },
   events: [
     ...initialSession.events,
@@ -389,9 +432,67 @@ async function installSessionApi(
   return { decisions, detailRequests: () => detailRequests };
 }
 
+async function installEmptySessionApi(page: Page) {
+  let posted: unknown;
+  await page.route("**/api/sessions**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname === "/api/sessions" && request.method() === "GET") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ mode: "mock", sessions: [] }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/sessions" && request.method() === "POST") {
+      posted = request.postDataJSON();
+      const created = structuredClone(initialSession);
+      created.scenario = {
+        id: "happy-path",
+        label: "Happy path",
+        summary: "The eligible repair reaches human approval.",
+        default: false,
+      };
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ session: created }),
+      });
+      return;
+    }
+    await route.fulfill({ status: 404 });
+  });
+  return { posted: () => posted };
+}
+
+test("defaults the competition selector to unsafe-high-score", async ({
+  page,
+}) => {
+  const api = await installEmptySessionApi(page);
+  await page.goto("/");
+
+  await expect(page.getByTestId("pre-run-incident")).toContainText(
+    "Temperature sensor disconnected",
+  );
+  await expect(page.getByTestId("mode-badge")).toHaveText(
+    "MOCK RUN - NOT PROVIDER-VERIFIED",
+  );
+  await expect(page.getByTestId("pre-run-incident")).toContainText(
+    "Preview only",
+  );
+  await expect(page.getByTestId("scenario-unsafe-high-score")).toBeChecked();
+  await expect(page.getByTestId("scenario-happy-path")).not.toBeChecked();
+  await page.getByTestId("scenario-happy-path").check();
+  await page.getByTestId("start-tournament").click();
+  await expect(page.getByTestId("scenario-banner")).toContainText("Happy path");
+  await expect(page.getByTestId("new-run-control")).toBeVisible();
+  await expect(page.getByTestId("start-new-run")).toBeEnabled();
+  expect(api.posted()).toMatchObject({ scenarioId: "happy-path" });
+});
+
 test("renders danger, three persistent candidates, provenance, and a closed PR gate", async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   const api = await installSessionApi(page, initialSession);
 
   await page.goto("/");
@@ -403,6 +504,33 @@ test("renders danger, three persistent candidates, provenance, and a closed PR g
   await expect(page.getByTestId("mode-badge")).toHaveText(
     "HYBRID • CHECK EACH SOURCE",
   );
+  await expect(page.getByTestId("competition-status")).toBeVisible();
+  await expect(page.getByTestId("hard-gate-summary")).toHaveText(
+    "2 REJECTED / 1 PASSED / 0 PENDING",
+  );
+  await expect(page.getByTestId("github-pr-status")).toHaveText("NOT CREATED");
+  await expect(page.getByTestId("coderabbit-status")).toHaveText("NOT RUN");
+  await expect(page.getByTestId("daytona-cleanup-status")).toHaveText(
+    "DELETED",
+  );
+  await expect(page.getByTestId("device-status")).toHaveText(
+    "SIMULATED DEVICE",
+  );
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+  const statusRail = page.getByTestId("competition-status");
+  expect(
+    await statusRail.evaluate((element) => element.scrollWidth <= element.clientWidth),
+  ).toBe(true);
+  const statusCells = statusRail.locator(":scope > div");
+  await expect(statusCells).toHaveCount(8);
+  for (let index = 0; index < 8; index += 1) {
+    const box = await statusCells.nth(index).boundingBox();
+    expect(box, `status cell ${index + 1} must be rendered`).not.toBeNull();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height);
+  }
   await expect(page.getByTestId("copilot-readable-state")).toBeVisible();
   await expect(page.getByTestId("copilot-hitl-registration")).toBeVisible();
 
@@ -424,7 +552,7 @@ test("marks mock mode and every visible provider result as not verified", async 
   await page.goto("/");
 
   await expect(page.getByTestId("mode-badge")).toHaveText(
-    "MOCK • NOT PROVIDER-VERIFIED",
+    "MOCK RUN - NOT PROVIDER-VERIFIED",
   );
   await expect(page.getByText("Local evaluation score")).toHaveCount(3);
   await expect(page.getByText("Braintrust score")).toHaveCount(0);
@@ -458,6 +586,109 @@ test("does not poll or permit a duplicate decision after bound approval", async 
 
   expect(api.detailRequests()).toBe(1);
   expect(api.decisions).toHaveLength(0);
+});
+
+test("keeps full provider IDs and sanitized JSON inside the Evidence drawer", async ({
+  page,
+}) => {
+  await installSessionApi(page, initialSession);
+  await page.goto("/");
+
+  const drawer = page.getByTestId("evidence-drawer");
+  await expect(drawer).toBeVisible();
+  await drawer.locator("summary").click();
+  await expect(
+    drawer.getByText("fw-request-full-0001", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    drawer.getByText("fw-request-full-0002", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    drawer.getByText("sandbox:daytona-sandbox-full-0001", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    drawer.getByRole("heading", { name: "Sanitized session JSON" }),
+  ).toBeVisible();
+});
+
+test("labels a recorded replay as recorded, never LIVE", async ({ page }) => {
+  const recorded = structuredClone(initialSession);
+  recorded.mode = "cached";
+  await installSessionApi(page, recorded);
+  await page.goto("/");
+
+  await expect(page.getByTestId("mode-badge")).toHaveText(
+    "RECORDED LIVE RUN - NOT CURRENT LIVE",
+  );
+  await expect(page.getByTestId("competition-mode")).toHaveText(
+    "RECORDED LIVE RUN - NOT CURRENT LIVE",
+  );
+  await expect(page.getByTestId("competition-mode")).not.toHaveText(
+    /^LIVE RUN$/u,
+  );
+});
+
+test("shows an injected provider failure as MOCK and failed closed", async ({
+  page,
+}) => {
+  const failed: SessionView = {
+    ...asMockSession(),
+    id: "session-provider-failure",
+    state: "FAILED",
+    scenario: {
+      id: "provider-failure",
+      label: "Provider failure",
+      summary: "A mock 429 injection proves provider errors fail closed.",
+      default: false,
+    },
+    candidates: [],
+    selectedCandidateId: undefined,
+    currentPatchDigest: undefined,
+    currentEvidenceDigest: undefined,
+    approval: undefined,
+    pullRequest: undefined,
+    review: undefined,
+    providerEvidence: [
+      {
+        provider: "fireworks",
+        operation: "injected provider-failure fixture",
+        status: "failed",
+        resourceIds: [],
+        urls: [],
+        provenance: {
+          kind: "mock",
+          provider: "injected-fixture",
+          verified: false,
+        },
+      },
+    ],
+    cleanup: {
+      status: "not-run",
+      sandboxIds: [],
+      summary: "No Daytona sandbox was created.",
+      provenance: {
+        kind: "mock",
+        provider: "injected-fixture",
+        verified: false,
+      },
+    },
+    failure: {
+      reason: "Injected HTTP 429 produced no CandidatePatch evidence.",
+      recoverable: false,
+    },
+  };
+  await installSessionApi(page, failed);
+  await page.goto("/");
+
+  await expect(page.getByTestId("mode-badge")).toHaveText(
+    "MOCK RUN - NOT PROVIDER-VERIFIED",
+  );
+  await expect(page.getByTestId("workflow-failure")).toContainText(
+    "failed closed",
+  );
+  await expect(page.getByTestId("hard-gate-summary")).toHaveText("FAIL CLOSED");
+  await expect(page.getByTestId("github-pr-status")).toHaveText("NOT CREATED");
+  await expect(page.getByTestId("coderabbit-status")).toHaveText("NOT RUN");
 });
 
 test("submits bound evidence to the decision API and only then shows ready for human merge", async ({
@@ -503,4 +734,9 @@ test("submits bound evidence to the decision API and only then shows ready for h
     body: await page.screenshot(),
     contentType: "image/png",
   });
+  const evidenceScreenshotPath =
+    process.env.SAFEFLASH_PHASE8_SCREENSHOT_PATH?.trim();
+  if (evidenceScreenshotPath) {
+    await page.screenshot({ path: evidenceScreenshotPath });
+  }
 });

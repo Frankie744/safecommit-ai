@@ -33,7 +33,7 @@ body {
 }
 
 body {
-  overflow: hidden;
+  overflow: auto;
   background: var(--bg);
   color: var(--text);
   font-family:
@@ -54,10 +54,10 @@ button {
 
 .console-shell {
   display: grid;
-  grid-template-rows: 76px minmax(0, 1fr) 146px;
+  grid-template-rows: 76px auto minmax(0, 1fr) 146px;
   width: 100vw;
   height: 100dvh;
-  min-width: 1120px;
+  min-width: 0;
   overflow: hidden;
   background:
     linear-gradient(rgba(98, 217, 232, 0.025) 1px, transparent 1px),
@@ -179,7 +179,7 @@ button {
 
 .workspace-grid {
   display: grid;
-  grid-row: 2;
+  grid-row: 3;
   grid-template-columns: minmax(258px, 0.84fr) minmax(650px, 2.25fr) minmax(
       272px,
       0.92fr
@@ -885,7 +885,7 @@ button {
 .approval-gate {
   z-index: 8;
   display: grid;
-  grid-row: 3;
+  grid-row: 4;
   grid-template-columns: minmax(490px, 1fr) minmax(610px, 1.15fr);
   gap: 20px;
   min-width: 0;
@@ -1089,6 +1089,323 @@ button {
   letter-spacing: 0.09em;
 }
 
+.competition-overview {
+  display: grid;
+  grid-row: 2;
+  grid-template-columns: minmax(210px, 0.75fr) minmax(0, 3.25fr);
+  gap: 10px;
+  padding: 9px 12px 0;
+}
+
+.scenario-banner {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+
+.scenario-banner > span,
+.competition-status span {
+  color: var(--faint);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.scenario-banner strong {
+  margin-top: 2px;
+  color: var(--cyan);
+  font-size: 12px;
+}
+
+.scenario-banner p {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 8.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.competition-status {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+
+.competition-status > div {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 3px;
+  padding: 7px 9px;
+  border-right: 1px solid var(--line);
+}
+
+.competition-status > div:nth-child(4n) {
+  border-right: 0;
+}
+
+.competition-status > div:nth-child(-n + 4) {
+  border-bottom: 1px solid var(--line);
+}
+
+.competition-status strong {
+  overflow: hidden;
+  color: var(--text);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 8.5px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scenario-picker {
+  display: grid;
+  width: min(760px, calc(100vw - 36px));
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 8px 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  text-align: left;
+}
+
+.scenario-picker legend {
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.scenario-picker label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  cursor: pointer;
+}
+
+.scenario-picker label:has(input:checked) {
+  border-color: var(--cyan);
+  background: var(--cyan-deep);
+}
+
+.scenario-picker label span {
+  display: grid;
+  gap: 3px;
+}
+
+.scenario-picker small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.pre-run-incident {
+  display: grid;
+  width: min(760px, calc(100vw - 36px));
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(255, 135, 96, 0.48);
+  border-radius: 9px;
+  background: rgba(102, 34, 25, 0.2);
+  text-align: left;
+}
+
+.pre-run-incident > span,
+.pre-run-incident small,
+.new-run-control > label {
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.pre-run-incident dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0;
+}
+
+.pre-run-incident dl div {
+  padding: 8px;
+  border-radius: 7px;
+  background: rgba(7, 15, 21, 0.52);
+}
+
+.pre-run-incident dt {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.pre-run-incident dd {
+  margin: 3px 0 0;
+  font-family: "SFMono-Regular", Consolas, monospace;
+}
+
+.new-run-control {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-raised);
+}
+
+.new-run-control > div {
+  display: flex;
+  gap: 8px;
+}
+
+.new-run-control select {
+  min-width: 170px;
+  flex: 1;
+  padding: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.new-run-control .button {
+  white-space: nowrap;
+}
+
+.evidence-drawer {
+  position: fixed;
+  z-index: 70;
+  right: 14px;
+  bottom: 12px;
+  width: min(980px, calc(100vw - 28px));
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: rgba(9, 20, 29, 0.99);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+}
+
+.evidence-drawer > summary {
+  width: max-content;
+  margin-left: auto;
+  padding: 8px 11px;
+  color: var(--cyan);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.evidence-drawer[open] > summary {
+  width: auto;
+  border-bottom: 1px solid var(--line);
+}
+
+.evidence-drawer__body {
+  display: grid;
+  max-height: min(720px, calc(100dvh - 110px));
+  gap: 13px;
+  padding: 13px;
+  overflow: auto;
+}
+
+.evidence-drawer__body section {
+  min-width: 0;
+}
+
+.evidence-drawer__body h2 {
+  margin: 0 0 7px;
+  font-size: 12px;
+}
+
+.evidence-drawer__body code,
+.evidence-drawer__body a {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--cyan);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 9px;
+}
+
+.evidence-binding {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.evidence-binding > div,
+.provider-evidence-grid article {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.evidence-binding dt {
+  color: var(--muted);
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.evidence-binding dd {
+  margin: 3px 0 0;
+}
+
+.provider-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.provider-evidence-grid article {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+}
+
+.provider-evidence-grid header {
+  display: flex;
+  justify-content: space-between;
+  gap: 5px;
+}
+
+.provider-evidence-grid p,
+.provider-evidence-grid span {
+  margin: 0;
+  color: var(--muted);
+  font-size: 8.5px;
+  line-height: 1.35;
+}
+
+.evidence-drawer__body pre {
+  max-height: 320px;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #050b10;
+  color: var(--muted);
+  font-size: 9px;
+}
+
 .error-banner,
 .warning-banner {
   position: fixed;
@@ -1246,6 +1563,30 @@ button {
     display: grid;
     grid-template-columns: 1fr;
     overflow: visible;
+  }
+
+  .competition-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .competition-status {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .scenario-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .pre-run-incident dl {
+    grid-template-columns: 1fr;
+  }
+
+  .new-run-control > div {
+    flex-direction: column;
+  }
+
+  .provider-evidence-grid {
+    grid-template-columns: 1fr;
   }
 
   .panel {

@@ -211,6 +211,7 @@ interface HarnessOptions {
     Record<number, { retryable: boolean; disposition: "failed-destroyed" | "failed-retained" | "cleanup-failed" }>
   >;
   reviewBaseDrift?: boolean;
+  readyRefreshHeadDrift?: boolean;
 }
 
 function harness(options: HarnessOptions = {}) {
@@ -321,6 +322,7 @@ function harness(options: HarnessOptions = {}) {
           resultCount: cases.length,
           candidateResults: cases.map((testCase) => ({
             candidateId: testCase.candidateId,
+            resultId: `eval-result-${experimentOrdinal}-${testCase.candidateId}`,
             evidenceDigest: testCase.evidenceDigest,
             evaluationEvidence: structuredClone(testCase.evaluationEvidence),
             scores: evaluateDeterministicScorers(testCase.evaluationEvidence).scores,
@@ -466,6 +468,34 @@ function harness(options: HarnessOptions = {}) {
           reason: status,
         };
         return officialEnvelope("coderabbit", evidence);
+      },
+      async inspectReview(request) {
+        const driftedHead = options.readyRefreshHeadDrift
+          ? "f".repeat(40)
+          : request.headSha;
+        return officialEnvelope("coderabbit", {
+          pullNumber: request.pullNumber,
+          headSha: request.headSha,
+          observedPrHeadSha: driftedHead,
+          expectedBaseRef: request.expectedBaseRef,
+          expectedBaseSha: request.expectedBaseSha,
+          observedBaseRef: request.expectedBaseRef,
+          observedBaseSha: request.expectedBaseSha,
+          requiresFullRevalidation: options.readyRefreshHeadDrift === true,
+          status: options.readyRefreshHeadDrift ? "stale" : "passed",
+          passed: options.readyRefreshHeadDrift !== true,
+          timedOut: false,
+          findings: [],
+          exactHeadEvidenceIds: options.readyRefreshHeadDrift
+            ? []
+            : ["freshness-check"],
+          staleEvidenceIds: options.readyRefreshHeadDrift
+            ? ["remote-head-drift"]
+            : [],
+          reason: options.readyRefreshHeadDrift
+            ? "remote PR head changed"
+            : "exact PR head remains approved",
+        });
       },
     },
     repository: {
@@ -634,6 +664,12 @@ describe("official live orchestrator composition", () => {
     }
     expect(snapshot.providerEvidence.stageTraceUrls.length).toBeGreaterThanOrEqual(8);
     expect(test.publishCalls).toBe(0);
+    expect(() =>
+      test.workflow.captureRecordedLiveArtifact(
+        snapshot.session.sessionId,
+        "live-orchestrator-test-signing-key-00000000000001",
+      ),
+    ).toThrow(/complete current READY_TO_MERGE Live run/iu);
 
     await expect(
       test.workflow.publishApprovedAndReview(snapshot.session.sessionId),
@@ -670,6 +706,32 @@ describe("official live orchestrator composition", () => {
     expect(test.reviewCalls).toBe(1);
     expect(test.traceNames).toContain("safeflash.github-approved-publication");
     expect(test.traceNames).toContain("safeflash.coderabbit-independent-review");
+    const recorded = test.workflow.captureRecordedLiveArtifact(
+      snapshot.session.sessionId,
+      "live-orchestrator-test-signing-key-00000000000001",
+    );
+    expect(recorded).toMatchObject({
+      kind: "safeflash-recorded-live-run",
+      session: {
+        state: "READY_TO_MERGE",
+        selectedCandidateId: reviewed.session.selectedCandidateId,
+      },
+    });
+    expect(recorded.providers.map((provider) => provider.provider)).toEqual([
+      "fireworks",
+      "daytona",
+      "braintrust",
+      "github",
+      "coderabbit",
+    ]);
+    expect(
+      recorded.providers.find((provider) => provider.provider === "daytona")
+        ?.cleanup,
+    ).toMatchObject({ status: "deleted" });
+    const serializedRecorded = JSON.stringify(recorded);
+    expect(serializedRecorded).not.toContain("unifiedDiff");
+    expect(serializedRecorded).not.toContain("approverId");
+    expect(serializedRecorded).not.toContain("Authorization");
     const progress = test.workflow.getProgress(snapshot.session.sessionId);
     expect(
       progress.find((event) => event.stage === "publication-requested")?.provider,
@@ -711,6 +773,39 @@ describe("official live orchestrator composition", () => {
     expect(test.publishCalls).toBe(2);
     expect(test.reviewCalls).toBe(2);
     expect(test.datasetCalls).toBe(1);
+  });
+
+  it("revokes READY when a read-only refresh observes a different PR head", async () => {
+    const test = harness({ readyRefreshHeadDrift: true });
+    const snapshot = await test.workflow.startTournament(
+      "live-contract-ready-refresh",
+    );
+    await approve(test.workflow, snapshot);
+    const ready = await test.workflow.publishApprovedAndReview(
+      snapshot.session.sessionId,
+    );
+    expect(ready.session.state).toBe("READY_TO_MERGE");
+
+    const invalidated = await test.workflow.refreshReadyToMerge(
+      snapshot.session.sessionId,
+    );
+    expect(invalidated.session.state).toBe("FAILED");
+    expect(invalidated.session.approval?.invalidatedAt).toBe(AT);
+    expect(invalidated.session.reviewReceipt).toBeUndefined();
+    expect(invalidated.session.reviewFindings).toEqual([]);
+    expect(invalidated.session.failure).toMatchObject({
+      recoverable: false,
+      retryAction: "start-new-live-validation",
+    });
+    expect(
+      test.workflow
+        .getProgress(snapshot.session.sessionId)
+        .at(-1),
+    ).toMatchObject({
+      stage: "readiness-invalidated",
+      state: "FAILED",
+      provider: "coderabbit",
+    });
   });
 
   it("settles every parallel Daytona attempt before releasing a failed start for retry", async () => {
@@ -780,6 +875,80 @@ describe("official live orchestrator composition", () => {
         (attempt) => attempt.disposition === "failed-destroyed",
       ),
     ).toMatchObject({ retryable: true, reservationStatus: "reserved" });
+    await approve(test.workflow, resumed);
+    const ready = await test.workflow.publishApprovedAndReview(
+      resumed.session.sessionId,
+    );
+    expect(ready.session.state).toBe("READY_TO_MERGE");
+    const recorded = test.workflow.captureRecordedLiveArtifact(
+      resumed.session.sessionId,
+      "live-orchestrator-test-signing-key-00000000000001",
+    );
+    expect(
+      recorded.providers.find((provider) => provider.provider === "daytona")
+        ?.cleanup?.resourceIds,
+    ).toHaveLength(6);
+  });
+
+  it("prioritizes unconfirmed cleanup across parallel failures and permanently blocks the session ID", async () => {
+    const test = harness({
+      attemptFailuresByCall: {
+        1: { retryable: true, disposition: "failed-destroyed" },
+        2: { retryable: true, disposition: "cleanup-failed" },
+      },
+    });
+
+    await expect(
+      test.workflow.startTournament("live-contract-mixed-cleanup-failure"),
+    ).rejects.toMatchObject({
+      name: "DaytonaAttemptError",
+      retryable: false,
+      attempt: { disposition: "cleanup-failed" },
+    });
+    expect(test.daytonaCalls).toBe(3);
+    expect(
+      test.workflow.getSandboxAttemptHistory(
+        "live-contract-mixed-cleanup-failure",
+      ),
+    ).toHaveLength(3);
+    const generationCalls = test.generationCalls;
+
+    await expect(
+      test.workflow.startTournament("live-contract-mixed-cleanup-failure"),
+    ).rejects.toMatchObject({
+      name: "DaytonaAttemptError",
+      retryable: false,
+    });
+    expect(test.generationCalls).toBe(generationCalls);
+    expect(test.daytonaCalls).toBe(3);
+  });
+
+  it("requires a new session ID after a nonretryable destroyed attempt", async () => {
+    const test = harness({
+      attemptFailuresByCall: {
+        1: { retryable: false, disposition: "failed-destroyed" },
+      },
+    });
+
+    await expect(
+      test.workflow.startTournament("live-contract-nonretryable-destroyed"),
+    ).rejects.toMatchObject({
+      name: "DaytonaAttemptError",
+      retryable: false,
+      attempt: { disposition: "failed-destroyed" },
+    });
+    const providerCalls = {
+      generation: test.generationCalls,
+      daytona: test.daytonaCalls,
+    };
+    await expect(
+      test.workflow.startTournament("live-contract-nonretryable-destroyed"),
+    ).rejects.toMatchObject({
+      name: "DaytonaAttemptError",
+      retryable: false,
+    });
+    expect(test.generationCalls).toBe(providerCalls.generation);
+    expect(test.daytonaCalls).toBe(providerCalls.daytona);
   });
 
   it("fails nonretryably instead of entering READY when the PR base drifts during review", async () => {
@@ -982,7 +1151,7 @@ describe("official live orchestrator composition", () => {
     ).toEqual(history);
   });
 
-  it("uses a fresh monotonic run ID when a repair Daytona attempt fails transiently", async () => {
+  it("permanently fails closed when repair sandbox deletion is unconfirmed", async () => {
     const test = harness({
       reviews: ["blocked"],
       attemptFailuresByCall: {
@@ -1000,7 +1169,7 @@ describe("official live orchestrator composition", () => {
 
     await expect(
       test.workflow.repairBlockedReview(initial.session.sessionId),
-    ).rejects.toMatchObject({ name: "DaytonaAttemptError", retryable: true });
+    ).rejects.toMatchObject({ name: "DaytonaAttemptError", retryable: false });
     const failedHistory = test.workflow.getSandboxAttemptHistory(
       initial.session.sessionId,
     );
@@ -1010,15 +1179,26 @@ describe("official live orchestrator composition", () => {
       reservationStatus: "reserved",
     });
 
-    const repaired = await test.workflow.repairBlockedReview(
-      initial.session.sessionId,
-    );
-    expect(repaired.session.state).toBe("AWAITING_HUMAN_APPROVAL");
+    expect(
+      test.workflow.getSession(initial.session.sessionId),
+    ).toMatchObject({
+      state: "FAILED",
+      failure: {
+        recoverable: false,
+        retryAction: "reconcile-and-start-new-session",
+      },
+    });
+    await expect(
+      test.workflow.repairBlockedReview(initial.session.sessionId),
+    ).rejects.toThrow(/blocked review|FAILED|repair/iu);
     expect(test.requestedRunIds.at(-1)).toBe(
-      "live-contract-repair-transient-daytona-000005",
+      "live-contract-repair-transient-daytona-000004",
     );
     expect(new Set(test.requestedRunIds).size).toBe(test.requestedRunIds.length);
-    expect(repaired.session.sandboxAttemptHistory).toHaveLength(5);
+    expect(
+      test.workflow.getSession(initial.session.sessionId)
+        .sandboxAttemptHistory,
+    ).toHaveLength(4);
   });
 
   it("rejects a structurally-live but unbranded GitHub publication before approval", async () => {

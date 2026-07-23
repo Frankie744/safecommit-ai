@@ -10,22 +10,54 @@ import { z } from "zod";
 
 import {
   createSession,
+  getSessionIndex,
   getSession,
-  listSessions,
   retrySession,
   submitSessionDecision,
 } from "../lib/session-api";
+import { getDeviceTelemetry } from "../lib/device-api";
+import type { DeviceTelemetrySnapshot } from "../lib/device-types";
 import {
   TERMINAL_STATES,
   type CandidateEvidenceView,
   type CandidateView,
   type DecisionAction,
+  type DemoScenarioId,
   type EvidenceProvenance,
   type SessionMode,
   type SessionView,
 } from "../lib/session-types";
+import {
+  CompetitionStatusRail,
+  EvidenceDrawer,
+} from "./competition-panels";
 
 const POLL_INTERVAL_MS = 1_200;
+const DEVICE_POLL_INTERVAL_MS = 2_000;
+const DEMO_SCENARIOS: readonly {
+  id: DemoScenarioId;
+  label: string;
+  summary: string;
+}[] = [
+  {
+    id: "unsafe-high-score",
+    label: "Unsafe high score",
+    summary:
+      "Default: the top soft score loses because a hard safety invariant fails.",
+  },
+  {
+    id: "happy-path",
+    label: "Happy path",
+    summary:
+      "The eligible fail-closed repair reaches evidence-bound human approval.",
+  },
+  {
+    id: "provider-failure",
+    label: "Provider failure",
+    summary:
+      "A MOCK HTTP 429 fixture proves that missing provider evidence fails closed.",
+  },
+];
 
 const approvalToolParameters = z.object({
   sessionId: z.string(),
@@ -66,11 +98,11 @@ function formatTime(value: string | undefined): string {
 function modeLabel(mode: SessionMode): string {
   switch (mode) {
     case "live":
-      return "LIVE API SESSION";
+      return "LIVE RUN";
     case "cached":
-      return "RECORDED REAL EVIDENCE • NOT LIVE";
+      return "RECORDED LIVE RUN - NOT CURRENT LIVE";
     case "mock":
-      return "MOCK • NOT PROVIDER-VERIFIED";
+      return "MOCK RUN - NOT PROVIDER-VERIFIED";
     case "hybrid":
       return "HYBRID • CHECK EACH SOURCE";
     default:
@@ -799,6 +831,10 @@ function CopilotSessionBridge({
 
 export function SafeFlashConsole() {
   const [session, setSession] = useState<SessionView | null>(null);
+  const [activeMode, setActiveMode] = useState<SessionMode>("unknown");
+  const [scenarioId, setScenarioId] =
+    useState<DemoScenarioId>("unsafe-high-score");
+  const [device, setDevice] = useState<DeviceTelemetrySnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -810,7 +846,9 @@ export function SafeFlashConsole() {
     setLoading(true);
     setError(null);
     try {
-      const sessions = await listSessions();
+      const index = await getSessionIndex();
+      const sessions = index.sessions;
+      setActiveMode(index.mode);
       if (sessions.length === 0) {
         setSession(null);
         return;
@@ -820,7 +858,33 @@ export function SafeFlashConsole() {
       try {
         setSession(await getSession(summary.id));
       } catch {
-        setSession(summary);
+        if (
+          summary.mode === "live" &&
+          summary.state === "READY_TO_MERGE"
+        ) {
+          const at = new Date().toISOString();
+          setSession({
+            ...summary,
+            state: "FAILED",
+            approval:
+              summary.approval === undefined
+                ? undefined
+                : {
+                    ...summary.approval,
+                    invalidatedAt: at,
+                    invalidationReason:
+                      "The detail endpoint could not refresh the remote READY claim.",
+                  },
+            review: undefined,
+            failure: {
+              reason:
+                "The exact remote READY claim could not be refreshed; stale readiness is hidden.",
+              recoverable: false,
+            },
+          });
+        } else {
+          setSession(summary);
+        }
         setPollWarning(
           "Detail endpoint unavailable; showing the API list snapshot without inventing missing evidence.",
         );
@@ -841,7 +905,34 @@ export function SafeFlashConsole() {
   }, [loadInitialSession]);
 
   useEffect(() => {
-    if (!session || TERMINAL_STATES.has(session.state)) return;
+    let cancelled = false;
+    const refresh = () => {
+      void getDeviceTelemetry()
+        .then((snapshot) => {
+          if (!cancelled) setDevice(snapshot);
+        })
+        .catch(() => {
+          if (!cancelled) setDevice(null);
+        });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, DEVICE_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    const requiresFreshnessPolling =
+      session.mode === "live" &&
+      (session.state === "READY_TO_MERGE" ||
+        (session.state === "FAILED" &&
+          session.failure?.recoverable === true &&
+          session.failure.retryAction ===
+            "retry-ready-freshness-check"));
+    if (TERMINAL_STATES.has(session.state) && !requiresFreshnessPolling) return;
     const approvalIsCurrent =
       session.approval?.decision === "approved" &&
       !session.approval.invalidatedAt &&
@@ -857,6 +948,35 @@ export function SafeFlashConsole() {
         })
         .catch((pollError: unknown) => {
           if (cancelled) return;
+          setSession((current) => {
+            if (
+              current === null ||
+              current.mode !== "live" ||
+              current.state !== "READY_TO_MERGE"
+            ) {
+              return current;
+            }
+            const at = new Date().toISOString();
+            return {
+              ...current,
+              state: "FAILED",
+              approval:
+                current.approval === undefined
+                  ? undefined
+                  : {
+                      ...current.approval,
+                      invalidatedAt: at,
+                      invalidationReason:
+                        "The client could not refresh the remote READY claim.",
+                    },
+              review: undefined,
+              failure: {
+                reason:
+                  "The exact remote READY claim could not be refreshed; stale readiness is hidden.",
+                recoverable: false,
+              },
+            };
+          });
           setPollWarning(
             pollError instanceof Error
               ? "Live refresh paused: " + pollError.message
@@ -875,7 +995,7 @@ export function SafeFlashConsole() {
     setStarting(true);
     setError(null);
     try {
-      const created = await createSession();
+      const created = await createSession(scenarioId);
       setSession(created);
     } catch (startError) {
       setError(
@@ -886,7 +1006,7 @@ export function SafeFlashConsole() {
     } finally {
       setStarting(false);
     }
-  }, []);
+  }, [scenarioId]);
 
   const handleDecision = useCallback(
     async (decision: DecisionAction): Promise<SessionView> => {
@@ -945,7 +1065,7 @@ export function SafeFlashConsole() {
               className={"mode-badge mode-badge--" + (session?.mode ?? "unknown")}
               data-testid="mode-badge"
             >
-              {modeLabel(session?.mode ?? "unknown")}
+              {modeLabel(session?.mode ?? activeMode)}
             </span>
             <span className="metadata-item">
               SESSION
@@ -963,6 +1083,12 @@ export function SafeFlashConsole() {
               STATE
               <strong data-testid="workflow-state">
                 {humanizeState(session?.state ?? "NO_SESSION")}
+              </strong>
+            </span>
+            <span className="metadata-item">
+              DEVICE
+              <strong data-testid="header-device-status">
+                {device?.displayLabel ?? "SIMULATED DEVICE"}
               </strong>
             </span>
           </div>
@@ -1018,6 +1144,51 @@ export function SafeFlashConsole() {
               This creates a server-owned Battery Sensor Disconnect tournament.
               The UI will only display states returned by the API.
             </p>
+            <div
+              className="pre-run-incident"
+              data-testid="pre-run-incident"
+            >
+              <span>Current device fault · repository-owned preview</span>
+              <strong>
+                Temperature sensor disconnected while charging remains enabled
+              </strong>
+              <dl>
+                <div>
+                  <dt>sensor_temperature</dt>
+                  <dd>0 °C</dd>
+                </div>
+                <div>
+                  <dt>sensor_fault</dt>
+                  <dd>true</dd>
+                </div>
+                <div>
+                  <dt>charger_enabled</dt>
+                  <dd>true</dd>
+                </div>
+              </dl>
+              <small>
+                Preview only. Start a run to create executable evidence.
+              </small>
+            </div>
+            <fieldset className="scenario-picker">
+              <legend>Competition scenario</legend>
+              {DEMO_SCENARIOS.map((scenario) => (
+                <label key={scenario.id}>
+                  <input
+                    checked={scenarioId === scenario.id}
+                    data-testid={`scenario-${scenario.id}`}
+                    name="demo-scenario"
+                    onChange={() => setScenarioId(scenario.id)}
+                    type="radio"
+                    value={scenario.id}
+                  />
+                  <span>
+                    <strong>{scenario.label}</strong>
+                    <small>{scenario.summary}</small>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
             <button
               className="button button--approve"
               data-testid="start-tournament"
@@ -1030,6 +1201,63 @@ export function SafeFlashConsole() {
           </section>
         ) : (
           <>
+            <div className="competition-overview">
+              <section className="scenario-banner" data-testid="scenario-banner">
+                <span>DEMO SCENARIO</span>
+                <strong>
+                  {session.scenario?.label ?? "Server-owned validation"}
+                </strong>
+                <p>
+                  {session.scenario?.summary ?? "Executable evidence only."}
+                </p>
+              </section>
+              <CompetitionStatusRail device={device} session={session} />
+              {session.mode === "cached" ? (
+                <section
+                  className="new-run-control"
+                  data-testid="recorded-run-read-only"
+                >
+                  <strong>READ-ONLY RECORDED RUN</strong>
+                  <label>
+                    Immutable replay cannot start or mutate a scenario.
+                  </label>
+                </section>
+              ) : (
+                <section
+                  className="new-run-control"
+                  data-testid="new-run-control"
+                >
+                  <label htmlFor="new-run-scenario">
+                    Preserve this evidence and start a fresh scenario
+                  </label>
+                  <div>
+                    <select
+                      data-testid="new-run-scenario"
+                      id="new-run-scenario"
+                      onChange={(event) =>
+                        setScenarioId(event.target.value as DemoScenarioId)
+                      }
+                      value={scenarioId}
+                    >
+                      {DEMO_SCENARIOS.map((scenario) => (
+                        <option key={scenario.id} value={scenario.id}>
+                          {scenario.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className="button"
+                      data-testid="start-new-run"
+                      disabled={starting}
+                      onClick={() => void handleStart()}
+                      type="button"
+                    >
+                      {starting ? "Starting…" : "Start new run"}
+                    </button>
+                  </div>
+                </section>
+              )}
+            </div>
             <div className="workspace-grid">
               <IncidentPanel session={session} />
 
@@ -1081,6 +1309,7 @@ export function SafeFlashConsole() {
               onDecision={handleDecision}
               session={session}
             />
+            <EvidenceDrawer session={session} />
           </>
         )}
       </main>
