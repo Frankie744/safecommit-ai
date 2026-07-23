@@ -20,6 +20,7 @@
     "test:firmware": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-firmware.ps1",
     "test:e2e": "playwright test",
     "demo:local": "tsx scripts/run-local-tournament.ts",
+    "demo:cross-device": "tsx scripts/run-cross-device-proof.ts",
     "demo:live": "tsx scripts/run-live-workflow.ts",
     "smoke:external": "tsx scripts/smoke-external.ts",
     "day-of:check": "tsx scripts/day-of-check.ts",
