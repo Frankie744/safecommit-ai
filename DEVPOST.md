@@ -162,9 +162,11 @@ repairs to return through full validation rather than jump directly to ready.
 **If CodeRabbit is removed:** SafeFlash loses an independent organizational
 review gate capable of challenging the agent's selected patch.
 
-**Current proof boundary:** GitHub/CodeRabbit behavior is contract-tested. No
-public demo PR or live CodeRabbit review is committed because repository
-authorization and App installation are not configured.
+**Current proof boundary:** GitHub/CodeRabbit behavior is contract-tested and
+the public source repository is available at
+`https://github.com/Frankie744/safeflash-ai`. No demo PR or live CodeRabbit
+review is claimed because a server-side GitHub token and the repository-scoped
+App installation are not configured.
 
 ## Challenges we ran into
 
@@ -347,10 +349,11 @@ blindly trust it.”
 
 ## Submission fields still blocked
 
-- Public GitHub repository URL: **requires owner/repository authorization**
+- Public GitHub repository URL:
+  **https://github.com/Frankie744/safeflash-ai**
 - Live Fireworks request/model evidence: **requires API key and model choice**
 - Live Daytona sandbox evidence: **requires API key/account**
 - Live Braintrust Dataset/Trace/Experiment links: **requires API key/account**
-- Live GitHub PR and CodeRabbit review/repair loop: **requires public repo,
-  token, App installation, and exact PR**
+- Live GitHub PR and CodeRabbit review/repair loop: **requires token, App
+  installation, and exact PR**
 - Two-minute published video URL: **not yet recorded/published**

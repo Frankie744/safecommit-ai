@@ -21,6 +21,8 @@
     "demo:local": "tsx scripts/run-local-tournament.ts",
     "demo:live": "tsx scripts/run-live-workflow.ts",
     "smoke:external": "tsx scripts/smoke-external.ts",
+    "day-of:check": "tsx scripts/day-of-check.ts",
+    "prepare:demo-pr": "tsx scripts/prepare-demo-pr.ts",
     "verify:p0": "tsx scripts/capture-p0-evidence.ts",
     "verify": "npm run typecheck && npm run test && npm run build && npm run test:e2e"
   },

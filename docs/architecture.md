@@ -16,10 +16,11 @@ verification status. They are deliberately not the same thing.
   persisted Next.js console, and evidence-bound local human approval.
 - **Implemented and contract-tested, but not verified live:** Fireworks,
   Daytona, Braintrust, GitHub, and CodeRabbit adapters.
-- **Externally blocked:** there are no provider credentials, authorized public
-  GitHub demo repository, or confirmed CodeRabbit GitHub App installation in
-  the committed evidence. No provider ID, trace, sandbox, PR, or review is
-  claimed.
+- **Public source ready, live providers blocked:** the public repository is
+  `https://github.com/Frankie744/safeflash-ai`, but there are no provider
+  credentials or confirmed repository-scoped CodeRabbit GitHub App
+  installation in the committed evidence. No provider ID, trace, sandbox, PR,
+  or review is claimed.
 
 The authoritative evidence ledger is
 [`HACKATHON_BUILD.md`](../HACKATHON_BUILD.md). The strongest committed local UI

@@ -44,8 +44,10 @@ Project handoff:
 - [P0 and judging map](docs/judging-map.md)
 - [Three-minute demo runbook](DEMO_RUNBOOK.md)
 - [Devpost draft](DEVPOST.md)
+- [Repository-scoped CodeRabbit installation](docs/coderabbit-installation.md)
 
-The live Fireworks, Daytona, Braintrust, GitHub, and CodeRabbit path still
-requires authorized credentials, a public demo repository, and CodeRabbit App
-installation. Missing provider access fails closed and is never relabelled as
-live success.
+The public source repository is now
+[`Frankie744/safeflash-ai`](https://github.com/Frankie744/safeflash-ai).
+The live Fireworks, Daytona, Braintrust, GitHub PR, and CodeRabbit path still
+requires authorized provider credentials and CodeRabbit App installation.
+Missing provider access fails closed and is never relabelled as live success.

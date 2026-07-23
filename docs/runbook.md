@@ -211,9 +211,10 @@ template and keep the result untracked:
 Copy-Item .env.example .env.local
 ```
 
-Required live switch:
+Required live mode and external-call switch:
 
 ```text
+SAFEFLASH_DEFAULT_MODE=live
 SAFEFLASH_ALLOW_LIVE=true
 ```
 
@@ -253,12 +254,41 @@ Provider variables:
 | Fireworks | `FIREWORKS_API_KEY`, `FIREWORKS_MODEL` | model supports the requested JSON Schema response |
 | Daytona | `DAYTONA_API_KEY` | account can create/delete a private sandbox |
 | Braintrust | `BRAINTRUST_API_KEY` | permission to create Dataset/Trace/Experiment in the configured project |
-| GitHub | `GITHUB_TOKEN`, `GITHUB_OWNER`, `GITHUB_REPO` | public repo; token reports push and PR write access |
+| GitHub | `GITHUB_TOKEN`, `GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_BASE_BRANCH`, `GITHUB_EXPECT_PUBLIC` | public repo; token reports push and PR write access |
 | CodeRabbit | the GitHub values plus `SAFEFLASH_SMOKE_PR_NUMBER`, `SAFEFLASH_SMOKE_PR_HEAD_SHA` | CodeRabbit App installed; existing open PR at that exact SHA |
 
 Optional provider settings and defaults are documented in
 [`../.env.example`](../.env.example). Never use a provider secret in a
 `NEXT_PUBLIC_` variable.
+
+For SafeFlash, keep the public-target values exact:
+
+```text
+GITHUB_OWNER=Frankie744
+GITHUB_REPO=safeflash-ai
+GITHUB_BASE_BRANCH=main
+GITHUB_EXPECT_PUBLIC=true
+```
+
+Install CodeRabbit with access limited to this repository by following
+[`coderabbit-installation.md`](coderabbit-installation.md). The repository owner
+must review and accept the GitHub App permissions; automation must not widen
+the App's repository selection.
+
+Before injecting live credentials, run the read-only launch checks:
+
+```powershell
+npm run day-of:check
+npm run prepare:demo-pr -- --dry-run
+```
+
+Both commands fail closed on repository, identity, remote, SHA, or environment
+drift. The dry-run has no branch, push, or pull-request mutation path. When all
+accounts, keys, the Fireworks model, the repository-scoped CodeRabbit
+installation, and an exact-head demo PR are already available, budget about
+15–30 minutes from server-side credential injection to a live demo rehearsal.
+If App authorization, account quota, model access, or provider cold starts
+remain unresolved, reserve 30–60 minutes or more.
 
 Run one provider at a time:
 
