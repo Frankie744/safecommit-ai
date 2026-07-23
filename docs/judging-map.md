@@ -149,13 +149,15 @@ required next action and makes no external-success claim.
 
 ### Phase 6 — final local P0 capture
 
-- `artifacts/evidence/phase-6/latest-run.txt` after `npm run verify:p0`
-- the referenced run's `summary.json`, `vitest.json`, command logs, and
-  `manifest.sha256`
+- [`summary.json`](../artifacts/evidence/phase-6/p0-verification-20260723T020443493Z/summary.json)
+- [`manifest.sha256`](../artifacts/evidence/phase-6/p0-verification-20260723T020443493Z/manifest.sha256)
+- `artifacts/evidence/phase-6/latest-run.txt` points to this capture.
 
-This package is authoritative only after a clean-tree run completes with
-`P0_RESULT=PASS`. Its provenance remains `local-test/local-process`, with all
-external live providers explicitly excluded.
+This clean-tree capture completed with `P0_RESULT=PASS` from source commit
+`4457ea208f3c45e5eb5886ab251bd0def56c6e3c`: 137/137 Vitest tests and 4/4
+Chrome Playwright tests passed. Its provenance remains
+`local-test/local-process`, with all external live providers explicitly
+excluded.
 
 ## Claims to make—and not make
 

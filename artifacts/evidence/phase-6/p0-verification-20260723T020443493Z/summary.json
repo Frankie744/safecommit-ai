@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "runId": "p0-verification-20260723T020443493Z",
+  "capturedAt": "2026-07-23T02:06:27.362Z",
+  "sourceCommit": "4457ea208f3c45e5eb5886ab251bd0def56c6e3c",
+  "provenance": {
+    "mode": "local-test",
+    "provider": "local-process",
+    "verifiedExternalProviders": false,
+    "notice": "Provider credentials were removed from child processes; this capture does not claim Daytona, Braintrust, Fireworks, GitHub, or CodeRabbit live execution."
+  },
+  "passed": true,
+  "commands": [
+    {
+      "name": "typecheck",
+      "command": "npm run typecheck",
+      "exitCode": 0,
+      "passed": true,
+      "durationMs": 1350.655,
+      "log": "typecheck.log"
+    },
+    {
+      "name": "build",
+      "command": "npm run build",
+      "exitCode": 0,
+      "passed": true,
+      "durationMs": 30056.814,
+      "log": "build.log"
+    },
+    {
+      "name": "vitest",
+      "command": "npm run test",
+      "exitCode": 0,
+      "passed": true,
+      "durationMs": 23543.866,
+      "log": "vitest.log"
+    },
+    {
+      "name": "playwright",
+      "command": "npm run test:e2e",
+      "exitCode": 0,
+      "passed": true,
+      "durationMs": 43872.678,
+      "log": "playwright.log"
+    },
+    {
+      "name": "secret-scan",
+      "command": "npm run test:secrets",
+      "exitCode": 0,
+      "passed": true,
+      "durationMs": 4431.988,
+      "log": "secret-scan.log"
+    }
+  ],
+  "vitest": {
+    "suites": {
+      "total": 39,
+      "passed": 39,
+      "failed": 0
+    },
+    "tests": {
+      "total": 137,
+      "passed": 137,
+      "failed": 0
+    }
+  },
+  "p0Matrix": {
+    "baseline_builds_but_fails_sensor_disconnect_safety_test": "passed",
+    "candidate_patch_schema_is_validated": "passed",
+    "each_candidate_uses_unique_sandbox": "passed",
+    "failed_build_is_ineligible": "passed",
+    "failed_safety_gate_cannot_be_compensated_by_high_average_score": "passed",
+    "patch_cannot_modify_existing_tests": "passed",
+    "patch_cannot_modify_safety_thresholds": "passed",
+    "highest_eligible_candidate_is_selected": "passed",
+    "human_approval_required_before_pr": "passed",
+    "approval_invalidated_when_patch_changes": "passed",
+    "critical_review_finding_blocks_ready_to_merge": "passed",
+    "review_fix_reenters_full_validation_pipeline": "passed",
+    "secrets_are_not_exposed_to_frontend_or_git": "passed",
+    "demo_session_can_be_replayed_from_recorded_evidence": "passed"
+  },
+  "missingOrFailed": []
+}

@@ -1,0 +1,65 @@
+COMMAND: npm run build
+EXIT_CODE: 0
+DURATION_MS: 30056.814
+
+
+> safeflash@0.1.0 build
+> npm run build --workspace @safeflash/web
+
+
+> @safeflash/web@0.1.0 build
+> npm run typecheck && next build --experimental-build-mode compile && next build --experimental-build-mode generate
+
+
+> @safeflash/web@0.1.0 typecheck
+> tsc --noEmit
+
+▲ Next.js 16.2.11 (Turbopack)
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 15.1s
+  Collecting page data using 11 workers ...
+  Finalizing page optimization ...
+  Build ran with "compile" mode, to finalize the build run either "generate" or "generate-env" mode as well
+
+Route (app)
+┌ ƒ /
+├ ƒ /_not-found
+├ ƒ /api/copilotkit
+├ ƒ /api/copilotkit/info
+├ ƒ /api/sessions
+├ ƒ /api/sessions/[sessionId]
+├ ƒ /api/sessions/[sessionId]/decision
+├ ƒ /api/sessions/[sessionId]/retry
+└ ƒ /icon.svg
+
+
+ƒ  (Dynamic)  server-rendered on demand
+
+▲ Next.js 16.2.11 (Turbopack)
+
+  Creating an optimized production build ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/4) ...
+  Generating static pages using 11 workers (1/4) 
+  Generating static pages using 11 workers (2/4) 
+  Generating static pages using 11 workers (3/4) 
+✓ Generating static pages using 11 workers (4/4) in 1333ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /api/copilotkit
+├ ƒ /api/copilotkit/info
+├ ƒ /api/sessions
+├ ƒ /api/sessions/[sessionId]
+├ ƒ /api/sessions/[sessionId]/decision
+├ ƒ /api/sessions/[sessionId]/retry
+└ ○ /icon.svg
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+
