@@ -1,0 +1,42 @@
+COMMAND: npm run test
+EXIT_CODE: 0
+DURATION_MS: 14227.057
+
+
+> safeflash@0.1.0 test
+> vitest run
+
+
+ RUN  v4.1.10 F:/desktop/hackthon
+
+ ✓ tests/integration/phase7-readiness.test.ts (7 tests) 12ms
+ ✓ tests/adversarial/patch-integrity.test.ts (6 tests) 12ms
+ ✓ tests/unit/selector.test.ts (3 tests) 7ms
+ ✓ tests/unit/workflow.test.ts (8 tests) 28ms
+ ✓ tests/unit/evidence-approval.test.ts (2 tests) 7ms
+ ✓ tests/unit/candidate-patch-schema.test.ts (1 test) 10ms
+ ✓ tests/unit/event-store.test.ts (3 tests) 59ms
+ ✓ tests/integration/provider-daytona.test.ts (9 tests) 29ms
+ ✓ tests/integration/provider-revalidation.test.ts (8 tests) 81ms
+ ✓ tests/integration/external-smoke-preflight.test.ts (4 tests) 10ms
+ ✓ tests/integration/provider-braintrust-evals.test.ts (6 tests) 16ms
+ ✓ tests/integration/provider-fireworks.test.ts (11 tests) 39ms
+ ✓ tests/integration/provider-provenance.test.ts (4 tests) 9ms
+ ✓ tests/unit/publish-authorization.test.ts (5 tests) 25ms
+ ✓ tests/adversarial/secrets.test.ts (1 test) 820ms
+     ✓ secrets_are_not_exposed_to_frontend_or_git  818ms
+ ✓ tests/integration/live-orchestrator.test.ts (11 tests) 147ms
+ ✓ tests/integration/provider-github-coderabbit.test.ts (36 tests) 196ms
+ ✓ tests/integration/live-session-service.test.ts (7 tests) 451ms
+ ✓ tests/integration/baseline-firmware.test.ts (1 test) 7531ms
+   ✓ baseline_builds_but_fails_sensor_disconnect_safety_test  7528ms
+ ✓ tests/integration/session-api-service.test.ts (6 tests) 8308ms
+ ✓ tests/integration/tournament.local.test.ts (5 tests) 8412ms
+
+ Test Files  21 passed (21)
+      Tests  144 passed (144)
+   Start at  21:33:40
+   Duration  13.27s (transform 4.70s, setup 0ms, import 54.07s, tests 26.21s, environment 2ms)
+
+JSON report written to F:/desktop/hackthon/artifacts/evidence/latest-vitest.json
+

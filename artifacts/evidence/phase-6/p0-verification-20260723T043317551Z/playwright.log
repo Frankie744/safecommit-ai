@@ -1,0 +1,82 @@
+COMMAND: npm run test:e2e
+EXIT_CODE: 0
+DURATION_MS: 31208.397
+
+
+> safeflash@0.1.0 test:e2e
+> playwright test
+
+[WebServer] 
+[WebServer] > @safeflash/web@0.1.0 build
+[WebServer] > npm run typecheck && next build --experimental-build-mode compile && next build --experimental-build-mode generate
+[WebServer] 
+[WebServer] 
+[WebServer] > @safeflash/web@0.1.0 typecheck
+[WebServer] > tsc --noEmit
+[WebServer] 
+[WebServer] ▲ Next.js 16.2.11 (Turbopack)
+[WebServer] 
+[WebServer]   Creating an optimized production build ...
+[WebServer] ✓ Compiled successfully in 12.4s
+[WebServer]   Collecting page data using 11 workers ...
+[WebServer]   Finalizing page optimization ...
+[WebServer]   Build ran with "compile" mode, to finalize the build run either "generate" or "generate-env" mode as well
+[WebServer] 
+[WebServer] Route (app)
+[WebServer] ┌ ƒ /
+[WebServer] ├ ƒ /_not-found
+[WebServer] ├ ƒ /api/copilotkit
+[WebServer] ├ ƒ /api/copilotkit/info
+[WebServer] ├ ƒ /api/sessions
+[WebServer] ├ ƒ /api/sessions/[sessionId]
+[WebServer] ├ ƒ /api/sessions/[sessionId]/decision
+[WebServer] ├ ƒ /api/sessions/[sessionId]/retry
+[WebServer] └ ƒ /icon.svg
+[WebServer] 
+[WebServer] 
+[WebServer] ƒ  (Dynamic)  server-rendered on demand
+[WebServer] 
+[WebServer] ▲ Next.js 16.2.11 (Turbopack)
+[WebServer] 
+[WebServer]   Creating an optimized production build ...
+[WebServer]   Collecting page data using 11 workers ...
+[WebServer]   Generating static pages using 11 workers (0/4) ...
+[WebServer]   Generating static pages using 11 workers (1/4) 
+[WebServer]   Generating static pages using 11 workers (2/4) 
+[WebServer]   Generating static pages using 11 workers (3/4) 
+[WebServer] ✓ Generating static pages using 11 workers (4/4) in 880ms
+[WebServer]   Finalizing page optimization ...
+[WebServer] 
+[WebServer] Route (app)
+[WebServer] ┌ ○ /
+[WebServer] ├ ○ /_not-found
+[WebServer] ├ ƒ /api/copilotkit
+[WebServer] ├ ƒ /api/copilotkit/info
+[WebServer] ├ ƒ /api/sessions
+[WebServer] ├ ƒ /api/sessions/[sessionId]
+[WebServer] ├ ƒ /api/sessions/[sessionId]/decision
+[WebServer] ├ ƒ /api/sessions/[sessionId]/retry
+[WebServer] └ ○ /icon.svg
+[WebServer] 
+[WebServer] 
+[WebServer] ○  (Static)   prerendered as static content
+[WebServer] ƒ  (Dynamic)  server-rendered on demand
+[WebServer] 
+[WebServer] 
+[WebServer] > @safeflash/web@0.1.0 start
+[WebServer] > next start --hostname 127.0.0.1 --port 36640
+[WebServer] 
+[WebServer] ▲ Next.js 16.2.11
+[WebServer] - Local:         http://127.0.0.1:36640
+[WebServer] - Network:       http://127.0.0.1:36640
+[WebServer] ✓ Ready in 303ms
+
+Running 4 tests using 1 worker
+
+  ok 1 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:392:5 › renders danger, three persistent candidates, provenance, and a closed PR gate (734ms)
+  ok 2 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:419:5 › marks mock mode and every visible provider result as not verified (715ms)
+  ok 3 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:442:5 › does not poll or permit a duplicate decision after bound approval (2.8s)
+  ok 4 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:463:5 › submits bound evidence to the decision API and only then shows ready for human merge (806ms)
+
+  4 passed (30.0s)
+

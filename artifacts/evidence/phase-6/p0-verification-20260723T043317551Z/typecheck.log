@@ -1,0 +1,9 @@
+COMMAND: npm run typecheck
+EXIT_CODE: 0
+DURATION_MS: 1044.839
+
+
+> safeflash@0.1.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+

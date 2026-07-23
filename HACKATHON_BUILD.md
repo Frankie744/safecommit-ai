@@ -13,5 +13,6 @@
 | 4 | CopilotKit console, persisted session, and evidence-bound human approval gate | verified locally in production + Playwright | `artifacts/evidence/phase-4/phase4-evidence-20260722T223143361Z/verification.json` |
 | 5 | GitHub PR and CodeRabbit review/revalidation gate | composed and contract-tested locally; external live run blocked | `artifacts/evidence/phase-5/phase5-preflight-20260723T010926245Z/` |
 | 6 | Replay, E2E, runbooks and submission material | verified locally from clean commit `4457ea208f3c45e5eb5886ab251bd0def56c6e3c` | `artifacts/evidence/phase-6/p0-verification-20260723T020443493Z/summary.json` |
+| 7A | Public GitHub repository and read-only launch readiness | `CREDENTIAL_READY`; repository/SHA/dry-run verified, external live smoke still blocked | `artifacts/evidence/phase-7/phase7a-readiness-20260723T043444961Z/summary.json` |
 
 Rows are promoted to `verified` only after the named evidence is captured.

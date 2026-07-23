@@ -1,0 +1,15 @@
+{
+  "owner": "Frankie744",
+  "name": "safeflash-ai",
+  "visibility": "PUBLIC",
+  "isFork": false,
+  "isArchived": false,
+  "url": "https://github.com/Frankie744/safeflash-ai",
+  "description": "The safety gate for AI-generated firmware.",
+  "defaultBranch": "main",
+  "originFetch": "https://github.com/Frankie744/safeflash-ai.git",
+  "originPush": "https://github.com/Frankie744/safeflash-ai.git",
+  "localHead": "7e7f5007c9c6e834ee6bc398273701dd30d2bfbd",
+  "remoteMainHead": "7e7f5007c9c6e834ee6bc398273701dd30d2bfbd",
+  "shaMatch": true
+}
