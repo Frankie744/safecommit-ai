@@ -10,15 +10,15 @@ import type {
 function modeLabel(mode: SessionMode): string {
   switch (mode) {
     case "live":
-      return "LIVE RUN";
+      return "LIVE PROVIDERS";
     case "cached":
-      return "RECORDED LIVE RUN - NOT CURRENT LIVE";
+      return "RECORDED LIVE";
     case "mock":
-      return "MOCK RUN - NOT PROVIDER-VERIFIED";
+      return "MOCK PROVIDERS";
     case "hybrid":
-      return "HYBRID - CHECK EACH SOURCE";
+      return "HYBRID SOURCES";
     default:
-      return "UNVERIFIED MODE";
+      return "PROVIDER MODE PENDING";
   }
 }
 
@@ -155,11 +155,50 @@ export function CompetitionStatusRail({
 export function EvidenceDrawer({ session }: { session: SessionView }) {
   return (
     <details className="evidence-drawer" data-testid="evidence-drawer">
-      <summary>Evidence and immutable provider IDs</summary>
+      <summary>Open evidence and immutable provider IDs</summary>
       <div className="evidence-drawer__body">
+        <section>
+          <h2>Incident and safety policy</h2>
+          <p>{session.incident.summary}</p>
+          <ul>
+            {session.incident.evidence.map((evidence) => (
+              <li key={evidence}>{evidence}</li>
+            ))}
+          </ul>
+          <dl className="evidence-binding">
+            <div>
+              <dt>Policy</dt>
+              <dd>{session.policy.name}</dd>
+            </div>
+            <div>
+              <dt>Policy version</dt>
+              <dd>
+                <code>{session.policy.version}</code>
+              </dd>
+            </div>
+          </dl>
+          <ol className="evidence-policy-list">
+            {session.policy.invariants.map((invariant) => (
+              <li key={invariant.id}>
+                <strong>
+                  {invariant.hardGate ? "HARD GATE" : "ADVISORY"} ·{" "}
+                  {invariant.id}
+                </strong>
+                <span>{invariant.description}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+
         <section>
           <h2>Binding</h2>
           <dl className="evidence-binding">
+            <div>
+              <dt>Session ID</dt>
+              <dd>
+                <code data-testid="session-id">{session.id}</code>
+              </dd>
+            </div>
             <div>
               <dt>Base commit</dt>
               <dd>
@@ -169,7 +208,7 @@ export function EvidenceDrawer({ session }: { session: SessionView }) {
             <div>
               <dt>Current head</dt>
               <dd>
-                <code>{session.currentCommitSha}</code>
+                <code data-testid="commit-sha">{session.currentCommitSha}</code>
               </dd>
             </div>
             <div>
@@ -235,6 +274,23 @@ export function EvidenceDrawer({ session }: { session: SessionView }) {
           {(session.cleanup?.sandboxIds ?? []).map((id) => (
             <code key={id}>{id}</code>
           ))}
+        </section>
+
+        <section>
+          <h2>Append-only audit events</h2>
+          <ol className="evidence-event-list">
+            {[...session.events]
+              .sort((left, right) => left.sequence - right.sequence)
+              .map((event) => (
+                <li key={event.id}>
+                  <strong>
+                    {String(event.sequence).padStart(2, "0")} · {event.title}
+                  </strong>
+                  <span>{event.summary}</span>
+                  <code>{event.id}</code>
+                </li>
+              ))}
+          </ol>
         </section>
 
         <section>

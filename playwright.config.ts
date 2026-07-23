@@ -41,11 +41,27 @@ export default defineConfig({
   },
   projects: [
     {
+      name: "chrome-1366x768",
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: "chrome",
+        viewport: { width: 1366, height: 768 },
+      },
+    },
+    {
       name: "chrome-1440x900",
       use: {
         ...devices["Desktop Chrome"],
         channel: "chrome",
         viewport: { width: 1440, height: 900 },
+      },
+    },
+    {
+      name: "chrome-1920x1080",
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: "chrome",
+        viewport: { width: 1920, height: 1080 },
       },
     },
   ],
