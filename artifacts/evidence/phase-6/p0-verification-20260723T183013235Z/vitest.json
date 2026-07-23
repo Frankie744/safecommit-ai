@@ -1,0 +1,950 @@
+{
+  "schemaVersion": 1,
+  "success": true,
+  "suites": {
+    "total": 57,
+    "passed": 57,
+    "failed": 0
+  },
+  "tests": {
+    "total": 190,
+    "passed": 190,
+    "failed": 0
+  },
+  "testResults": [
+    {
+      "name": "F:/desktop/hackthon/tests/adversarial/no-auto-merge.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "remote merge remains a human-only boundary contains no GitHub merge or auto-merge mutation in production source",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/adversarial/patch-integrity.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "patch integrity hard gate accepts a focused firmware source change",
+          "status": "passed"
+        },
+        {
+          "fullName": "patch integrity hard gate patch_cannot_modify_existing_tests",
+          "status": "passed"
+        },
+        {
+          "fullName": "patch integrity hard gate patch_cannot_modify_safety_thresholds",
+          "status": "passed"
+        },
+        {
+          "fullName": "patch integrity hard gate rejects CI, build-script, safety-policy, traversal, and binary patches",
+          "status": "passed"
+        },
+        {
+          "fullName": "patch integrity hard gate rejects model-authored shell and network execution",
+          "status": "passed"
+        },
+        {
+          "fullName": "patch integrity hard gate rejects symlink, gitlink, executable-file, and mode-change patches",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/adversarial/secrets.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "secret boundary treats signing keys as secrets without misclassifying path variables",
+          "status": "passed"
+        },
+        {
+          "fullName": "secret boundary secrets_are_not_exposed_to_frontend_or_git",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/unit/candidate-patch-schema.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "CandidatePatchSchema candidate_patch_schema_is_validated",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/unit/device-telemetry.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "non-blocking optional device telemetry returns an honestly labeled software fallback when no device is present",
+          "status": "passed"
+        },
+        {
+          "fullName": "non-blocking optional device telemetry accepts HTTP telemetry, then falls back without blocking after disconnect",
+          "status": "passed"
+        },
+        {
+          "fullName": "non-blocking optional device telemetry accepts a user-routed serial JSON frame without assuming a port name",
+          "status": "passed"
+        },
+        {
+          "fullName": "non-blocking optional device telemetry strictly rejects malformed, extra, or physically invalid telemetry",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/unit/event-store.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "append-only hash-chain event store serializes concurrent appends and replays verified local evidence",
+          "status": "passed"
+        },
+        {
+          "fullName": "append-only hash-chain event store rejects a modified historical event",
+          "status": "passed"
+        },
+        {
+          "fullName": "append-only hash-chain event store rejects a hash-valid completion that skips candidate evidence",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/unit/evidence-approval.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "evidence and approval binding canonical evidence digest is stable across object key order",
+          "status": "passed"
+        },
+        {
+          "fullName": "evidence and approval binding approval_invalidated_when_patch_changes",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/unit/publish-authorization.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "server-only publish authorization binds every publication field and consumes a valid HMAC authorization once",
+          "status": "passed"
+        },
+        {
+          "fullName": "server-only publish authorization rejects tampering with a constant-time MAC comparison",
+          "status": "passed"
+        },
+        {
+          "fullName": "server-only publish authorization rejects changes to every required publication binding before consume",
+          "status": "passed"
+        },
+        {
+          "fullName": "server-only publish authorization rejects expired and future-issued authorizations",
+          "status": "passed"
+        },
+        {
+          "fullName": "server-only publish authorization fails closed on weak or malformed server secret configuration",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/unit/recorded-live.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "recorded-live artifact boundary creates an immutable canonical artifact from complete live evidence",
+          "status": "passed"
+        },
+        {
+          "fullName": "recorded-live artifact boundary rejects incomplete, unverified, sensitive, and unordered captures",
+          "status": "passed"
+        },
+        {
+          "fullName": "recorded-live artifact boundary rejects missing provider resource kinds and incomplete Daytona cleanup",
+          "status": "passed"
+        },
+        {
+          "fullName": "recorded-live artifact boundary detects changes to immutable provider IDs and event timing",
+          "status": "passed"
+        },
+        {
+          "fullName": "recorded-live artifact boundary binds GitHub and CodeRabbit to the exact PR head",
+          "status": "passed"
+        },
+        {
+          "fullName": "recorded-live artifact boundary binds every candidate to a provider-owned Braintrust Eval result ID",
+          "status": "passed"
+        },
+        {
+          "fullName": "recorded-live artifact boundary rejects a structurally valid fixture without the capture authority key",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/unit/safety-policy-composer-reservation.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "Safety Policy Composer Phase 8 reservation is disabled by default and never advertises conversion",
+          "status": "passed"
+        },
+        {
+          "fullName": "Safety Policy Composer Phase 8 reservation accepts only an explicit true flag while keeping conversion unavailable",
+          "status": "passed"
+        },
+        {
+          "fullName": "Safety Policy Composer Phase 8 reservation validates the structured test fixture and rejects unreserved input fields",
+          "status": "passed"
+        },
+        {
+          "fullName": "Safety Policy Composer Phase 8 reservation renders only an honest empty state with no policy conversion form",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/unit/selector.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "hard-gate candidate selector failed_build_is_ineligible",
+          "status": "passed"
+        },
+        {
+          "fullName": "hard-gate candidate selector failed_safety_gate_cannot_be_compensated_by_high_average_score",
+          "status": "passed"
+        },
+        {
+          "fullName": "hard-gate candidate selector highest_eligible_candidate_is_selected",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/unit/workflow.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "validation workflow guards requires and persists exact live provider evidence for initial selection while preserving mock compatibility",
+          "status": "passed"
+        },
+        {
+          "fullName": "validation workflow guards human_approval_required_before_pr",
+          "status": "passed"
+        },
+        {
+          "fullName": "validation workflow guards each_candidate_uses_unique_sandbox",
+          "status": "passed"
+        },
+        {
+          "fullName": "validation workflow guards critical_review_finding_blocks_ready_to_merge",
+          "status": "passed"
+        },
+        {
+          "fullName": "validation workflow guards review_fix_reenters_full_validation_pipeline",
+          "status": "passed"
+        },
+        {
+          "fullName": "validation workflow guards review gate permits readiness only after approval and no blockers",
+          "status": "passed"
+        },
+        {
+          "fullName": "validation workflow guards does not accept an empty findings array as proof that CodeRabbit passed",
+          "status": "passed"
+        },
+        {
+          "fullName": "validation workflow guards binds PR creation and independent review to the exact approved head",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/baseline-firmware.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "baseline_builds_but_fails_sensor_disconnect_safety_test",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/competition-scenarios.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "Phase 8 explicit competition scenarios makes unsafe-high-score the unique default and accepts happy-path",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 8 explicit competition scenarios keeps provider-failure out of the executable local tournament",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 8 explicit competition scenarios runs a distinct happy path whose real safe candidates are ranked normally",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 8 explicit competition scenarios persists an honest MOCK provider failure with every mutation blocked",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/cross-device-profiles.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "cross-device executable assurance profiles keeps every command, path, candidate set, and test count server-owned",
+          "status": "passed"
+        },
+        {
+          "fullName": "cross-device executable assurance profiles runs the motor profile through the same hard-gate selector and rejects the higher unsafe score",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/device-telemetry-route.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "device telemetry HTTP route accepts only the two telemetry fields and reports HTTP provenance honestly",
+          "status": "passed"
+        },
+        {
+          "fullName": "device telemetry HTTP route rejects extra fields without reflecting their values",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/external-smoke-preflight.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "external provider smoke preflight reports every missing provider requirement before network access",
+          "status": "passed"
+        },
+        {
+          "fullName": "external provider smoke preflight blocks malformed optional endpoints and exact-head inputs locally",
+          "status": "passed"
+        },
+        {
+          "fullName": "external provider smoke preflight selects only known provider names",
+          "status": "passed"
+        },
+        {
+          "fullName": "external provider smoke preflight preflights every requested provider before running any external operation",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/live-orchestrator.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "official live orchestrator composition binds the exact temperature-disconnect telemetry and six immutable invariants",
+          "status": "passed"
+        },
+        {
+          "fullName": "official live orchestrator composition runs two real contenders plus a rejected control and serializes evidence-bound approval",
+          "status": "passed"
+        },
+        {
+          "fullName": "official live orchestrator composition resumes a failed publication and pending CodeRabbit poll without a duplicate PR write",
+          "status": "passed"
+        },
+        {
+          "fullName": "official live orchestrator composition revokes READY when a read-only refresh observes a different PR head",
+          "status": "passed"
+        },
+        {
+          "fullName": "official live orchestrator composition settles every parallel Daytona attempt before releasing a failed start for retry",
+          "status": "passed"
+        },
+        {
+          "fullName": "official live orchestrator composition prioritizes unconfirmed cleanup across parallel failures and permanently blocks the session ID",
+          "status": "passed"
+        },
+        {
+          "fullName": "official live orchestrator composition requires a new session ID after a nonretryable destroyed attempt",
+          "status": "passed"
+        },
+        {
+          "fullName": "official live orchestrator composition fails nonretryably instead of entering READY when the PR base drifts during review",
+          "status": "passed"
+        },
+        {
+          "fullName": "official live orchestrator composition uses one bounded real-provider regeneration when a contender misses a hard gate",
+          "status": "passed"
+        },
+        {
+          "fullName": "official live orchestrator composition rejects a profile replacement that reuses the discarded slot sandbox",
+          "status": "passed"
+        },
+        {
+          "fullName": "official live orchestrator composition repairs a blocked exact head in a fresh sandbox, invalidates approval, and updates the same PR",
+          "status": "passed"
+        },
+        {
+          "fullName": "official live orchestrator composition rejects a repair retry that reuses the failed repair sandbox",
+          "status": "passed"
+        },
+        {
+          "fullName": "official live orchestrator composition permanently fails closed when repair sandbox deletion is unconfirmed",
+          "status": "passed"
+        },
+        {
+          "fullName": "official live orchestrator composition rejects a structurally-live but unbranded GitHub publication before approval",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/live-session-service.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "live Web session service contract returns immediately, consumes real progress, and maps all three distinct provider evidence cards",
+          "status": "passed"
+        },
+        {
+          "fullName": "live Web session service contract binds approval to currentCommitSha and reaches READY in the background",
+          "status": "passed"
+        },
+        {
+          "fullName": "live Web session service contract revokes a cached READY view when the read-only remote freshness check reports drift",
+          "status": "passed"
+        },
+        {
+          "fullName": "live Web session service contract repairs a blocked review, retains loser-round provenance, and requires fresh approval",
+          "status": "passed"
+        },
+        {
+          "fullName": "live Web session service contract bounds transient publication retries and resumes without a second approval",
+          "status": "passed"
+        },
+        {
+          "fullName": "live Web session service contract resumes the repair checkpoint without republishing the blocked PR",
+          "status": "passed"
+        },
+        {
+          "fullName": "live Web session service contract routes live POST as 202 with an injected fake and fails closed for cached/unknown modes",
+          "status": "passed"
+        },
+        {
+          "fullName": "live Web session service contract reports a live UI bridge without claiming a live chat model",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/phase7-readiness.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "Phase 7A read-only launch readiness returns CREDENTIAL_READY without claiming live certification or revealing values",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 7A read-only launch readiness fails closed on an unexpected authenticated owner",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 7A read-only launch readiness fails closed before GitHub access when the tree is dirty or defaults drift",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 7A read-only launch readiness fails closed when a real environment file is present or an example secret is populated",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 7A read-only launch readiness rejects a separate or additional origin push URL",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 7A read-only launch readiness requires the sole --dry-run argument without executing any command",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 7A read-only launch readiness produces a read-only PR plan and exposes no mutation adapter",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/provider-braintrust-evals.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "Braintrust dataset and deterministic scorers defines ten complete, stable Firmware Safety Incidents",
+          "status": "passed"
+        },
+        {
+          "fullName": "Braintrust dataset and deterministic scorers returns all eight deterministic scores with hard gates fail-closed",
+          "status": "passed"
+        },
+        {
+          "fullName": "Braintrust dataset and deterministic scorers accepts only error-free Braintrust-returned rows with exact scorer values",
+          "status": "passed"
+        },
+        {
+          "fullName": "Braintrust dataset and deterministic scorers recomputes scores server-side instead of accepting caller output",
+          "status": "passed"
+        },
+        {
+          "fullName": "Braintrust dataset and deterministic scorers runs Braintrust scorers from raw evaluation evidence rather than echoing task output",
+          "status": "passed"
+        },
+        {
+          "fullName": "Braintrust dataset and deterministic scorers uses the final dataset, trace, and Experiment ports in a smoke run",
+          "status": "passed"
+        },
+        {
+          "fullName": "Braintrust dataset and deterministic scorers rejects malformed Dataset, Trace, Experiment, and Eval result identifiers",
+          "status": "passed"
+        },
+        {
+          "fullName": "Braintrust dataset and deterministic scorers classifies Braintrust HTTP 401 failures as retryable=false",
+          "status": "passed"
+        },
+        {
+          "fullName": "Braintrust dataset and deterministic scorers classifies Braintrust HTTP 403 failures as retryable=false",
+          "status": "passed"
+        },
+        {
+          "fullName": "Braintrust dataset and deterministic scorers classifies Braintrust HTTP 422 failures as retryable=false",
+          "status": "passed"
+        },
+        {
+          "fullName": "Braintrust dataset and deterministic scorers classifies Braintrust HTTP 429 failures as retryable=true",
+          "status": "passed"
+        },
+        {
+          "fullName": "Braintrust dataset and deterministic scorers classifies Braintrust timeouts as retryable",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/provider-daytona.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "Daytona isolation contract rejects a credential-bearing API endpoint during configuration",
+          "status": "passed"
+        },
+        {
+          "fullName": "Daytona isolation contract clones an exact commit, blocks network, runs only trusted commands, and destroys",
+          "status": "passed"
+        },
+        {
+          "fullName": "Daytona isolation contract rejects a command policy whose safety command was replaced",
+          "status": "passed"
+        },
+        {
+          "fullName": "Daytona isolation contract does not retain a caller-owned policy that changes after construction",
+          "status": "passed"
+        },
+        {
+          "fullName": "Daytona isolation contract stops after a trusted command failure but still destroys the sandbox",
+          "status": "passed"
+        },
+        {
+          "fullName": "Daytona isolation contract retries sandbox deletion within a fixed bound before returning evidence",
+          "status": "passed"
+        },
+        {
+          "fullName": "Daytona isolation contract returns sanitized structured attempt evidence after post-create and cleanup failures",
+          "status": "passed"
+        },
+        {
+          "fullName": "Daytona isolation contract rejects mutable refs or credential-bearing repository URLs before creation",
+          "status": "passed"
+        },
+        {
+          "fullName": "Daytona isolation contract classifies injected 401, 403, and 422 create failures as nonretryable",
+          "status": "passed"
+        },
+        {
+          "fullName": "Daytona isolation contract classifies injected 429 and timeout create failures as retryable",
+          "status": "passed"
+        },
+        {
+          "fullName": "Daytona isolation contract rejects protected-path and threshold patches before creating a sandbox",
+          "status": "passed"
+        },
+        {
+          "fullName": "Daytona isolation contract runs a network-blocked disposable smoke and verifies exact output",
+          "status": "passed"
+        },
+        {
+          "fullName": "Daytona isolation contract fails the smoke after bounded cleanup retries are exhausted",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/provider-fireworks.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "Fireworks structured candidate contract allows live credentials only for the official Fireworks endpoint",
+          "status": "passed"
+        },
+        {
+          "fullName": "Fireworks structured candidate contract uses JSON schema and validates the response locally",
+          "status": "passed"
+        },
+        {
+          "fullName": "Fireworks structured candidate contract requires a safe provider-owned request ID and never substitutes a local digest",
+          "status": "passed"
+        },
+        {
+          "fullName": "Fireworks structured candidate contract retries a malformed structured response but rejects identity drift",
+          "status": "passed"
+        },
+        {
+          "fullName": "Fireworks structured candidate contract injects 401, 403, and 422 as nonretryable failures without leaking bodies",
+          "status": "passed"
+        },
+        {
+          "fullName": "Fireworks structured candidate contract retries 429 and timeout injections with a bounded fresh request",
+          "status": "passed"
+        },
+        {
+          "fullName": "Fireworks structured candidate contract fails closed when required token telemetry is missing or invalid",
+          "status": "passed"
+        },
+        {
+          "fullName": "Fireworks structured candidate contract retries policy-invalid patches with bounded feedback and rejects source tampering",
+          "status": "passed"
+        },
+        {
+          "fullName": "Fireworks structured candidate contract rejects unsafe or oversized source context before any provider call",
+          "status": "passed"
+        },
+        {
+          "fullName": "Fireworks structured candidate contract treats prompt-like repository comments as inert source data",
+          "status": "passed"
+        },
+        {
+          "fullName": "Fireworks structured candidate contract snapshots policy and source context before the provider await",
+          "status": "passed"
+        },
+        {
+          "fullName": "Fireworks structured candidate contract requires exactly three unique tournament strategies",
+          "status": "passed"
+        },
+        {
+          "fullName": "Fireworks structured candidate contract rejects a tournament assembled across source commits or policy contexts",
+          "status": "passed"
+        },
+        {
+          "fullName": "Fireworks structured candidate contract rejects three strategy labels that resolve to duplicate candidate patches",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/provider-github-coderabbit.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates rejects unsafe GitHub repository coordinates before client creation",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates keeps the GitHub smoke read-only while verifying the configured base head",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates classifies HTTP 408, 429, and every 5xx response as retryable without exposing response data",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates classifies authentication, authorization, not-found, and validation HTTP responses as nonretryable",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates classifies explicit transient network failures, including nested causes, as retryable",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates uses the same retry classification at source-read, preparation, and PR-mutation boundaries",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates keeps adapter consistency failures nonretryable",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates prepares exact candidate Git objects using only immutable GitHub reads",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates refuses to publish a patch against symlink, gitlink, or non-100644 base paths",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates reads only server-registered exact-commit source context as verified UTF-8",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates requires and verifies publish authorization before the first GitHub call",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates publishes the frozen authorized snapshot when the caller mutates after the first await",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates mints only from the authoritative live CREATING_PULL_REQUEST session",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates uses the candidate sandbox map for an initial-selection receipt",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates consumes a publish authorization exactly once before network mutation",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates blocks PR creation without a current approval before any GitHub call",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates rejects an approval whose repository target differs from server config",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates binds candidate, evidence, and approved commit to the requested PR head",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates creates only an open unmerged PR at the exact approved head",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates fast-forwards an existing stable branch without force before PR mutation",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates is idempotent and refuses a changed remote head",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates fails closed on configured base drift before any Git object or ref write",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates rejects both the PR mutation response and final reread when their exact base SHA drifts",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates maps current CodeRabbit severity names while preserving raw severity",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates does not accept CodeRabbit evidence from an older head SHA",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates marks the request stale before reading review evidence when the PR head changed",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates accepts only the official CodeRabbit bot login and app slug",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates does not treat an unrelated check from the CodeRabbit app as review success",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates maps a failed official CodeRabbit check into an exact-head REVIEW_BLOCKED workflow event",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates fails closed when the PR head changes during review evaluation",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates terminates review without polling when the initial PR base SHA has drifted",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates invalidates a successful review when the PR base moves during the final reread",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates blocks unknown inline findings but keeps unknown summaries informational",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates blocks Major findings and passes exact-head success without blockers",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates supports verifiable structured manual fallback without losing raw severity",
+          "status": "passed"
+        },
+        {
+          "fullName": "GitHub mutation and CodeRabbit exact-head gates rejects a manual attestation URL for another repository or PR",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/provider-provenance.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "provider provenance and fail-closed configuration requires explicit live enablement and every credential",
+          "status": "passed"
+        },
+        {
+          "fullName": "provider provenance and fail-closed configuration never lets a live adapter silently become cached or mock",
+          "status": "passed"
+        },
+        {
+          "fullName": "provider provenance and fail-closed configuration requires traceable provenance for replay and mock evidence",
+          "status": "passed"
+        },
+        {
+          "fullName": "provider provenance and fail-closed configuration redacts known secrets and credential-shaped values from errors",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/provider-revalidation.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "live review revalidation receipt binds initial selection to all mapped Daytona sandboxes and the highest eligible Braintrust result",
+          "status": "passed"
+        },
+        {
+          "fullName": "live review revalidation receipt freezes the package-internal official transport authority",
+          "status": "passed"
+        },
+        {
+          "fullName": "live review revalidation receipt derives every pass field and evidence reference from exact live envelopes",
+          "status": "passed"
+        },
+        {
+          "fullName": "live review revalidation receipt requires finite Fireworks telemetry and binds it into the evidence digest",
+          "status": "passed"
+        },
+        {
+          "fullName": "live review revalidation receipt requires destroyed Daytona evidence and rejects retained or ambiguous states",
+          "status": "passed"
+        },
+        {
+          "fullName": "live review revalidation receipt rejects local provenance, command replacement, stale sandbox, and mismatched Braintrust metadata",
+          "status": "passed"
+        },
+        {
+          "fullName": "live review revalidation receipt requires exact reserved attempt history and rejects any observed identifier reuse",
+          "status": "passed"
+        },
+        {
+          "fullName": "live review revalidation receipt recomputes hard-gate eligibility instead of trusting a boolean",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/recorded-live-session-service.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "recorded-live session service replays the immutable artifact as cached and recorded-live everywhere",
+          "status": "passed"
+        },
+        {
+          "fullName": "recorded-live session service fails closed on a modified digest and never returns a mock session",
+          "status": "passed"
+        },
+        {
+          "fullName": "recorded-live session service requires an explicit artifact and routes cached mode without mock fallback",
+          "status": "passed"
+        },
+        {
+          "fullName": "recorded-live session service maps only validated artifacts into a replay view",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/session-api-service.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "Phase 4 persisted local session API service creates from real local tournament evidence and recovers after service restart",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 4 persisted local session API service rejects a decision whose evidence binding was tampered",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 4 persisted local session API service requires approval before any PR and never invents provider success",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 4 persisted local session API service strictly rejects extra decision fields and unsafe path identifiers",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 4 persisted local session API service migrates version-1 local snapshots before validating new commit fields",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 4 persisted local session API service fails closed when a persisted snapshot no longer matches the event chain",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "F:/desktop/hackthon/tests/integration/tournament.local.test.ts",
+      "status": "passed",
+      "assertions": [
+        {
+          "fullName": "Phase 3 local safety tournament executes three strict patches in unique local-test sandboxes with real outcomes",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 3 local safety tournament demo_session_can_be_replayed_from_recorded_evidence",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 3 local safety tournament live mode without a provider fails closed instead of using local evidence",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 3 local safety tournament does not expose provider secrets to repository-owned local test binaries",
+          "status": "passed"
+        },
+        {
+          "fullName": "Phase 3 local safety tournament rejects an external provider that self-reports inconsistent provenance",
+          "status": "passed"
+        }
+      ]
+    }
+  ]
+}
