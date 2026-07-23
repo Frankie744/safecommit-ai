@@ -23,7 +23,14 @@ text is an operator cue, not spoken narration.
 > safety rule, and requires a human to approve the exact evidence before a pull
 > request can be published.
 
-> We built the Parallel Safety Tournament during this HackSprint.
+Pre-event operator note: do not make a “built during this HackSprint” claim
+until the post-start feature commit and evidence exist.
+
+After Cross-Device Assurance Profiles is verified, say:
+
+> Today we made this gate cross-device. The Battery controller and a Motor
+> controller have different physical hazards, but neither can bypass the same
+> evidence-first safety boundary.
 
 ## 0:40–1:25 — The tournament
 
@@ -95,9 +102,9 @@ Operator cue: open
 
 Use these one-sentence answers, then return to the current screen:
 
-- **What is new?** “The Parallel Safety Tournament makes multiple repair
-  strategies compete under hard physical-safety gates while preserving every
-  rejection as evidence.”
+- **What is new?** Before day-of verification, do not claim the reserved
+  feature. After verification: “Cross-Device Assurance Profiles apply the same
+  non-bypassable gate to executable simulated Battery and Motor controllers.”
 - **Is this live?** “The current badge is authoritative: `MOCK` is local,
   `RECORDED_LIVE` is prior real evidence, and `LIVE` means a provider call in
   this run. The recorded-live mechanism exists, but no complete artifact is

@@ -1,203 +1,178 @@
-# SafeFlash HackSprint new-feature plan
+# SafeFlash HackSprint day-of feature plan
 
-## Implemented HackSprint feature: Parallel Safety Tournament
+## Decision
 
-The competition feature built during the HackSprint is the **Parallel Safety
-Tournament**.
+The official competition-day feature is:
 
-It changes the product from a single-answer code fixer into an evidence
-tournament:
+> **Cross-Device Assurance Profiles**
+>
+> One safety gate, multiple classes of physical devices.
 
-1. one incident and immutable policy define the shared problem;
-2. Fireworks produces distinct, schema-constrained repair strategies;
-3. each candidate has a separate Daytona attempt identity;
-4. build, tests, integrity, and physical-safety evidence feed Braintrust;
-5. hard-gate failures make a candidate ineligible before ranking;
-6. the UI preserves every rejection and explains the selected eligible patch;
-7. a human approves an exact evidence binding;
-8. CodeRabbit can send the exact PR head through repair and full revalidation.
+**Pre-event status:** planned only. The executable Motor profile, generic
+profile-driven runner, Motor candidate patches, and UI evidence are not
+implemented in the pre-event branch. They must not be described as completed.
 
-This is the core competition narrative and the primary product innovation. It
-is part of the implemented workflow and its local/provider contracts.
+Implementation may begin only after the official HackSprint hacking window
+opens. The resulting source commit, tests, evidence, and screenshots must all
+be captured after that boundary.
 
-## Reserved follow-on: Policy Composer
+## Pre-event baseline
 
-**Status: reservation surface only; core conversion design is not implemented.**
+The existing verified reference implementation is a simulated Battery
+controller backed by real compiled C:
 
-The Policy Composer currently reserves a server-only flag, a read-only empty
-state, a strict structured fixture schema, and a test fixture. It is not part of
-any safety-critical state transition. No current demo should claim that natural
-language is converted into an enforced policy.
+- incident: temperature-sensor disconnect while charging;
+- unsafe physical state: charging remains enabled;
+- hard-gate result: a higher-scoring unsafe candidate is ineligible;
+- safe result: charging is disabled and the fault remains latched;
+- device provenance: `SIMULATED DEVICE`;
+- firmware provenance: real compiled native C fixture;
+- Provider provenance: authoritative `LIVE`, `RECORDED_LIVE`, or `MOCK`
+  labels remain separate from device provenance.
 
-Its purpose would be to help a domain expert draft a versioned safety-policy
-proposal from structured intent while keeping activation separate and
-human-controlled.
+The ten-row incident dataset models additional hardware classes, but only the
+Battery controller is executable before the HackSprint. Do not claim ten
+executable devices.
 
-### Non-goals
+## Day-of implementation
 
-- It does not auto-activate a generated policy.
-- It does not change thresholds in the active tournament.
-- It does not replace executable safety tests.
-- It does not infer electrical or regulatory requirements from a datasheet.
-- It does not grant Fireworks or another model authority over hard gates.
-- It does not mark a draft as validated because its schema parses.
+### 1. Server-owned executable profile
 
-### Reserved feature flag
-
-The server-only reservation flag is:
-
-```text
-SAFEFLASH_ENABLE_POLICY_COMPOSER=false
-```
-
-Its current contract is deliberately limited:
-
-- absence, an unknown value, or `false` leaves the reservation off;
-- exact `true` reveals only the empty state, never a conversion form;
-- it must not use a `NEXT_PUBLIC_` variable as the authorization boundary;
-- disabling it must leave the current tournament behavior unchanged.
-
-### Proposed input interface
+Create a repository-owned profile contract similar to:
 
 ```ts
-interface PolicyComposerInput {
-  policyId: string;
-  basePolicyVersion: string;
-  deviceClass: string;
-  hazard: {
-    title: string;
-    severity: "low" | "medium" | "high" | "critical";
-    unsafeOutcome: string;
-  };
-  signals: readonly {
-    name: string;
-    unit?: string;
-    validRange?: { minimum: number; maximum: number };
-    missingEvidenceBehavior: "fail-closed" | "hold-last-value-prohibited";
-  }[];
+interface ExecutableIncidentProfile {
+  targetId: string;
+  hardwareClass: string;
+  incident: Incident;
+  safetyPolicy: ImmutableSafetyPolicy;
+  fixtureDirectory: string;
+  sourceContextPaths: readonly string[];
   allowedPatchPaths: readonly string[];
   protectedPaths: readonly string[];
-  requiredTestIds: readonly string[];
+  commandPolicyId: string;
+  unitTestLabel: string;
+  safetyTestLabel: string;
 }
 ```
 
-Inputs are structured deliberately. Free-form prose may accompany a field as an
-operator note, but it must not be the sole source of a threshold or protected
-path.
+The model and browser must never provide shell commands. `commandPolicyId`
+selects a fixed, server-owned command sequence.
 
-### Proposed draft interface
+### 2. Executable simulated Motor controller
 
-```ts
-interface PolicyComposerDraft {
-  schemaVersion: 1;
-  status: "draft";
-  basedOnPolicyVersion: string;
-  proposedPolicyVersion: string;
-  invariants: readonly {
-    id: string;
-    statement: string;
-    hardGate: true;
-    evidenceRequirements: readonly string[];
-  }[];
-  patchBoundary: {
-    allowedPaths: readonly string[];
-    protectedPaths: readonly string[];
-    maximumChangedFiles: number;
-    maximumChangedLines: number;
-  };
-  unresolvedQuestions: readonly string[];
-  sourceAttributions: readonly string[];
-  draftDigest: string;
-}
-```
-
-The output status is always `draft`. A separate review process would need to
-validate schema, thresholds, test coverage, source attribution, and policy
-regression before producing a version that the tournament can reference.
-
-### Reserved UI empty state
-
-When the flag is absent or false:
-
-> **Policy Composer is not enabled**
->
-> SafeFlash is using the repository-owned, versioned safety policy. Draft
-> composition is a planned feature and is not part of this validation run.
-
-The empty state must not show fake drafts, animated conversions, sample model
-confidence, or an enabled “Activate” action.
-
-When the flag is true:
-
-> **No policy conversion is implemented**
->
-> Start from a reviewed base policy and structured hazard inputs. Drafts cannot
-> change an active tournament or become approval evidence.
-
-The reserved page must remain read-only: no form, textarea, conversion action,
-policy mutation, or activation action.
-
-### Fixture reservation and proposed expansion
-
-The reservation uses a strict structured fixture schema and one
-`test-fixture`-provenance example. Future implementation may expand it with:
+Add:
 
 ```text
-tests/fixtures/
-  safety-policy-composer.fixture.json
-  battery-sensor-disconnect.input.json
-  battery-sensor-disconnect.expected-draft.json
-  incomplete-threshold.input.json
-  malicious-protected-path.input.json
-  ambiguous-unit.input.json
-
-packages/domain/src/
-  composer-contract.ts
-
-tests/unit/
-  policy-composer-contract.test.ts
-
-tests/adversarial/
-  policy-composer-boundary.test.ts
+fixtures/motor-controller/
+  CMakeLists.txt
+  README.md
+  include/motor_controller.h
+  src/motor_controller.c
+  tests/test_unit.c
+  tests/test_safety.c
 ```
 
-Fixture expectations:
+The incident is `motor-command-nan`:
 
-- missing units or thresholds remain unresolved instead of being invented;
-- protected paths cannot move into the allowlist;
-- existing hard gates cannot be downgraded;
-- unknown fields and non-finite numbers fail schema validation;
-- prompt-like text remains inert data;
-- source attribution and base policy version are mandatory;
-- repeated canonical input produces the same draft digest;
-- no draft can be consumed by the active workflow.
-
-### Proposed activation design
-
-Activation is intentionally outside the composer:
-
-```mermaid
-flowchart LR
-  I[Structured hazard input] --> D[Policy draft]
-  D --> V[Schema and adversarial validation]
-  V --> H[Domain-owner review]
-  H --> T[Regression tests against incident dataset]
-  T --> S[Signed/versioned policy release]
-  S --> N[Only new tournaments may reference it]
+```text
+non-finite torque command
+-> unsafe baseline allows the value to reach PWM calculation
+-> safe behavior commands zero torque, disables PWM, and latches a fault
 ```
 
-Every arrow after draft creation represents unimplemented future work. The
-current repository-owned policy remains the only authority.
+Normal finite commands and boundary behavior must continue to pass unit tests.
+NaN and positive/negative infinity must fail closed.
 
-### Exit criteria before implementation may be claimed
+### 3. Same hard-gate path
 
-- feature flag and empty state are tested fail-closed;
-- draft schemas reject incomplete and hostile inputs;
-- no route can activate or mutate the current policy;
-- policy regression runs against the incident Dataset;
-- a human domain-owner decision is authenticated and audited;
-- the released policy is versioned and bound to subsequent evidence;
-- the current Parallel Safety Tournament passes unchanged with the flag off.
+Run three Motor candidates through the same eligibility and ranking semantics:
 
-Until all exit criteria have evidence, describe Policy Composer as a reserved
-empty state and planned interface, not a policy-conversion capability.
+```text
+BuildSuccess == 1
+SafetyInvariant == 1
+PatchIntegrity == 1
+UnitTestPassRate >= 0.95
+```
+
+At least one candidate should demonstrate that a high weighted score cannot
+compensate for a failed Motor safety invariant. Device-specific code must not
+introduce a second selector or weaker thresholds.
+
+### 4. Evidence contract
+
+Motor evidence must bind:
+
+- `targetId` and profile version;
+- source commit and before/after tree identities;
+- patch and evidence digests;
+- fixed command-policy identity;
+- compiler, build, unit-test, and safety-test results;
+- separate sandbox identity;
+- provenance of `LOCAL TEST`, `LIVE`, or `RECORDED_LIVE`;
+- simulated-device status.
+
+### 5. Competition command and UI
+
+Add a bounded command such as:
+
+```text
+npm run demo:cross-device
+```
+
+Expected summary:
+
+```text
+EXECUTABLE_PROFILES=2
+BATTERY_PROFILE=PASS
+MOTOR_PROFILE=PASS
+SIMULATED_DEVICES=YES
+HARD_GATE_BYPASS=0
+```
+
+The website should add only a compact cross-device evidence comparison. The
+Battery incident remains the three-minute primary story. Detailed Motor diffs,
+tests, and provenance stay collapsed in Technical Evidence.
+
+## Required day-of verification
+
+After implementation:
+
+1. run the Motor native build and targeted unit/safety tests;
+2. run the profile-driven Battery and Motor integration path;
+3. run adversarial tests proving one profile cannot modify another profile's
+   protected paths or command policy;
+4. run TypeScript, full unit/integration tests, Playwright Chrome, production
+   build, secret scan, `npm audit`, `npm run verify:p0`, and `npm run rehearsal`;
+5. capture a new evidence directory and SHA-256 manifest;
+6. preserve the first post-start implementation commit and final verified head;
+7. update the Draft competition PR without merging it;
+8. update README, Devpost, slides, and the pitch only after the evidence exists.
+
+## Allowed claims after verification
+
+Only after the day-of evidence passes:
+
+```text
+Two executable simulated device profiles
+Ten modeled firmware-safety incidents
+One non-bypassable hard-gate architecture
+```
+
+Do not claim:
+
+- ten executable devices;
+- physical hardware or HIL validation;
+- universal firmware safety;
+- live Provider evidence when the run is local or mock;
+- Motor support before the day-of implementation and evidence exist.
+
+## Policy Composer
+
+Safety Policy Composer remains a disabled roadmap item. It is not the official
+day-of feature and must not be implemented or presented as an active converter
+for this submission.
+
+The product continues to rely on repository-owned, engineer-reviewed safety
+policies. An AI-generated policy draft could never activate itself, weaken an
+existing hard gate, replace executable tests, or authorize hardware access.

@@ -261,16 +261,20 @@ the successful diff.
 
 ## Hackathon-day new work
 
-The workspace began with only the supplied specification. The unchanged
-baseline is commit `29378c54ec2d349ac5494bf454f967579876413c`, tagged
-`pre-hackathon-baseline`; implementation is on
-`hackathon/safety-tournament`.
+This section is a pre-event placeholder and must be replaced only after the
+official hacking window opens and the resulting implementation is verified.
 
-The core new feature is the **Parallel Safety Tournament**: multiple firmware
-repair candidates execute separately, deterministic physical-safety gates
-eliminate unsafe candidates, and all failures remain visible in the evidence
-console. [`HACKATHON_BUILD.md`](HACKATHON_BUILD.md) maps each phase to its
-verification package.
+The selected day-of feature is **Cross-Device Assurance Profiles**:
+
+> One safety gate, multiple classes of physical devices.
+
+The intended proof adds an executable simulated Motor controller to the
+existing executable simulated Battery controller, while preserving the same
+server-owned patch boundaries, deterministic hard gates, evidence binding, and
+no-auto-merge semantics. Before that post-start commit and evidence exist, the
+project claims only one executable Battery reference and ten modeled incident
+definitions. See
+[`docs/hacksprint-new-feature-plan.md`](docs/hacksprint-new-feature-plan.md).
 
 ## Built with
 

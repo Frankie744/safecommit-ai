@@ -11,11 +11,15 @@ physical-safety invariant cannot win on average score.
 > Final capture: unsafe incident → candidates → hard-gate rejection → bound
 > approval → review/revalidation. Replace only after the rehearsal is frozen.
 
-**Built during the Daytona HackSprint w/ Braintrust, July 2026.** Its core new
-feature is the **Parallel Safety Tournament**: multiple strategies run
-separately while every rejection remains visible. Policy Composer currently
-has only a reserved flag, honest empty state, and test fixture—not a policy
-conversion or safety transition.
+**Pre-event competition baseline for the Daytona HackSprint w/ Braintrust,
+July 2026.** The verified reference is the **Parallel Safety Tournament**:
+multiple strategies run separately while every rejection remains visible.
+The selected competition-day feature is **Cross-Device Assurance Profiles**,
+summarized as “One safety gate, multiple classes of physical devices.” Its
+Motor implementation must begin after the official hacking window opens and
+must not be claimed before fresh day-of evidence exists. Policy Composer
+remains a disabled roadmap surface, not a policy conversion or safety
+transition.
 
 ## One-command demo
 

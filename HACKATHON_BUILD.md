@@ -4,6 +4,11 @@
 - Baseline: `pre-hackathon-baseline`
 - Build owner: SafeFlash team, with Codex implementation assistance
 
+This ledger records the pre-event implementation baseline. It is not evidence
+that these phases were implemented during the official July 24, 2026 hacking
+window. The selected day-of feature and its separate post-start evidence are
+defined in `docs/hacksprint-new-feature-plan.md`.
+
 | Phase | New capability | Verification status | Evidence |
 |---|---|---|---|
 | 0 | Workspace/Git audit, decision log, environment contract | verified locally | `artifacts/evidence/phase-0/` |

@@ -15,19 +15,20 @@ The product is the evidence and control plane around code generation.
 
 ### What did you build during the HackSprint?
 
-The core new feature is the **Parallel Safety Tournament**: distinct firmware
-repair strategies proceed through separate validation identities, failed
-candidates remain visible, and only the highest-scoring candidate that passes
-every hard gate can reach approval. The architecture, provider adapters,
-evidence console, approval binding, and independent review loop support that
-feature.
+Pre-event answer: the selected day-of feature is **Cross-Device Assurance
+Profiles**, but it is not yet implemented and must not be claimed.
+
+After day-of evidence exists, answer: we made the safety gate profile-driven
+and added a second executable simulated device class. A Battery sensor
+disconnect and a Motor non-finite torque command use different physical
+invariants but the same non-compensable hard gates, evidence binding, and
+no-auto-merge boundary.
 
 ### What is the Policy Composer?
 
-It is a reserved surface, not an implemented safety-critical converter. The
-current reservation is a server-only flag, read-only empty state, strict
-fixture schema, and test fixture. The plan defines future draft interfaces and
-validation, but the feature remains outside the core transition path. See
+It is a disabled roadmap surface, not the selected competition feature and not
+an implemented safety-critical converter. SafeFlash continues to use
+repository-owned, engineer-reviewed policies. See
 [hacksprint-new-feature-plan.md](hacksprint-new-feature-plan.md).
 
 ### Why is this valuable beyond a battery demo?
