@@ -15,9 +15,11 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:adversarial": "vitest run tests/adversarial",
+    "test:secrets": "vitest run tests/adversarial/secrets.test.ts --reporter=default",
     "test:firmware": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-firmware.ps1",
     "test:e2e": "playwright test",
     "demo:local": "tsx scripts/run-local-tournament.ts",
+    "demo:live": "tsx scripts/run-live-workflow.ts",
     "smoke:external": "tsx scripts/smoke-external.ts",
     "verify:p0": "tsx scripts/capture-p0-evidence.ts",
     "verify": "npm run typecheck && npm run test && npm run build && npm run test:e2e"
@@ -35,10 +37,7 @@
     "vitest": "4.1.10"
   },
   "dependencies": {
-    "@ai-sdk/openai": "4.0.18",
     "@copilotkit/react-core": "1.63.1",
-    "@copilotkit/react-ui": "1.63.1",
-    "@copilotkit/runtime": "1.63.1",
     "@daytona/sdk": "0.200.1",
     "braintrust": "3.24.0",
     "next": "16.2.11",
@@ -47,5 +46,10 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "4.4.3"
+  },
+  "overrides": {
+    "@opentelemetry/propagator-jaeger": "2.10.0",
+    "postcss": "8.5.22",
+    "sharp": "0.35.3"
   }
 }

@@ -51,6 +51,7 @@ const provenanceKinds = [
   "recorded-live",
   "mock",
   "local-test",
+  "server-owned",
   "manual-verified",
   "unknown",
 ] as const;
@@ -109,6 +110,7 @@ function normalizeCandidate(
   const tests = asRecord(record.tests);
   const safetyGate = asRecord(record.safetyGate);
   const score = asRecord(record.score);
+  const generation = asRecord(record.generation);
   const normalizedTests = normalizeEvidence(tests, "daytona");
   const normalizedSafety = normalizeEvidence(safetyGate, "braintrust");
 
@@ -117,6 +119,19 @@ function normalizeCandidate(
     label: asString(record.label, "Candidate " + String(index + 1)),
     strategy: asString(record.strategy, "Strategy not reported"),
     hypothesis: asString(record.hypothesis) || undefined,
+    validationRound: asNumber(record.validationRound) ?? undefined,
+    generation:
+      Object.keys(generation).length === 0
+        ? undefined
+        : {
+            model: asString(generation.model) || undefined,
+            profile: asString(generation.profile) || undefined,
+            patchDigest: asString(generation.patchDigest) || undefined,
+            provenance: normalizeProvenance(
+              generation.provenance,
+              "fireworks",
+            ),
+          },
     selected:
       asBoolean(record.selected, false) ||
       (selectedCandidateId !== undefined && selectedCandidateId === id),
@@ -145,7 +160,8 @@ function normalizeCandidate(
     },
     score: {
       weighted: asNumber(score.weighted),
-      eligible: asBoolean(score.eligible, false),
+      eligible:
+        typeof score.eligible === "boolean" ? score.eligible : null,
       experimentId: asString(score.experimentId) || undefined,
       traceId: asString(score.traceId) || undefined,
       provenance: normalizeProvenance(score.provenance, "braintrust"),
@@ -224,6 +240,8 @@ export function normalizeSession(payload: unknown): SessionView {
   const eventsValue = outer.events !== undefined ? outer.events : source.events;
   const approval = asRecord(source.approval);
   const pullRequest = asRecord(source.pullRequest);
+  const review = asRecord(source.review);
+  const failure = asRecord(source.failure);
 
   return {
     id: asString(source.id, asString(source.sessionId, "unknown-session")),
@@ -235,6 +253,10 @@ export function normalizeSession(payload: unknown): SessionView {
       repoUrl: asString(repository.repoUrl) || undefined,
       commitSha: asString(repository.commitSha, "unreported"),
     },
+    currentCommitSha: asString(
+      source.currentCommitSha,
+      asString(repository.commitSha, "unreported"),
+    ),
     incident: normalizeIncident(
       outer.incident !== undefined ? outer.incident : source.incident,
     ),
@@ -278,6 +300,47 @@ export function normalizeSession(payload: unknown): SessionView {
               pullRequest.provenance,
               "github",
             ),
+          },
+    review:
+      Object.keys(review).length === 0
+        ? undefined
+        : {
+            round: asNumber(review.round, 0) ?? 0,
+            status: oneOf(
+              review.status,
+              ["pending", "blocked", "passed"] as const,
+              "pending",
+            ),
+            headSha: asString(review.headSha) || undefined,
+            findings: asArray(review.findings).map((item, index) => {
+              const finding = asRecord(item);
+              return {
+                id: asString(finding.id, `review-finding-${index + 1}`),
+                severity: oneOf(
+                  finding.severity,
+                  ["info", "low", "medium", "high", "critical"] as const,
+                  "medium",
+                ),
+                title: asString(finding.title, "Review finding"),
+                body: asString(finding.body, "No finding detail reported."),
+                filePath: asString(finding.filePath) || undefined,
+                line: asNumber(finding.line) ?? undefined,
+                resolved: Boolean(finding.resolved),
+                url: asString(finding.url) || undefined,
+              };
+            }),
+            provenance: normalizeProvenance(review.provenance, "coderabbit"),
+          },
+    failure:
+      Object.keys(failure).length === 0
+        ? undefined
+        : {
+            reason: asString(
+              failure.reason,
+              "The workflow failed without a reported reason.",
+            ),
+            recoverable: Boolean(failure.recoverable),
+            retryAction: asString(failure.retryAction) || undefined,
           },
     events: asArray(eventsValue)
       .map(normalizeEvent)
@@ -357,11 +420,19 @@ export async function submitSessionDecision(
         candidateId: session.selectedCandidateId,
         evidenceDigest: session.currentEvidenceDigest,
         patchDigest: session.currentPatchDigest,
-        commitSha: session.repository.commitSha,
+        commitSha: session.currentCommitSha,
         policyVersion: session.policy.version,
       }),
     },
   );
 
   return payload === undefined ? getSession(session.id) : normalizeSession(payload);
+}
+
+export async function retrySession(sessionId: string): Promise<SessionView> {
+  const payload = await requestJson(
+    "/api/sessions/" + encodeURIComponent(sessionId) + "/retry",
+    { method: "POST" },
+  );
+  return normalizeSession(payload);
 }

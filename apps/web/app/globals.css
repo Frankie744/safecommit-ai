@@ -366,6 +366,11 @@ button {
   color: #8ecff6;
 }
 
+.provenance--server-owned {
+  border-color: #315a68;
+  color: #8edbe8;
+}
+
 .incident-evidence {
   margin-top: 15px;
   padding-top: 12px;

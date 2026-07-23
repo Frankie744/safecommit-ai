@@ -32,7 +32,8 @@ import type {
 } from "../lib/session-types";
 
 const SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/u;
-const STORE_VERSION = 1 as const;
+const STORE_VERSION = 2 as const;
+const LEGACY_STORE_VERSION = 1 as const;
 const POLICY_VERSION = "battery-safety-v1";
 const SOURCE_VERSION = "web-session-service-v1";
 
@@ -82,6 +83,18 @@ export class SessionServiceError extends Error {
     super(message);
     this.name = "SessionServiceError";
   }
+}
+
+export function configuredApproverId(fallback: string): string {
+  const value = process.env.SAFEFLASH_APPROVER_ID?.trim() || fallback;
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/u.test(value)) {
+    throw new SessionServiceError(
+      503,
+      "INVALID_APPROVER_CONFIGURATION",
+      "SAFEFLASH_APPROVER_ID must be a safe 1-100 character operator identifier.",
+    );
+  }
+  return value;
 }
 
 export interface SessionServiceOptions {
@@ -261,7 +274,8 @@ function parsePersisted(value: unknown, expectedId?: string): PersistedSession {
   }
   const record = value as Partial<PersistedSession>;
   if (
-    record.storeVersion !== STORE_VERSION ||
+    (record.storeVersion !== STORE_VERSION &&
+      (record.storeVersion as number | undefined) !== LEGACY_STORE_VERSION) ||
     typeof record.session !== "object" ||
     record.session === null ||
     typeof record.view !== "object" ||
@@ -275,7 +289,24 @@ function parsePersisted(value: unknown, expectedId?: string): PersistedSession {
   ) {
     throw new SessionServiceError(500, "CORRUPT_SESSION", "Stored session failed validation.");
   }
-  return record as PersistedSession;
+  const session = record.session as ValidationSession;
+  return {
+    ...(record as PersistedSession),
+    storeVersion: STORE_VERSION,
+    session: {
+      ...session,
+      currentCommitSha: session.currentCommitSha ?? session.repository.commitSha,
+      revalidationSandboxIds: session.revalidationSandboxIds ?? [],
+      sandboxAttemptHistory: session.sandboxAttemptHistory ?? [],
+    },
+    view: {
+      ...record.view,
+      currentCommitSha:
+        record.view.currentCommitSha ??
+        session.currentCommitSha ??
+        session.repository.commitSha,
+    },
+  };
 }
 
 export class SessionService {
@@ -393,6 +424,7 @@ export class SessionService {
       record.session.repository.commitSha !== started.payload.sourceCommitSha ||
       record.session.currentCommitSha !== started.payload.sourceCommitSha ||
       record.view.repository.commitSha !== started.payload.sourceCommitSha ||
+      record.view.currentCommitSha !== started.payload.sourceCommitSha ||
       record.session.policyVersion !== record.view.policy.version ||
       record.view.pullRequest !== undefined ||
       record.view.events.length < events.length ||
@@ -451,8 +483,10 @@ export class SessionService {
     const safeId = assertSafeSessionId(sessionId);
     try {
       const text = await readFile(this.filePath(safeId), "utf8");
-      const record = parsePersisted(JSON.parse(text) as unknown, safeId);
+      const parsed = JSON.parse(text) as { storeVersion?: number };
+      const record = parsePersisted(parsed, safeId);
       await this.validateEvidence(record);
+      if (parsed.storeVersion === LEGACY_STORE_VERSION) await this.persist(record);
       return record;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -566,6 +600,7 @@ export class SessionService {
         createdAt,
         updatedAt: domainSession.updatedAt,
         repository: { repoUrl: "local-workspace", commitSha },
+        currentCommitSha: domainSession.currentCommitSha ?? commitSha,
         incident: {
           title: "Battery temperature sensor disconnected while charging",
           summary:
@@ -683,7 +718,8 @@ export class SessionService {
         evidenceDigest: request.data.evidenceDigest,
         commitSha: request.data.commitSha,
         policyVersion: request.data.policyVersion,
-        approverId: "local-web-operator",
+        pullRequestTarget: current.pullRequestTarget,
+        approverId: configuredApproverId("local-web-operator"),
         approverDisplayName: request.data.approverDisplayName ?? "Local operator",
         decision: request.data.decision as ApprovalDecision,
         source: "web-api-local",

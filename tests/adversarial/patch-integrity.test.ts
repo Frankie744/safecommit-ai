@@ -129,5 +129,55 @@ describe("patch integrity hard gate", () => {
       }).allowed,
     ).toBe(true);
   });
-});
 
+  it("rejects symlink, gitlink, executable-file, and mode-change patches", () => {
+    const addedFile = (mode: string, content: string) =>
+      [
+        "diff --git a/firmware/src/escape.c b/firmware/src/escape.c",
+        `new file mode ${mode}`,
+        "index 0000000..1111111",
+        "--- /dev/null",
+        "+++ b/firmware/src/escape.c",
+        "@@ -0,0 +1 @@",
+        `+${content}`,
+      ].join("\n");
+
+    expect(
+      validatePatchIntegrity(addedFile("120000", "../../outside.c")).violations.map(
+        ({ code }) => code,
+      ),
+    ).toContain("SYMLINK_PATCH");
+    expect(
+      validatePatchIntegrity(
+        addedFile("160000", "Subproject commit 1111111111111111111111111111111111111111"),
+      ).violations.map(({ code }) => code),
+    ).toContain("SYMLINK_PATCH");
+    expect(
+      validatePatchIntegrity(addedFile("100755", "int main(void) { return 0; }")).violations.map(
+        ({ code }) => code,
+      ),
+    ).toContain("UNSAFE_FILE_MODE");
+
+    const chmod = [
+      "diff --git a/firmware/src/controller.c b/firmware/src/controller.c",
+      "old mode 100644",
+      "new mode 100755",
+    ].join("\n");
+    expect(validatePatchIntegrity(chmod).violations.map(({ code }) => code)).toContain(
+      "UNSAFE_FILE_MODE",
+    );
+
+    const existingSymlink = [
+      "diff --git a/firmware/src/linked.c b/firmware/src/linked.c",
+      "index 1111111..2222222 120000",
+      "--- a/firmware/src/linked.c",
+      "+++ b/firmware/src/linked.c",
+      "@@ -1 +1 @@",
+      "-controller.c",
+      "+../../outside.c",
+    ].join("\n");
+    expect(
+      validatePatchIntegrity(existingSymlink).violations.map(({ code }) => code),
+    ).toContain("SYMLINK_PATCH");
+  });
+});

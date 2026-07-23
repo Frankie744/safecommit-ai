@@ -21,6 +21,19 @@ export interface RepositoryRevision {
   commitSha: string;
 }
 
+export interface PullRequestTarget {
+  provider: "github";
+  owner: string;
+  repository: string;
+  baseBranch: string;
+}
+
+export interface ValidationPolicySnapshot {
+  allowedPatchPaths: readonly string[];
+  maxChangedFiles: number;
+  maxChangedLines: number;
+}
+
 export interface Incident extends DomainEntity {
   kind: string;
   title: string;
@@ -162,6 +175,7 @@ export interface HumanApproval extends DomainEntity {
   patchDigest: string;
   policyVersion: string;
   commitSha: string;
+  pullRequestTarget?: PullRequestTarget;
   bindingDigest: string;
   reason?: string;
   invalidatedAt?: IsoTimestamp;
@@ -176,7 +190,10 @@ export interface PullRequestRecord extends DomainEntity {
   number: number;
   url: string;
   headSha: string;
+  headTreeSha: string;
   baseBranch: string;
+  /** Exact immutable base commit reported by GitHub for this PR. */
+  baseSha: string;
   status: "open" | "closed" | "merged";
 }
 
@@ -203,6 +220,10 @@ export interface IndependentReviewReceipt {
   status: "passed" | "blocked";
   pullNumber: number;
   headSha: string;
+  expectedBaseRef: string;
+  expectedBaseSha: string;
+  observedBaseRef: string;
+  observedBaseSha: string;
   reviewUrl: string;
   evidenceIds: readonly string[];
   capturedAt: IsoTimestamp;
@@ -215,14 +236,26 @@ export interface IndependentReviewReceipt {
  * and provenance checks have succeeded.
  */
 export interface FullRevalidationReceipt {
+  sourceKind: "live-provider-evidence";
+  mode: "live";
+  validationPurpose: "initial-selection" | "review-repair";
+  sessionId: string;
+  policyVersion: string;
   candidateId: string;
   patchDigest: string;
   commitSha: string;
+  validatedTreeSha: string;
+  pullRequestTarget: PullRequestTarget;
   evidenceDigest: string;
+  attestationDigest: string;
   executionProvider: "daytona";
   evaluationProvider: "braintrust";
   sandboxId: string;
+  daytonaRunId: string;
   daytonaEvidenceRef: string;
+  braintrustProjectId: string;
+  braintrustExperimentId: string;
+  braintrustExperimentName: string;
   braintrustExperimentRef: string;
   buildPassed: boolean;
   unitTestsPassed: boolean;
@@ -261,6 +294,32 @@ export interface WorkflowFailure {
   failedFrom: ValidationState;
 }
 
+/**
+ * Append-only reservation for every Daytona validation response observed by a
+ * live session. This includes attempts that are later replaced or rejected;
+ * keeping those identifiers prevents a resumed round from treating an old
+ * sandbox or run as fresh evidence.
+ */
+export interface DaytonaAttemptInput {
+  candidateId: string;
+  sandboxId: string;
+  runId: string;
+  purpose: "initial-candidate" | "profile-replacement" | "review-repair";
+  capturedAt: string;
+  disposition:
+    | "completed"
+    | "failed-destroyed"
+    | "failed-retained"
+    | "cleanup-failed";
+  retryable: boolean;
+}
+
+export interface DaytonaAttemptRecord extends DaytonaAttemptInput {
+  reservationStatus: "reserved" | "rejected-reuse";
+  duplicateSandbox: boolean;
+  duplicateRun: boolean;
+}
+
 export interface ValidationSession extends DomainEntity {
   mode: OperatingMode;
   runKind: "single" | "tournament";
@@ -268,19 +327,26 @@ export interface ValidationSession extends DomainEntity {
   incidentId: string;
   policyId: string;
   policyVersion: string;
+  /** Server-owned immutable policy limits captured when the session starts. */
+  policySnapshot?: ValidationPolicySnapshot;
   repository: RepositoryRevision;
+  pullRequestTarget?: PullRequestTarget;
   candidateIds: readonly string[];
   sandboxIdsByCandidate: Readonly<Record<string, string>>;
+  /** Append-only across successful, failed, replaced, and resumed attempts. */
+  sandboxAttemptHistory: readonly DaytonaAttemptRecord[];
   selectedCandidateId?: string;
   currentPatchDigest?: string;
   currentEvidenceDigest?: string;
   /** Commit at the current approved/validated PR head; repository.commitSha is the ingested base. */
   currentCommitSha?: string;
+  currentValidatedTreeSha?: string;
   approval?: HumanApproval;
   pullRequest?: PullRequestRecord;
   reviewFindings: readonly ReviewFinding[];
   reviewReceipt?: IndependentReviewReceipt;
   lastRevalidation?: FullRevalidationReceipt;
+  revalidationSandboxIds: readonly string[];
   validationRound: number;
   failure?: WorkflowFailure;
 }

@@ -1,5 +1,5 @@
 import { computeEvidenceDigest } from "./evidence";
-import type { HumanApproval, IsoTimestamp } from "./types";
+import type { HumanApproval, IsoTimestamp, PullRequestTarget } from "./types";
 
 export interface ApprovalBinding {
   candidateId: string;
@@ -7,6 +7,7 @@ export interface ApprovalBinding {
   evidenceDigest: string;
   policyVersion: string;
   commitSha: string;
+  pullRequestTarget?: PullRequestTarget;
 }
 
 export interface CreateApprovalInput extends ApprovalBinding {
@@ -32,6 +33,10 @@ export function createHumanApproval(input: CreateApprovalInput): HumanApproval {
     evidenceDigest: input.evidenceDigest,
     policyVersion: input.policyVersion,
     commitSha: input.commitSha,
+    pullRequestTarget:
+      input.pullRequestTarget === undefined
+        ? undefined
+        : { ...input.pullRequestTarget },
   };
 
   return {
@@ -50,6 +55,10 @@ export function createHumanApproval(input: CreateApprovalInput): HumanApproval {
     patchDigest: input.patchDigest,
     policyVersion: input.policyVersion,
     commitSha: input.commitSha,
+    pullRequestTarget:
+      input.pullRequestTarget === undefined
+        ? undefined
+        : { ...input.pullRequestTarget },
     bindingDigest: computeApprovalBindingDigest(binding),
     reason: input.reason,
   };
@@ -73,7 +82,9 @@ export function isApprovalValid(
     approval.patchDigest === current.patchDigest &&
     approval.evidenceDigest === current.evidenceDigest &&
     approval.policyVersion === current.policyVersion &&
-    approval.commitSha === current.commitSha
+    approval.commitSha === current.commitSha &&
+    computeEvidenceDigest(approval.pullRequestTarget ?? null) ===
+      computeEvidenceDigest(current.pullRequestTarget ?? null)
   );
 }
 
@@ -98,4 +109,3 @@ export function invalidateApprovalWhenEvidenceChanges(
       "The candidate patch or its validation evidence changed after approval.",
   };
 }
-

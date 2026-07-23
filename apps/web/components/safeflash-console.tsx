@@ -12,6 +12,7 @@ import {
   createSession,
   getSession,
   listSessions,
+  retrySession,
   submitSessionDecision,
 } from "../lib/session-api";
 import {
@@ -24,12 +25,15 @@ import {
   type SessionView,
 } from "../lib/session-types";
 
-const POLL_INTERVAL_MS = 1_000;
+const POLL_INTERVAL_MS = 1_200;
 
 const approvalToolParameters = z.object({
   sessionId: z.string(),
   candidateId: z.string(),
   evidenceDigest: z.string(),
+  patchDigest: z.string(),
+  commitSha: z.string(),
+  policyVersion: z.string(),
   summary: z.string(),
 });
 
@@ -91,6 +95,10 @@ function provenanceLabel(provenance: EvidenceProvenance): string {
         : "LIVE " + provider + " • UNVERIFIED";
     case "manual-verified":
       return "MANUAL VERIFIED • " + provider;
+    case "server-owned":
+      return provenance.verified
+        ? "SERVER EVENT • " + provider
+        : "SERVER EVENT • UNVERIFIED " + provider;
     default:
       return "SOURCE UNVERIFIED • " + provider;
   }
@@ -223,7 +231,12 @@ function CandidateCard({ candidate }: { candidate: CandidateView }) {
     >
       <header className="candidate-card__header">
         <div>
-          <span className="eyebrow">{candidate.label}</span>
+          <span className="eyebrow">
+            {candidate.label}
+            {candidate.validationRound === undefined
+              ? ""
+              : ` · ROUND ${candidate.validationRound}`}
+          </span>
           <h3>{candidate.strategy}</h3>
         </div>
         <span className={"decision-tag decision-tag--" + cardState}>
@@ -237,6 +250,20 @@ function CandidateCard({ candidate }: { candidate: CandidateView }) {
 
       {candidate.hypothesis ? (
         <p className="candidate-card__hypothesis">{candidate.hypothesis}</p>
+      ) : null}
+
+      {candidate.generation ? (
+        <div className="evidence-row" data-testid="candidate-generation">
+          <div className="evidence-row__line">
+            <span className="evidence-row__label">Fireworks generation</span>
+            <strong className="evidence-row__value">
+              {candidate.generation.model ??
+                candidate.generation.profile ??
+                "captured"}
+            </strong>
+          </div>
+          <ProvenanceBadge provenance={candidate.generation.provenance} />
+        </div>
       ) : null}
 
       <div className="candidate-card__evidence">
@@ -286,10 +313,18 @@ function CandidateCard({ candidate }: { candidate: CandidateView }) {
         <span
           className={
             "eligibility eligibility--" +
-            (candidate.score.eligible ? "eligible" : "ineligible")
+            (candidate.score.eligible === null
+              ? "pending"
+              : candidate.score.eligible
+                ? "eligible"
+                : "ineligible")
           }
         >
-          {candidate.score.eligible ? "ELIGIBLE" : "NOT ELIGIBLE"}
+          {candidate.score.eligible === null
+            ? "EVALUATING"
+            : candidate.score.eligible
+              ? "ELIGIBLE"
+              : "NOT ELIGIBLE"}
         </span>
         <ProvenanceBadge provenance={candidate.score.provenance} />
       </div>
@@ -421,6 +456,35 @@ function TimelinePanel({ session }: { session: SessionView }) {
           <strong>{humanizeState(session.state)}</strong>
         </div>
       </div>
+      {session.review ? (
+        <div className="current-tool" data-testid="coderabbit-review">
+          <div>
+            <span>
+              CodeRabbit review round {session.review.round} · {session.review.status}
+            </span>
+            <strong>
+              {session.review.findings.length} finding
+              {session.review.findings.length === 1 ? "" : "s"}
+            </strong>
+            {session.review.findings.length > 0 ? (
+              <ul className="rejection-list" data-testid="coderabbit-findings">
+                {session.review.findings.map((finding) => (
+                  <li key={finding.id}>
+                    <strong>
+                      {finding.severity.toUpperCase()} · {finding.title}
+                    </strong>
+                    <span>
+                      {finding.filePath ?? "Pull request"}
+                      {finding.line === undefined ? "" : `:${finding.line}`} · {finding.body}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <ProvenanceBadge provenance={session.review.provenance} />
+          </div>
+        </div>
+      ) : null}
       <ol className="timeline-list" data-testid="timeline">
         {events.length === 0 ? (
           <li className="timeline-empty">
@@ -586,7 +650,9 @@ function ApprovalGate({
             className="pr-link pr-link--disabled"
             data-testid="pull-request-link"
           >
-            PR unavailable before valid approval
+            {session.mode === "live" && approvalIsCurrent
+              ? "PR publication and independent review in progress"
+              : "PR unavailable before valid approval"}
           </span>
         )}
         {ready ? (
@@ -616,7 +682,9 @@ function CopilotSessionBridge({
         mode: session?.mode ?? "unknown",
         selectedCandidateId: session?.selectedCandidateId ?? null,
         evidenceDigest: session?.currentEvidenceDigest ?? null,
-        commitSha: session?.repository.commitSha ?? null,
+        patchDigest: session?.currentPatchDigest ?? null,
+        commitSha: session?.currentCommitSha ?? null,
+        policyVersion: session?.policy.version ?? null,
         candidates:
           session?.candidates.map((candidate) => ({
             id: candidate.id,
@@ -649,11 +717,17 @@ function CopilotSessionBridge({
         const requestedSession = props.args.sessionId;
         const requestedCandidate = props.args.candidateId;
         const requestedEvidence = props.args.evidenceDigest;
+        const requestedPatch = props.args.patchDigest;
+        const requestedCommit = props.args.commitSha;
+        const requestedPolicy = props.args.policyVersion;
         const bindingMatches =
           session !== null &&
           requestedSession === session.id &&
           requestedCandidate === session.selectedCandidateId &&
-          requestedEvidence === session.currentEvidenceDigest;
+          requestedEvidence === session.currentEvidenceDigest &&
+          requestedPatch === session.currentPatchDigest &&
+          requestedCommit === session.currentCommitSha &&
+          requestedPolicy === session.policy.version;
 
         if (props.status === ToolCallStatus.Executing) {
           const respond = props.respond;
@@ -713,6 +787,9 @@ function CopilotSessionBridge({
       session?.state,
       session?.selectedCandidateId,
       session?.currentEvidenceDigest,
+      session?.currentPatchDigest,
+      session?.currentCommitSha,
+      session?.policy.version,
       onDecision,
     ],
   );
@@ -724,6 +801,7 @@ export function SafeFlashConsole() {
   const [session, setSession] = useState<SessionView | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [busyDecision, setBusyDecision] = useState<DecisionAction | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pollWarning, setPollWarning] = useState<string | null>(null);
@@ -768,7 +846,7 @@ export function SafeFlashConsole() {
       session.approval?.decision === "approved" &&
       !session.approval.invalidatedAt &&
       session.approval.evidenceDigest === session.currentEvidenceDigest;
-    if (approvalIsCurrent) return;
+    if (approvalIsCurrent && session.mode !== "live") return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void getSession(session.id)
@@ -833,6 +911,23 @@ export function SafeFlashConsole() {
     [session],
   );
 
+  const handleRetry = useCallback(async () => {
+    if (!session) return;
+    setRetrying(true);
+    setError(null);
+    try {
+      setSession(await retrySession(session.id));
+    } catch (retryError) {
+      setError(
+        retryError instanceof Error
+          ? retryError.message
+          : "The backend rejected the resume request.",
+      );
+    } finally {
+      setRetrying(false);
+    }
+  }, [session]);
+
   return (
     <CopilotSessionBridge session={session} onDecision={handleDecision}>
       <main className="console-shell" data-testid="safeflash-console">
@@ -861,7 +956,7 @@ export function SafeFlashConsole() {
             <span className="metadata-item">
               COMMIT
               <strong data-testid="commit-sha">
-                {compactIdentifier(session?.repository.commitSha, 12)}
+                {compactIdentifier(session?.currentCommitSha, 12)}
               </strong>
             </span>
             <span className="metadata-item">
@@ -885,6 +980,26 @@ export function SafeFlashConsole() {
         {pollWarning ? (
           <div className="warning-banner" role="status">
             {pollWarning}
+          </div>
+        ) : null}
+        {session?.failure ? (
+          <div className="error-banner" data-testid="workflow-failure" role="alert">
+            <strong>Workflow failed closed.</strong>
+            <span>
+              {session.failure.reason} {session.failure.recoverable
+                ? `Resume action: ${session.failure.retryAction ?? "available"}.`
+                : "This failure is not recoverable from the UI."}
+            </span>
+            {session.failure.recoverable ? (
+              <button
+                data-testid="resume-live-workflow"
+                disabled={retrying}
+                onClick={() => void handleRetry()}
+                type="button"
+              >
+                {retrying ? "Resuming…" : "Resume live workflow"}
+              </button>
+            ) : null}
           </div>
         ) : null}
 

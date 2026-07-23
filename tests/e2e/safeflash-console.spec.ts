@@ -26,6 +26,7 @@ const initialSession: SessionView = {
     repoUrl: "https://github.test/safeflash/firmware",
     commitSha: "8e74c12bca94a58e6d3c85d0a19d0d2217d6be66",
   },
+  currentCommitSha: "9f85d23cdb05b69f7e4d96e1b20e1e3328e7cf77",
   incident: {
     title: "Battery sensor disconnect",
     summary:
@@ -494,7 +495,7 @@ test("submits bound evidence to the decision API and only then shows ready for h
     candidateId: "candidate-latch",
     evidenceDigest: "sha256:test-evidence-c",
     patchDigest: "sha256:test-patch-c",
-    commitSha: initialSession.repository.commitSha,
+    commitSha: initialSession.currentCommitSha,
     policyVersion: initialSession.policy.version,
   });
 

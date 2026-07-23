@@ -3,7 +3,12 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const unavailable = {
+function unavailable() {
+  const configuredMode = process.env.SAFEFLASH_DEFAULT_MODE ?? "mock";
+  const sessionMode = ["live", "cached", "mock"].includes(configuredMode)
+    ? configuredMode
+    : "invalid";
+  return {
   error: {
     code: "COPILOT_RUNTIME_NOT_CONFIGURED",
     message:
@@ -11,19 +16,22 @@ const unavailable = {
   },
   capability: {
     available: false,
-    mode: "mock",
+    mode: "chat-runtime-not-configured",
+    uiBridgeAvailable: true,
+    sessionMode,
     provenance: {
-      kind: "local-test",
-      provider: "none",
+      kind: "unknown",
+      provider: "copilotkit-chat-runtime",
       verified: false,
     },
   },
-} as const;
+  } as const;
+}
 
 export async function GET(): Promise<NextResponse> {
-  return NextResponse.json(unavailable, { status: 503 });
+  return NextResponse.json(unavailable(), { status: 503 });
 }
 
 export async function POST(): Promise<NextResponse> {
-  return NextResponse.json(unavailable, { status: 503 });
+  return NextResponse.json(unavailable(), { status: 503 });
 }

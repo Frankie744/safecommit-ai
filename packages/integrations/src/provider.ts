@@ -57,6 +57,28 @@ export interface ProviderEnvelope<T> {
   data: T;
 }
 
+type ProviderTransportSource = object & {
+  readonly transport: ProviderTransport;
+};
+
+// These identities deliberately never cross the package boundary. A caller can
+// describe JSON as `provenance.kind = "live"`, but only an adapter backed by a
+// transport created in this module graph can mint an envelope accepted by a
+// live P0 gate. WeakSets also ensure cloning/serialization strips authority.
+const officialTransports = new WeakSet<object>();
+const officialLiveEnvelopes = new WeakSet<object>();
+
+function deepFreeze<T>(value: T, seen = new WeakSet<object>()): T {
+  if (typeof value !== "object" || value === null || seen.has(value)) {
+    return value;
+  }
+  seen.add(value);
+  for (const key of Reflect.ownKeys(value)) {
+    deepFreeze((value as Record<PropertyKey, unknown>)[key], seen);
+  }
+  return Object.freeze(value);
+}
+
 export class ProviderConfigurationError extends Error {
   readonly retryable = false;
 
@@ -135,18 +157,6 @@ export function requireLiveConfiguration<K extends string>(
   ) as Record<K, string>;
 }
 
-export function liveEnvelope<T>(
-  provider: ProviderName,
-  data: T,
-  capturedAt = new Date().toISOString(),
-): ProviderEnvelope<T> {
-  return {
-    provider,
-    provenance: { mode: "live", kind: "live", capturedAt },
-    data,
-  };
-}
-
 export function localTestEnvelope<T>(
   provider: ProviderName,
   data: T,
@@ -189,15 +199,50 @@ export function manualVerifiedEnvelope<T>(
   };
 }
 
+/** @internal Register only concrete official SDK transports at construction. */
+export function registerOfficialTransport<
+  T extends object & { readonly transport: "official-sdk" },
+>(transport: T): T {
+  officialTransports.add(transport);
+  return Object.freeze(transport);
+}
+
+/** @internal Mint an identity-bound envelope from an adapter transport. */
 export function transportEnvelope<T>(
   provider: ProviderName,
-  transport: ProviderTransport,
+  source: ProviderTransportSource,
   data: T,
   capturedAt = new Date().toISOString(),
 ): ProviderEnvelope<T> {
-  return transport === "official-sdk"
-    ? liveEnvelope(provider, data, capturedAt)
-    : localTestEnvelope(provider, data, capturedAt);
+  if (source.transport === "local-test") {
+    return localTestEnvelope(provider, data, capturedAt);
+  }
+  if (!officialTransports.has(source)) {
+    throw new ProviderResponseError(
+      provider,
+      "An unregistered transport cannot mint live provider evidence",
+      false,
+    );
+  }
+  const authoritativeData = deepFreeze(structuredClone(data));
+  const envelope: ProviderEnvelope<T> = Object.freeze({
+    provider,
+    provenance: Object.freeze({ mode: "live", kind: "live", capturedAt }),
+    data: authoritativeData,
+  });
+  officialLiveEnvelopes.add(envelope);
+  return envelope;
+}
+
+/** @internal Authority check used by server-only receipt factories. */
+export function isOfficialLiveEnvelope<T>(
+  envelope: ProviderEnvelope<T>,
+): envelope is ProviderEnvelope<T> & { provenance: LiveProvenance } {
+  return (
+    envelope.provenance.mode === "live" &&
+    envelope.provenance.kind === "live" &&
+    officialLiveEnvelopes.has(envelope)
+  );
 }
 
 export function cachedEnvelope<T>(
@@ -275,6 +320,10 @@ export function redactSecrets(
   }
 
   return redacted
+    .replace(
+      /\bsfpa1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu,
+      "[REDACTED_PUBLISH_AUTHORIZATION]",
+    )
     .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/giu, "Bearer [REDACTED]")
     .replace(/\bgithub_pat_[A-Za-z0-9_]+\b/gu, "[REDACTED_GITHUB_TOKEN]")
     .replace(/\bgh[pousr]_[A-Za-z0-9]+\b/gu, "[REDACTED_GITHUB_TOKEN]")

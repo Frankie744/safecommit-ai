@@ -5,6 +5,7 @@ export type ProvenanceKind =
   | "recorded-live"
   | "mock"
   | "local-test"
+  | "server-owned"
   | "manual-verified"
   | "unknown";
 
@@ -64,6 +65,13 @@ export interface CandidateView {
   label: string;
   strategy: string;
   hypothesis?: string;
+  validationRound?: number;
+  generation?: {
+    model?: string;
+    profile?: string;
+    patchDigest?: string;
+    provenance: EvidenceProvenance;
+  };
   selected: boolean;
   eliminatedReason?: string;
   sandbox: {
@@ -83,7 +91,7 @@ export interface CandidateView {
   };
   score: {
     weighted: number | null;
-    eligible: boolean;
+    eligible: boolean | null;
     experimentId?: string;
     traceId?: string;
     provenance: EvidenceProvenance;
@@ -101,6 +109,17 @@ export interface TimelineEventView {
   provenance: EvidenceProvenance;
 }
 
+export interface ReviewFindingView {
+  id: string;
+  severity: "info" | "low" | "medium" | "high" | "critical";
+  title: string;
+  body: string;
+  filePath?: string;
+  line?: number;
+  resolved: boolean;
+  url?: string;
+}
+
 export interface SessionView {
   id: string;
   mode: SessionMode;
@@ -111,6 +130,8 @@ export interface SessionView {
     repoUrl?: string;
     commitSha: string;
   };
+  /** Exact validated candidate/PR-head commit; repository.commitSha remains the ingested base. */
+  currentCommitSha: string;
   incident: IncidentView;
   policy: SafetyPolicyView;
   candidates: readonly CandidateView[];
@@ -129,6 +150,18 @@ export interface SessionView {
     url: string;
     status: "open" | "closed" | "merged";
     provenance: EvidenceProvenance;
+  };
+  review?: {
+    round: number;
+    status: "pending" | "blocked" | "passed";
+    headSha?: string;
+    findings: readonly ReviewFindingView[];
+    provenance: EvidenceProvenance;
+  };
+  failure?: {
+    reason: string;
+    recoverable: boolean;
+    retryAction?: string;
   };
   events: readonly TimelineEventView[];
 }

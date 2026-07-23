@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { getActiveSessionService } from "../../../../server/active-session-service";
 import { apiErrorResponse } from "../../../../server/http";
-import { getSessionService } from "../../../../server/session-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +16,9 @@ export async function GET(
 ): Promise<NextResponse> {
   try {
     const { sessionId } = await context.params;
-    return NextResponse.json({ session: await getSessionService().get(sessionId) });
+    return NextResponse.json({
+      session: await getActiveSessionService().get(sessionId),
+    });
   } catch (error) {
     return apiErrorResponse(error);
   }

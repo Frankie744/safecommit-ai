@@ -8,7 +8,11 @@ import {
   type DeterministicScore,
   type FirmwareSafetyIncidentCase,
 } from "@safeflash/evals";
-import type { OperatingMode } from "@safeflash/domain";
+import {
+  canonicalJson,
+  computeEvidenceDigest,
+  type OperatingMode,
+} from "@safeflash/domain";
 import {
   Eval,
   initDataset,
@@ -20,6 +24,7 @@ import {
 
 import {
   ProviderResponseError,
+  registerOfficialTransport,
   requireLiveConfiguration,
   transportEnvelope,
   type Environment,
@@ -52,6 +57,16 @@ export interface BraintrustTraceEvidence {
 export interface BraintrustExperimentCase {
   candidateId: string;
   input: Record<string, unknown>;
+  evaluationEvidence: CandidateEvaluationEvidence;
+  evidenceDigest: string;
+  expected?: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+}
+
+export interface BraintrustPreparedExperimentCase {
+  candidateId: string;
+  input: Record<string, unknown>;
+  evaluationEvidence: CandidateEvaluationEvidence;
   output: {
     scores: readonly DeterministicScore[];
     evidenceDigest: string;
@@ -67,6 +82,137 @@ export interface BraintrustExperimentEvidence {
   experimentId: string;
   experimentUrl: string;
   resultCount: number;
+  candidateResults: readonly {
+    candidateId: string;
+    evidenceDigest: string;
+    evaluationEvidence: CandidateEvaluationEvidence;
+    scores: readonly DeterministicScore[];
+    metadata: Record<string, unknown>;
+  }[];
+}
+
+export interface BraintrustReturnedExperimentResult {
+  input: BraintrustPreparedExperimentCase;
+  output: BraintrustPreparedExperimentCase["output"];
+  expected?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  error: unknown;
+  scores: Record<string, number | null>;
+}
+
+/**
+ * Braintrust's scorer callback recomputes the eight deterministic scores from
+ * the raw evaluation evidence. The task output is only a comparison oracle;
+ * it cannot make an unsafe candidate score as safe by supplying numbers.
+ */
+export function evaluateBraintrustCandidateScorers(
+  input: BraintrustPreparedExperimentCase,
+  output: BraintrustPreparedExperimentCase["output"],
+): readonly DeterministicScore[] {
+  const recomputed = evaluateDeterministicScorers(
+    input.evaluationEvidence,
+  ).scores;
+  if (canonicalJson(recomputed) !== canonicalJson(output.scores)) {
+    throw new ProviderResponseError(
+      "braintrust",
+      "Braintrust task output does not match scorer-recomputed evidence",
+      false,
+    );
+  }
+  return recomputed;
+}
+
+type BraintrustCandidateResult =
+  BraintrustExperimentEvidence["candidateResults"][number];
+
+/**
+ * Normalize only values confirmed by Braintrust's returned Eval rows. The
+ * caller-supplied cases are comparison oracles, never the evidence source.
+ */
+export function normalizeBraintrustReturnedResults(
+  cases: readonly BraintrustPreparedExperimentCase[],
+  results: readonly BraintrustReturnedExperimentResult[],
+): readonly BraintrustCandidateResult[] {
+  if (results.length !== cases.length || cases.length === 0) {
+    throw new ProviderResponseError(
+      "braintrust",
+      "Braintrust did not return exactly one result for every candidate",
+      false,
+    );
+  }
+  const expectedByCandidate = new Map<string, BraintrustPreparedExperimentCase>();
+  for (const testCase of cases) {
+    if (
+      testCase.candidateId.trim() === "" ||
+      expectedByCandidate.has(testCase.candidateId)
+    ) {
+      throw new ProviderResponseError(
+        "braintrust",
+        "Braintrust candidate IDs must be non-empty and unique",
+        false,
+      );
+    }
+    expectedByCandidate.set(testCase.candidateId, testCase);
+  }
+
+  const seen = new Set<string>();
+  return results.map((remote) => {
+    const candidateId = remote.input?.candidateId;
+    const expected = expectedByCandidate.get(candidateId);
+    const expectedMetadata =
+      expected === undefined
+        ? undefined
+        : { ...expected.metadata, candidateId: expected.candidateId };
+    if (
+      expected === undefined ||
+      seen.has(candidateId) ||
+      (remote.error !== null && remote.error !== undefined) ||
+      canonicalJson(remote.input) !== canonicalJson(expected) ||
+      canonicalJson(remote.output) !== canonicalJson(expected.output) ||
+      canonicalJson(remote.expected ?? null) !==
+        canonicalJson(expected.expected ?? null) ||
+      canonicalJson(remote.metadata ?? {}) !== canonicalJson(expectedMetadata)
+    ) {
+      throw new ProviderResponseError(
+        "braintrust",
+        "Braintrust returned an errored, duplicate, or mismatched candidate result",
+        false,
+      );
+    }
+    const expectedScores = new Map<string, number>(
+      remote.output.scores.map((score) => [score.name, score.score] as const),
+    );
+    const returnedNames = Object.keys(remote.scores);
+    if (
+      expectedScores.size !== remote.output.scores.length ||
+      returnedNames.length !== expectedScores.size ||
+      returnedNames.some((name) => {
+        const value = remote.scores[name];
+        return (
+          value === null ||
+          !Number.isFinite(value) ||
+          value !== expectedScores.get(name)
+        );
+      })
+    ) {
+      throw new ProviderResponseError(
+        "braintrust",
+        "Braintrust returned missing, null, extra, or mismatched scorer results",
+        false,
+      );
+    }
+    seen.add(candidateId);
+    return {
+      candidateId,
+      evidenceDigest: remote.output.evidenceDigest,
+      evaluationEvidence: structuredClone(remote.input.evaluationEvidence),
+      scores: remote.output.scores.map((score) => ({
+        ...score,
+        metadata: { ...score.metadata },
+      })),
+      metadata: { ...remote.input.metadata },
+    };
+  });
 }
 
 export interface BraintrustSmokeEvidence {
@@ -93,7 +239,7 @@ export interface BraintrustSdkPort {
   runExperiment(
     config: BraintrustConfig,
     experimentName: string,
-    cases: readonly BraintrustExperimentCase[],
+    cases: readonly BraintrustPreparedExperimentCase[],
   ): Promise<BraintrustExperimentEvidence>;
 }
 
@@ -139,7 +285,7 @@ function createLogger(config: BraintrustConfig): Logger<true> {
 }
 
 export function createBraintrustSdkPort(): BraintrustSdkPort {
-  return {
+  return registerOfficialTransport({
     transport: "official-sdk",
     async seedDataset(config, cases) {
       assertFirmwareSafetyDataset(cases);
@@ -253,8 +399,8 @@ export function createBraintrustSdkPort(): BraintrustSdkPort {
           })),
           task: (testCase) => testCase.output,
           scores: [
-            ({ output }) =>
-              output.scores.map((resultScore) => ({
+            ({ input, output }) =>
+              evaluateBraintrustCandidateScorers(input, output).map((resultScore) => ({
                 name: resultScore.name,
                 score: resultScore.score,
                 metadata: resultScore.metadata,
@@ -294,9 +440,13 @@ export function createBraintrustSdkPort(): BraintrustSdkPort {
           summary.experimentUrl ?? startedSummary?.experimentUrl,
         ),
         resultCount: result.results.length,
+        candidateResults: normalizeBraintrustReturnedResults(
+          cases,
+          result.results,
+        ),
       };
     },
-  };
+  } satisfies BraintrustSdkPort);
 }
 
 export class BraintrustAdapter {
@@ -312,7 +462,7 @@ export class BraintrustAdapter {
     try {
       return transportEnvelope(
         "braintrust",
-        this.sdk.transport,
+        this.sdk,
         await this.sdk.seedDataset(this.config, cases),
       );
     } catch (error) {
@@ -335,7 +485,7 @@ export class BraintrustAdapter {
     try {
       return transportEnvelope(
         "braintrust",
-        this.sdk.transport,
+        this.sdk,
         await this.sdk.writeTrace(this.config, event),
       );
     } catch (error) {
@@ -354,10 +504,45 @@ export class BraintrustAdapter {
     cases: readonly BraintrustExperimentCase[],
   ): Promise<ProviderEnvelope<BraintrustExperimentEvidence>> {
     try {
+      const seen = new Set<string>();
+      const prepared: BraintrustPreparedExperimentCase[] = cases.map(
+        (testCase) => {
+          if (
+            testCase.candidateId.trim() === "" ||
+            seen.has(testCase.candidateId) ||
+            testCase.evaluationEvidence.candidateId !== testCase.candidateId ||
+            !/^[0-9a-f]{64}$/iu.test(testCase.evidenceDigest)
+          ) {
+            throw new ProviderResponseError(
+              "braintrust",
+              "Braintrust cases require unique bound candidates and a SHA-256 evidence digest",
+              false,
+            );
+          }
+          seen.add(testCase.candidateId);
+          const deterministic = evaluateDeterministicScorers(
+            testCase.evaluationEvidence,
+          );
+          return {
+            candidateId: testCase.candidateId,
+            input: { ...testCase.input },
+            evaluationEvidence: structuredClone(testCase.evaluationEvidence),
+            output: {
+              scores: deterministic.scores,
+              evidenceDigest: testCase.evidenceDigest,
+            },
+            expected:
+              testCase.expected === undefined
+                ? undefined
+                : { ...testCase.expected },
+            metadata: { ...testCase.metadata },
+          };
+        },
+      );
       return transportEnvelope(
         "braintrust",
-        this.sdk.transport,
-        await this.sdk.runExperiment(this.config, experimentName, cases),
+        this.sdk,
+        await this.sdk.runExperiment(this.config, experimentName, prepared),
       );
     } catch (error) {
       if (error instanceof ProviderResponseError) throw error;
@@ -409,10 +594,11 @@ export class BraintrustAdapter {
         {
           candidateId: smokeEvidence.candidateId,
           input: { smoke: true },
-          output: {
+          evaluationEvidence: smokeEvidence,
+          evidenceDigest: computeEvidenceDigest({
+            kind: "braintrust-contract-smoke",
             scores: deterministic.scores,
-            evidenceDigest: "contract-smoke-no-candidate-patch",
-          },
+          }),
           expected: { deterministicScores: 8 },
           metadata: { smoke: true },
         },
@@ -420,7 +606,7 @@ export class BraintrustAdapter {
     );
     return transportEnvelope(
       "braintrust",
-      this.sdk.transport,
+      this.sdk,
       {
         dataset: dataset.data,
         trace: trace.data,

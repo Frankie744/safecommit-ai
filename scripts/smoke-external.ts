@@ -14,6 +14,7 @@ import {
   isSafeGitHubOwner,
   isSafeGitHubRepository,
   isSafeGitRef,
+  createFireworksSourceContext,
   readBraintrustConfig,
   readCodeRabbitConfig,
   readDaytonaConfig,
@@ -260,6 +261,7 @@ async function smokeFireworks(environment: Environment): Promise<unknown> {
     sessionId: "external-smoke",
     candidateId: "fireworks-contract-smoke",
     strategy: "fail-closed",
+    evaluationProfile: "safety-contender",
     incident: {
       title: "External structured-output smoke",
       summary:
@@ -278,6 +280,21 @@ async function smokeFireworks(environment: Environment): Promise<unknown> {
       repoUrl: "https://github.com/example/safeflash-smoke.git",
       commitSha: "0000000000000000000000000000000000000000",
     },
+    sourceContext: createFireworksSourceContext({
+      commitSha: "0000000000000000000000000000000000000000",
+      files: [
+        {
+          path: "fixtures/battery-controller/src/battery_controller.c",
+          content:
+            "void control_tick(bool sensor_ok) { if (sensor_ok) actuator_enabled = true; }\n",
+        },
+        {
+          path: "fixtures/battery-controller/tests/safety_tests.c",
+          content:
+            "/* Trusted oracle: sensor timeout must set actuator_enabled=false. */\n",
+        },
+      ],
+    }),
     requestedTests: ["battery_unit_tests", "battery_safety_tests"],
     seed: 20260722,
   });
@@ -288,6 +305,8 @@ async function smokeFireworks(environment: Environment): Promise<unknown> {
     strategy: result.data.candidate.strategy,
     latencyMs: result.data.latencyMs,
     finishReason: result.data.finishReason,
+    sourceContextDigest: result.data.sourceContextDigest,
+    requestDigest: result.data.requestDigest,
     inputTokens: result.data.inputTokens,
     outputTokens: result.data.outputTokens,
     totalTokens: result.data.totalTokens,
@@ -318,6 +337,9 @@ async function smokeGitHub(environment: Environment): Promise<unknown> {
 
 async function smokeCodeRabbit(environment: Environment): Promise<unknown> {
   const config = readCodeRabbitConfig(environment, "live");
+  const base = await new GitHubAdapter(
+    readGitHubConfig(environment, "live"),
+  ).smokeReadiness();
   const pullNumberText = environment.SAFEFLASH_SMOKE_PR_NUMBER!.trim();
   const headSha = environment.SAFEFLASH_SMOKE_PR_HEAD_SHA!.trim();
   const pullNumber = Number(pullNumberText);
@@ -325,10 +347,17 @@ async function smokeCodeRabbit(environment: Environment): Promise<unknown> {
     sessionId: "external-smoke",
     pullNumber,
     headSha,
+    expectedBaseRef: base.data.configuredBaseBranch,
+    expectedBaseSha: base.data.baseHeadSha,
   });
   return {
     pullNumber: result.data.pullNumber,
     headSha: result.data.headSha,
+    expectedBaseRef: result.data.expectedBaseRef,
+    expectedBaseSha: result.data.expectedBaseSha,
+    observedBaseRef: result.data.observedBaseRef,
+    observedBaseSha: result.data.observedBaseSha,
+    requiresFullRevalidation: result.data.requiresFullRevalidation,
     status: result.data.status,
     passed: result.data.passed,
     reason: result.data.reason,
@@ -418,15 +447,52 @@ export async function runProvider(
   }
 }
 
+export async function runSelectedProviders(
+  requested: readonly ProviderName[],
+  environment: Environment = process.env,
+  runner: (
+    provider: ProviderName,
+    environment: Environment,
+  ) => Promise<SmokeResult> = runProvider,
+): Promise<readonly SmokeResult[]> {
+  const preflight = requested.map((provider) => ({
+    provider,
+    blockers: configurationBlockers(provider, environment),
+  }));
+  if (preflight.some((item) => item.blockers.length > 0)) {
+    return preflight.map(({ provider, blockers }) => {
+      const contract = PROVIDER_OPERATIONS[provider];
+      const effectiveBlockers =
+        blockers.length > 0
+          ? blockers
+          : [
+              "Aggregate preflight aborted because another requested provider is not configured",
+            ];
+      return {
+        provider,
+        status: "blocked",
+        operation: contract.operation,
+        externalEffects: contract.externalEffects,
+        blockers: effectiveBlockers,
+        reason: `Aggregate configuration preflight blocked before any provider client was constructed: ${effectiveBlockers.join("; ")}.`,
+        nextAction: contract.nextAction,
+      };
+    });
+  }
+
+  const results: SmokeResult[] = [];
+  for (const provider of requested) {
+    results.push(await runner(provider, environment));
+  }
+  return results;
+}
+
 export async function main(): Promise<void> {
   if (existsSync(".env.local")) {
     loadEnvFile(".env.local");
   }
   const requested = selectedProviders(process.argv.slice(2));
-  const services: SmokeResult[] = [];
-  for (const provider of requested) {
-    services.push(await runProvider(provider, process.env));
-  }
+  const services = await runSelectedProviders(requested, process.env);
   const result = services.some((service) => service.status === "failed")
     ? "failed"
     : services.some((service) => service.status === "blocked")

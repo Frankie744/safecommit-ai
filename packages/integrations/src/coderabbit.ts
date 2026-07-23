@@ -15,7 +15,9 @@ import {
 } from "./github";
 import {
   ProviderResponseError,
+  isOfficialLiveEnvelope,
   manualVerifiedEnvelope,
+  registerOfficialTransport,
   requireLiveConfiguration,
   transportEnvelope,
   type Environment,
@@ -77,6 +79,7 @@ export interface CodeRabbitPullRequestArtifact {
   number: number;
   headSha: string;
   baseRef: string;
+  baseSha: string;
   state: "open" | "closed";
   merged: boolean;
   url: string;
@@ -117,6 +120,12 @@ export interface CodeRabbitInspectionEvidence {
   pullNumber: number;
   headSha: string;
   observedPrHeadSha: string;
+  expectedBaseRef: string;
+  expectedBaseSha: string;
+  observedBaseRef: string;
+  observedBaseSha: string;
+  /** A moving base invalidates the validated candidate and requires a new full run. */
+  requiresFullRevalidation: boolean;
   status: "passed" | "blocked" | "pending" | "stale";
   passed: boolean;
   timedOut: boolean;
@@ -130,6 +139,8 @@ export interface CodeRabbitInspectionRequest {
   sessionId: string;
   pullNumber: number;
   headSha: string;
+  expectedBaseRef: string;
+  expectedBaseSha: string;
 }
 
 /**
@@ -148,11 +159,14 @@ export function createLiveIndependentReviewReceipt(
     (data.status === "blocked" && !data.passed);
   if (
     inspection.provider !== "coderabbit" ||
-    provenance.kind !== "live" ||
+    !isOfficialLiveEnvelope(inspection) ||
     !terminal ||
     !statusConsistent ||
     data.timedOut ||
     data.headSha.toLowerCase() !== data.observedPrHeadSha.toLowerCase() ||
+    data.expectedBaseRef !== data.observedBaseRef ||
+    data.expectedBaseSha.toLowerCase() !== data.observedBaseSha.toLowerCase() ||
+    data.requiresFullRevalidation ||
     data.exactHeadEvidenceIds.length === 0
   ) {
     throw new ProviderResponseError(
@@ -173,9 +187,13 @@ export function createLiveIndependentReviewReceipt(
     status: data.status === "passed" ? "passed" : "blocked",
     pullNumber: data.pullNumber,
     headSha: data.headSha,
+    expectedBaseRef: data.expectedBaseRef,
+    expectedBaseSha: data.expectedBaseSha,
+    observedBaseRef: data.observedBaseRef,
+    observedBaseSha: data.observedBaseSha,
     reviewUrl,
     evidenceIds: [...data.exactHeadEvidenceIds],
-    capturedAt: provenance.capturedAt,
+    capturedAt: inspection.provenance.capturedAt,
   };
 }
 
@@ -236,7 +254,7 @@ export function createCodeRabbitClient(
         request: { headers: { "X-GitHub-Api-Version": config.apiVersion } },
       }),
   );
-  return {
+  return registerOfficialTransport({
     transport: "official-sdk",
     async getPullRequest(owner, repository, pullNumber) {
       const octokit = await octokitPromise;
@@ -249,6 +267,7 @@ export function createCodeRabbitClient(
         number: response.data.number,
         headSha: response.data.head.sha,
         baseRef: response.data.base.ref,
+        baseSha: response.data.base.sha,
         state: response.data.state,
         merged: response.data.merged,
         url: response.data.html_url,
@@ -314,7 +333,7 @@ export function createCodeRabbitClient(
         completedAt: check.completed_at ?? undefined,
       }));
     },
-  };
+  } satisfies CodeRabbitClientPort);
 }
 
 export function mapCodeRabbitSeverity(raw: string): {
@@ -425,7 +444,10 @@ function normalizedFinding(input: {
   };
 }
 
-function validateInspectionRequest(request: CodeRabbitInspectionRequest): void {
+function validatePullRequestHead(request: {
+  pullNumber: number;
+  headSha: string;
+}): void {
   if (!Number.isSafeInteger(request.pullNumber) || request.pullNumber <= 0) {
     throw new ProviderResponseError(
       "coderabbit",
@@ -437,6 +459,20 @@ function validateInspectionRequest(request: CodeRabbitInspectionRequest): void {
     throw new ProviderResponseError(
       "coderabbit",
       "CodeRabbit inspection requires the exact full PR head SHA",
+      false,
+    );
+  }
+}
+
+function validateInspectionRequest(request: CodeRabbitInspectionRequest): void {
+  validatePullRequestHead(request);
+  if (
+    !isSafeGitRef(request.expectedBaseRef) ||
+    !/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/iu.test(request.expectedBaseSha)
+  ) {
+    throw new ProviderResponseError(
+      "coderabbit",
+      "CodeRabbit inspection requires the exact expected base ref and full base SHA",
       false,
     );
   }
@@ -458,6 +494,13 @@ export class CodeRabbitAdapter {
     request: CodeRabbitInspectionRequest,
   ): Promise<ProviderEnvelope<CodeRabbitInspectionEvidence>> {
     validateInspectionRequest(request);
+    if (request.expectedBaseRef !== this.config.baseBranch) {
+      throw new ProviderResponseError(
+        "coderabbit",
+        "CodeRabbit inspection base ref must match the configured GitHub base branch",
+        false,
+      );
+    }
     try {
       const pullRequest = await this.client.getPullRequest(
         this.config.owner,
@@ -468,10 +511,15 @@ export class CodeRabbitAdapter {
         pullRequest.number !== request.pullNumber ||
         pullRequest.headSha.toLowerCase() !== request.headSha.toLowerCase()
       ) {
-        return transportEnvelope("coderabbit", this.client.transport, {
+        return transportEnvelope("coderabbit", this.client, {
           pullNumber: request.pullNumber,
           headSha: request.headSha,
           observedPrHeadSha: pullRequest.headSha,
+          expectedBaseRef: request.expectedBaseRef,
+          expectedBaseSha: request.expectedBaseSha,
+          observedBaseRef: pullRequest.baseRef,
+          observedBaseSha: pullRequest.baseSha,
+          requiresFullRevalidation: false,
           status: "stale",
           passed: false,
           timedOut: false,
@@ -483,14 +531,42 @@ export class CodeRabbitAdapter {
         });
       }
       if (
+        pullRequest.baseRef !== request.expectedBaseRef ||
+        pullRequest.baseSha.toLowerCase() !== request.expectedBaseSha.toLowerCase()
+      ) {
+        return transportEnvelope("coderabbit", this.client, {
+          pullNumber: request.pullNumber,
+          headSha: request.headSha,
+          observedPrHeadSha: pullRequest.headSha,
+          expectedBaseRef: request.expectedBaseRef,
+          expectedBaseSha: request.expectedBaseSha,
+          observedBaseRef: pullRequest.baseRef,
+          observedBaseSha: pullRequest.baseSha,
+          requiresFullRevalidation: true,
+          status: "blocked",
+          passed: false,
+          timedOut: false,
+          findings: [],
+          exactHeadEvidenceIds: [`pull-request-base:${pullRequest.baseSha}`],
+          staleEvidenceIds: [],
+          reason:
+            "Pull request base ref or SHA drifted after validation; start a new full validation against the new base.",
+        });
+      }
+      if (
         pullRequest.state !== "open" ||
         pullRequest.merged ||
         pullRequest.baseRef !== this.config.baseBranch
       ) {
-        return transportEnvelope("coderabbit", this.client.transport, {
+        return transportEnvelope("coderabbit", this.client, {
           pullNumber: request.pullNumber,
           headSha: request.headSha,
           observedPrHeadSha: pullRequest.headSha,
+          expectedBaseRef: request.expectedBaseRef,
+          expectedBaseSha: request.expectedBaseSha,
+          observedBaseRef: pullRequest.baseRef,
+          observedBaseSha: pullRequest.baseSha,
+          requiresFullRevalidation: false,
           status: "blocked",
           passed: false,
           timedOut: false,
@@ -585,7 +661,14 @@ export class CodeRabbitAdapter {
         }
       }
       for (const comment of exactComments) {
-        const mapped = extractCodeRabbitSeverity(comment.body);
+        const extracted = extractCodeRabbitSeverity(comment.body);
+        // An inline comment points at executable source. If the official bot
+        // omitted a recognized label, fail closed instead of silently
+        // downgrading a potentially safety-critical finding to informational.
+        const mapped =
+          extracted.rawSeverity === "unknown"
+            ? ({ rawSeverity: "unknown", severity: "high" } as const)
+            : extracted;
         normalized.push(
           normalizedFinding({
             sessionId: request.sessionId,
@@ -666,16 +749,45 @@ export class CodeRabbitAdapter {
         request.pullNumber,
       );
       if (
+        finalPullRequest.baseRef !== request.expectedBaseRef ||
+        finalPullRequest.baseSha.toLowerCase() !==
+          request.expectedBaseSha.toLowerCase()
+      ) {
+        return transportEnvelope("coderabbit", this.client, {
+          pullNumber: request.pullNumber,
+          headSha: request.headSha,
+          observedPrHeadSha: finalPullRequest.headSha,
+          expectedBaseRef: request.expectedBaseRef,
+          expectedBaseSha: request.expectedBaseSha,
+          observedBaseRef: finalPullRequest.baseRef,
+          observedBaseSha: finalPullRequest.baseSha,
+          requiresFullRevalidation: true,
+          status: "blocked",
+          passed: false,
+          timedOut: false,
+          findings: normalized,
+          exactHeadEvidenceIds: [`pull-request-base:${finalPullRequest.baseSha}`],
+          staleEvidenceIds,
+          reason:
+            "Pull request base ref or SHA moved while CodeRabbit evidence was evaluated; start a new full validation.",
+        });
+      }
+      if (
         finalPullRequest.number !== pullRequest.number ||
         finalPullRequest.headSha.toLowerCase() !== pullRequest.headSha.toLowerCase() ||
         finalPullRequest.state !== "open" ||
         finalPullRequest.merged ||
         finalPullRequest.baseRef !== this.config.baseBranch
       ) {
-        return transportEnvelope("coderabbit", this.client.transport, {
+        return transportEnvelope("coderabbit", this.client, {
           pullNumber: request.pullNumber,
           headSha: request.headSha,
           observedPrHeadSha: finalPullRequest.headSha,
+          expectedBaseRef: request.expectedBaseRef,
+          expectedBaseSha: request.expectedBaseSha,
+          observedBaseRef: finalPullRequest.baseRef,
+          observedBaseSha: finalPullRequest.baseSha,
+          requiresFullRevalidation: false,
           status: "stale",
           passed: false,
           timedOut: false,
@@ -690,10 +802,15 @@ export class CodeRabbitAdapter {
         });
       }
 
-      return transportEnvelope("coderabbit", this.client.transport, {
+      return transportEnvelope("coderabbit", this.client, {
         pullNumber: request.pullNumber,
         headSha: request.headSha,
         observedPrHeadSha: finalPullRequest.headSha,
+        expectedBaseRef: request.expectedBaseRef,
+        expectedBaseSha: request.expectedBaseSha,
+        observedBaseRef: finalPullRequest.baseRef,
+        observedBaseSha: finalPullRequest.baseSha,
+        requiresFullRevalidation: false,
         status,
         passed: status === "passed",
         timedOut: false,
@@ -732,7 +849,7 @@ export class CodeRabbitAdapter {
       latest.data.status !== "passed" &&
       latest.data.status !== "blocked"
     ) {
-      return transportEnvelope("coderabbit", this.client.transport, {
+      return transportEnvelope("coderabbit", this.client, {
         ...latest.data,
         timedOut: true,
         passed: false,
@@ -775,6 +892,10 @@ export function createManualVerifiedIndependentReviewReceipt(input: {
   repository: Pick<CodeRabbitConfig, "owner" | "repository">;
   pullNumber: number;
   headSha: string;
+  expectedBaseRef: string;
+  expectedBaseSha: string;
+  observedBaseRef: string;
+  observedBaseSha: string;
   reviewUrl: string;
   status: IndependentReviewReceipt["status"];
   evidenceIds: readonly string[];
@@ -785,10 +906,14 @@ export function createManualVerifiedIndependentReviewReceipt(input: {
     sessionId: "manual-attestation",
     pullNumber: input.pullNumber,
     headSha: input.headSha,
+    expectedBaseRef: input.expectedBaseRef,
+    expectedBaseSha: input.expectedBaseSha,
   });
   assertManualReviewUrl(input);
   if (
     (input.status !== "passed" && input.status !== "blocked") ||
+    !isSafeGitRef(input.observedBaseRef) ||
+    !/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/iu.test(input.observedBaseSha) ||
     input.evidenceIds.length === 0 ||
     input.evidenceIds.some((id) => id.trim() === "") ||
     new Set(input.evidenceIds).size !== input.evidenceIds.length ||
@@ -808,6 +933,10 @@ export function createManualVerifiedIndependentReviewReceipt(input: {
       status: input.status,
       pullNumber: input.pullNumber,
       headSha: input.headSha,
+      expectedBaseRef: input.expectedBaseRef,
+      expectedBaseSha: input.expectedBaseSha,
+      observedBaseRef: input.observedBaseRef,
+      observedBaseSha: input.observedBaseSha,
       reviewUrl: input.reviewUrl,
       evidenceIds: [...input.evidenceIds],
       capturedAt: input.attestedAt,
@@ -836,8 +965,7 @@ export function createManualVerifiedCodeRabbitFinding(input: {
   filePath?: string;
   line?: number;
 }): ProviderEnvelope<NormalizedCodeRabbitFinding> {
-  validateInspectionRequest({
-    sessionId: input.sessionId,
+  validatePullRequestHead({
     pullNumber: input.pullNumber,
     headSha: input.headSha,
   });

@@ -4,7 +4,9 @@ import type { CandidatePatch } from "@safeflash/domain";
 import {
   DEFAULT_DAYTONA_COMMAND_POLICY,
   DaytonaAdapter,
+  DaytonaAttemptError,
   ProviderResponseError,
+  createDaytonaClient,
   readDaytonaConfig,
   type DaytonaClientPort,
   type DaytonaConfig,
@@ -12,6 +14,13 @@ import {
 } from "@safeflash/integrations";
 
 const COMMIT = "a".repeat(40);
+const VALIDATED_TREE = "b".repeat(40);
+const POLICY = {
+  policyVersion: "policy-v1",
+  allowedPatchPaths: ["fixtures/battery-controller/src/**"],
+  maxChangedFiles: 1,
+  maxChangedLines: 120,
+} as const;
 
 const CONFIG: DaytonaConfig = {
   mode: "live",
@@ -45,6 +54,9 @@ class FakeDaytona implements DaytonaClientPort {
   readonly cloneArgs: unknown[][] = [];
   readonly createParams: unknown[] = [];
   failCommand?: string;
+  failClone = false;
+  failDelete = false;
+  wrongCommit = false;
   smokeMode = false;
 
   readonly sandbox: DaytonaSandboxPort = {
@@ -53,6 +65,7 @@ class FakeDaytona implements DaytonaClientPort {
       clone: async (...args) => {
         this.events.push("clone");
         this.cloneArgs.push(args);
+        if (this.failClone) throw new Error("secret clone transport detail");
       },
     },
     fs: {
@@ -70,7 +83,13 @@ class FakeDaytona implements DaytonaClientPort {
           return { exitCode: 0, result: "SAFEFLASH_DAYTONA_SMOKE" };
         }
         if (command === "git rev-parse HEAD") {
-          return { exitCode: 0, result: COMMIT };
+          return {
+            exitCode: 0,
+            result: this.wrongCommit ? "c".repeat(40) : COMMIT,
+          };
+        }
+        if (command === "git write-tree") {
+          return { exitCode: 0, result: VALIDATED_TREE };
         }
         return {
           exitCode: this.failCommand === command ? 1 : 0,
@@ -91,6 +110,7 @@ class FakeDaytona implements DaytonaClientPort {
 
   async delete(): Promise<void> {
     this.events.push("delete");
+    if (this.failDelete) throw new Error("secret cleanup transport detail");
   }
 }
 
@@ -117,6 +137,12 @@ describe("Daytona isolation contract", () => {
         DAYTONA_API_URL: "https://app.daytona.io/api",
       }).apiUrl,
     ).toBe("https://app.daytona.io/api");
+    expect(() =>
+      createDaytonaClient({
+        ...CONFIG,
+        apiUrl: "https://credential-collector.example/api",
+      }),
+    ).toThrow(ProviderResponseError);
   });
 
   it("clones an exact commit, blocks network, runs only trusted commands, and destroys", async () => {
@@ -136,10 +162,13 @@ describe("Daytona isolation contract", () => {
         repoUrl: "https://github.com/example/safeflash.git",
         commitSha: COMMIT,
       },
+      policy: POLICY,
     });
 
     expect(result.data.passed).toBe(true);
     expect(result.data.destroyed).toBe(true);
+    expect(result.data.patchDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(result.data.validatedTreeSha).toBe(VALIDATED_TREE);
     expect(result.data.commands).toHaveLength(
       DEFAULT_DAYTONA_COMMAND_POLICY.length,
     );
@@ -191,6 +220,58 @@ describe("Daytona isolation contract", () => {
       .toBe(true);
   });
 
+  it("rejects a command policy whose safety command was replaced", () => {
+    const safetyIndex = DEFAULT_DAYTONA_COMMAND_POLICY.findIndex(
+      (definition) => definition.id === "safety-tests",
+    );
+    const runtimeMutable = DEFAULT_DAYTONA_COMMAND_POLICY as unknown as {
+      command: string;
+    }[];
+    expect(() => {
+      runtimeMutable[safetyIndex]!.command = "true";
+    }).toThrow(TypeError);
+    expect(DEFAULT_DAYTONA_COMMAND_POLICY[safetyIndex]?.command).not.toBe("true");
+
+    const modified = DEFAULT_DAYTONA_COMMAND_POLICY.map((definition) =>
+      definition.id === "safety-tests"
+        ? { ...definition, command: "true" }
+        : definition,
+    );
+    expect(() => new DaytonaAdapter(CONFIG, new FakeDaytona(), modified)).toThrow(
+      /command policy was modified/u,
+    );
+  });
+
+  it("does not retain a caller-owned policy that changes after construction", async () => {
+    const mutablePolicy = DEFAULT_DAYTONA_COMMAND_POLICY.map((definition) => ({
+      ...definition,
+    }));
+    const fake = new FakeDaytona();
+    const adapter = new DaytonaAdapter(CONFIG, fake, mutablePolicy);
+    const safety = mutablePolicy.find(
+      (definition) => definition.id === "safety-tests",
+    )!;
+    safety.command = "true";
+
+    const result = await adapter.validateCandidate({
+      runId: "run-policy-alias",
+      sessionId: "session-daytona",
+      candidate: CANDIDATE,
+      repository: {
+        repoUrl: "https://github.com/example/safeflash.git",
+        commitSha: COMMIT,
+      },
+      policy: POLICY,
+    });
+    expect(result.data.passed).toBe(true);
+    expect(fake.commands.some((command) => command.command === "true")).toBe(
+      false,
+    );
+    expect(fake.commands.map((command) => command.command)).toEqual(
+      DEFAULT_DAYTONA_COMMAND_POLICY.map((definition) => definition.command),
+    );
+  });
+
   it("stops after a trusted command failure but still destroys the sandbox", async () => {
     const fake = new FakeDaytona();
     fake.failCommand = "cmake --build build --parallel 2";
@@ -202,11 +283,88 @@ describe("Daytona isolation contract", () => {
         repoUrl: "https://github.com/example/safeflash.git",
         commitSha: COMMIT,
       },
+      policy: POLICY,
     });
     expect(result.data.passed).toBe(false);
     expect(result.data.commands.at(-1)?.exitCode).toBe(1);
     expect(fake.events.at(-1)).toBe("delete");
-    expect(fake.commands).toHaveLength(5);
+    expect(fake.commands).toHaveLength(6);
+  });
+
+  it("returns sanitized structured attempt evidence after post-create and cleanup failures", async () => {
+    const failedClone = new FakeDaytona();
+    failedClone.failClone = true;
+    let cloneError: unknown;
+    try {
+      await new DaytonaAdapter(CONFIG, failedClone, undefined, () => new Date(1234))
+        .validateCandidate({
+          runId: "run-post-create-failure",
+          sessionId: "session-daytona",
+          candidate: CANDIDATE,
+          repository: {
+            repoUrl: "https://github.com/example/safeflash.git",
+            commitSha: COMMIT,
+          },
+          policy: POLICY,
+        });
+    } catch (error) {
+      cloneError = error;
+    }
+    expect(cloneError).toBeInstanceOf(DaytonaAttemptError);
+    expect((cloneError as DaytonaAttemptError).retryable).toBe(true);
+    expect((cloneError as DaytonaAttemptError).attempt).toEqual({
+      sandboxId: "sandbox-contract-id",
+      runId: "run-post-create-failure",
+      candidateId: CANDIDATE.candidateId,
+      capturedAt: new Date(1234).toISOString(),
+      disposition: "failed-destroyed",
+    });
+    expect((cloneError as Error).message).not.toMatch(/secret|clone transport/iu);
+    expect(failedClone.events.at(-1)).toBe("delete");
+
+    const failedCleanup = new FakeDaytona();
+    failedCleanup.failClone = true;
+    failedCleanup.failDelete = true;
+    await expect(
+      new DaytonaAdapter(CONFIG, failedCleanup).validateCandidate({
+        runId: "run-cleanup-failure",
+        sessionId: "session-daytona",
+        candidate: CANDIDATE,
+        repository: {
+          repoUrl: "https://github.com/example/safeflash.git",
+          commitSha: COMMIT,
+        },
+        policy: POLICY,
+      }),
+    ).rejects.toMatchObject({
+      name: "DaytonaAttemptError",
+      retryable: true,
+      attempt: {
+        sandboxId: "sandbox-contract-id",
+        runId: "run-cleanup-failure",
+        candidateId: CANDIDATE.candidateId,
+        disposition: "cleanup-failed",
+      },
+    });
+
+    const nonRetryable = new FakeDaytona();
+    nonRetryable.wrongCommit = true;
+    await expect(
+      new DaytonaAdapter(CONFIG, nonRetryable).validateCandidate({
+        runId: "run-nonretryable-failure",
+        sessionId: "session-daytona",
+        candidate: CANDIDATE,
+        repository: {
+          repoUrl: "https://github.com/example/safeflash.git",
+          commitSha: COMMIT,
+        },
+        policy: POLICY,
+      }),
+    ).rejects.toMatchObject({
+      name: "DaytonaAttemptError",
+      retryable: false,
+      attempt: { disposition: "failed-destroyed" },
+    });
   });
 
   it("rejects mutable refs or credential-bearing repository URLs before creation", async () => {
@@ -221,6 +379,7 @@ describe("Daytona isolation contract", () => {
           repoUrl: "https://token@github.com/example/safeflash.git",
           commitSha: "main",
         },
+        policy: POLICY,
       }),
     ).rejects.toBeInstanceOf(ProviderResponseError);
     expect(fake.events).toEqual([]);
@@ -251,6 +410,7 @@ describe("Daytona isolation contract", () => {
             repoUrl: "https://github.com/example/safeflash.git",
             commitSha: COMMIT,
           },
+          policy: POLICY,
         }),
       ).rejects.toBeInstanceOf(ProviderResponseError);
       expect(fake.events).toEqual([]);

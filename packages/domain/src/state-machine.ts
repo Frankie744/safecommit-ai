@@ -4,7 +4,13 @@ import {
   type ApprovalBinding,
 } from "./approval";
 import { evaluateCodeRabbitGate } from "./review-gate";
+import {
+  computeFullRevalidationAttestationDigest,
+  isFullRevalidationReceiptStructurallyValid,
+} from "./revalidation";
 import type {
+  DaytonaAttemptInput,
+  DaytonaAttemptRecord,
   FullRevalidationReceipt,
   HumanApproval,
   IndependentReviewReceipt,
@@ -20,9 +26,20 @@ export interface CreateValidationSessionInput {
   incidentId: string;
   policyId: string;
   policyVersion: string;
+  policySnapshot?: {
+    allowedPatchPaths: readonly string[];
+    maxChangedFiles: number;
+    maxChangedLines: number;
+  };
   repository: {
     repoUrl: string;
     commitSha: string;
+  };
+  pullRequestTarget?: {
+    provider: "github";
+    owner: string;
+    repository: string;
+    baseBranch: string;
   };
   mode: OperatingMode;
   runKind?: "single" | "tournament";
@@ -35,6 +52,11 @@ export type WorkflowEvent =
   | { type: "REPOSITORY_INGESTED"; at: string }
   | { type: "INCIDENT_ANALYZED"; at: string }
   | { type: "CANDIDATES_GENERATED"; at: string; candidateIds: readonly string[] }
+  | {
+      type: "DAYTONA_ATTEMPT_RECORDED";
+      at: string;
+      attempt: DaytonaAttemptInput;
+    }
   | {
       type: "SANDBOXES_PROVISIONED";
       at: string;
@@ -50,6 +72,8 @@ export type WorkflowEvent =
       patchDigest: string;
       evidenceDigest: string;
       commitSha: string;
+      /** Required for live mode; omitted only by local/mock workflows. */
+      receipt?: FullRevalidationReceipt;
     }
   | { type: "APPROVAL_RECORDED"; at: string; approval: HumanApproval }
   | { type: "PR_CREATION_REQUESTED"; at: string }
@@ -134,11 +158,25 @@ export function createValidationSession(
     incidentId: input.incidentId,
     policyId: input.policyId,
     policyVersion: input.policyVersion,
+    policySnapshot:
+      input.policySnapshot === undefined
+        ? undefined
+        : {
+            allowedPatchPaths: [...input.policySnapshot.allowedPatchPaths],
+            maxChangedFiles: input.policySnapshot.maxChangedFiles,
+            maxChangedLines: input.policySnapshot.maxChangedLines,
+          },
     repository: { ...input.repository },
+    pullRequestTarget:
+      input.pullRequestTarget === undefined
+        ? undefined
+        : { ...input.pullRequestTarget },
     currentCommitSha: input.repository.commitSha,
     candidateIds: [],
     sandboxIdsByCandidate: {},
+    sandboxAttemptHistory: [],
     reviewFindings: [],
+    revalidationSandboxIds: [],
     validationRound: 0,
   };
 }
@@ -159,6 +197,7 @@ function currentBinding(session: ValidationSession): ApprovalBinding | undefined
     evidenceDigest: session.currentEvidenceDigest,
     policyVersion: session.policyVersion,
     commitSha: session.currentCommitSha,
+    pullRequestTarget: session.pullRequestTarget,
   };
 }
 
@@ -169,6 +208,12 @@ export function canCreateOrUpdatePullRequest(session: ValidationSession): {
   const binding = currentBinding(session);
   if (session.state !== "AWAITING_HUMAN_APPROVAL") {
     return { allowed: false, reason: "Workflow is not awaiting human approval." };
+  }
+  if (session.pullRequestTarget === undefined) {
+    return {
+      allowed: false,
+      reason: "A session-bound GitHub pull request target is required.",
+    };
   }
   if (binding === undefined || !isApprovalValid(session.approval, binding)) {
     return {
@@ -194,7 +239,13 @@ export function canEnterReadyToMerge(session: ValidationSession): {
     session.reviewReceipt.status !== "passed" ||
     session.reviewReceipt.pullNumber !== session.pullRequest.number ||
     session.reviewReceipt.headSha.toLowerCase() !==
-      session.pullRequest.headSha.toLowerCase()
+      session.pullRequest.headSha.toLowerCase() ||
+    session.reviewReceipt.expectedBaseRef !== session.pullRequest.baseBranch ||
+    session.reviewReceipt.observedBaseRef !== session.pullRequest.baseBranch ||
+    session.reviewReceipt.expectedBaseSha.toLowerCase() !==
+      session.pullRequest.baseSha.toLowerCase() ||
+    session.reviewReceipt.observedBaseSha.toLowerCase() !==
+      session.pullRequest.baseSha.toLowerCase()
   ) {
     return {
       allowed: false,
@@ -210,7 +261,10 @@ export function canEnterReadyToMerge(session: ValidationSession): {
   }
   if (
     session.pullRequest.status !== "open" ||
-    session.pullRequest.headSha.toLowerCase() !== binding.commitSha.toLowerCase()
+    session.pullRequest.headSha.toLowerCase() !== binding.commitSha.toLowerCase() ||
+    (session.currentValidatedTreeSha !== undefined &&
+      session.pullRequest.headTreeSha.toLowerCase() !==
+        session.currentValidatedTreeSha.toLowerCase())
   ) {
     return {
       allowed: false,
@@ -224,6 +278,43 @@ function isFullGitObjectId(value: string): boolean {
   return /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/iu.test(value);
 }
 
+function isSha256Digest(value: string): boolean {
+  return /^[0-9a-f]{64}$/iu.test(value);
+}
+
+function receiptHasUniqueReservedAttempt(
+  session: ValidationSession,
+  receipt: FullRevalidationReceipt,
+): boolean {
+  const history = session.sandboxAttemptHistory ?? [];
+  const sandboxIds = history.map((attempt) => attempt.sandboxId);
+  const runIds = history.map((attempt) => attempt.runId);
+  const historyIsClean =
+    history.length > 0 &&
+    history.every(
+      (attempt) =>
+        attempt.reservationStatus === "reserved" &&
+        !attempt.duplicateSandbox &&
+        !attempt.duplicateRun,
+    ) &&
+    new Set(sandboxIds).size === sandboxIds.length &&
+    new Set(runIds).size === runIds.length;
+  const purposeMatches = (purpose: DaytonaAttemptRecord["purpose"]) =>
+    receipt.validationPurpose === "review-repair"
+      ? purpose === "review-repair"
+      : purpose === "initial-candidate" || purpose === "profile-replacement";
+  const matching = history.filter(
+    (attempt) =>
+      attempt.reservationStatus === "reserved" &&
+      attempt.disposition === "completed" &&
+      purposeMatches(attempt.purpose) &&
+      attempt.candidateId === receipt.candidateId &&
+      attempt.sandboxId === receipt.sandboxId &&
+      attempt.runId === receipt.daytonaRunId,
+  );
+  return historyIsClean && matching.length === 1;
+}
+
 function isCanonicalGitHubPullRequest(
   pullRequest: PullRequestRecord,
 ): boolean {
@@ -233,9 +324,25 @@ function isCanonicalGitHubPullRequest(
       pullRequest.owner,
     )}/${encodeURIComponent(pullRequest.repository)}/pull/${pullRequest.number}`;
     return (
-      pullRequest.owner.trim() !== "" &&
-      pullRequest.repository.trim() !== "" &&
-      pullRequest.baseBranch.trim() !== "" &&
+      /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/u.test(pullRequest.owner) &&
+      !pullRequest.owner.endsWith("-") &&
+      !pullRequest.owner.includes("--") &&
+      /^[A-Za-z0-9_.-]{1,100}$/u.test(pullRequest.repository) &&
+      ![".", ".."].includes(pullRequest.repository) &&
+      /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/u.test(
+        pullRequest.baseBranch,
+      ) &&
+      !pullRequest.baseBranch.includes("..") &&
+      !pullRequest.baseBranch.includes("//") &&
+      !pullRequest.baseBranch.includes("@{") &&
+      !pullRequest.baseBranch.endsWith("/") &&
+      !pullRequest.baseBranch.endsWith(".") &&
+      !pullRequest.baseBranch.endsWith(".lock") &&
+      isFullGitObjectId(pullRequest.headSha) &&
+      isFullGitObjectId(pullRequest.headTreeSha) &&
+      isFullGitObjectId(pullRequest.baseSha) &&
+      Number.isSafeInteger(pullRequest.number) &&
+      pullRequest.number > 0 &&
       url.protocol === "https:" &&
       url.hostname.toLowerCase() === "github.com" &&
       url.port === "" &&
@@ -322,6 +429,12 @@ function requireIndependentReviewReceipt(
     receipt.pullNumber !== pullRequest.number ||
     receipt.headSha.toLowerCase() !== pullRequest.headSha.toLowerCase() ||
     !isFullGitObjectId(receipt.headSha) ||
+    receipt.expectedBaseRef !== pullRequest.baseBranch ||
+    receipt.observedBaseRef !== pullRequest.baseBranch ||
+    receipt.expectedBaseSha.toLowerCase() !== pullRequest.baseSha.toLowerCase() ||
+    receipt.observedBaseSha.toLowerCase() !== pullRequest.baseSha.toLowerCase() ||
+    !isFullGitObjectId(receipt.expectedBaseSha) ||
+    !isFullGitObjectId(receipt.observedBaseSha) ||
     !isReviewUrlForPullRequest(receipt.reviewUrl, pullRequest.url) ||
     Number.isNaN(Date.parse(receipt.capturedAt)) ||
     receipt.evidenceIds.length === 0 ||
@@ -343,6 +456,7 @@ function requireFullRevalidationReceipt(
   session: ValidationSession,
   receipt: FullRevalidationReceipt,
 ): void {
+  const { attestationDigest, ...attestedEvidence } = receipt;
   const everyGatePassed =
     receipt.buildPassed &&
     receipt.unitTestsPassed &&
@@ -350,25 +464,71 @@ function requireFullRevalidationReceipt(
     receipt.integrityChecksPassed &&
     receipt.braintrustScored &&
     receipt.candidateEligible;
-  const referencesPresent =
-    receipt.sandboxId.trim() !== "" &&
-    receipt.daytonaEvidenceRef.trim() !== "" &&
-    receipt.braintrustExperimentRef.trim() !== "" &&
-    receipt.evidenceDigest.trim() !== "";
-  const freshSandbox = !Object.values(session.sandboxIdsByCandidate).includes(
-    receipt.sandboxId,
-  ) && receipt.sandboxId !== session.lastRevalidation?.sandboxId;
+  let referencesValid = false;
+  try {
+    const daytona = new URL(receipt.daytonaEvidenceRef);
+    const braintrust = new URL(receipt.braintrustExperimentRef);
+    referencesValid =
+      receipt.sandboxId.trim() !== "" &&
+      receipt.daytonaRunId.trim() !== "" &&
+      receipt.braintrustProjectId.trim() !== "" &&
+      receipt.braintrustExperimentId.trim() !== "" &&
+      receipt.braintrustExperimentName.trim() !== "" &&
+      daytona.protocol === "daytona:" &&
+      daytona.hostname === "sandbox" &&
+      daytona.pathname ===
+        `/${encodeURIComponent(receipt.sandboxId)}/runs/${encodeURIComponent(
+          receipt.daytonaRunId,
+        )}` &&
+      daytona.username === "" &&
+      daytona.password === "" &&
+      braintrust.protocol === "https:" &&
+      ["braintrust.dev", "www.braintrust.dev"].includes(
+        braintrust.hostname.toLowerCase(),
+      ) &&
+      braintrust.port === "" &&
+      braintrust.username === "" &&
+      braintrust.password === "" &&
+      braintrust.pathname.includes(
+        encodeURIComponent(receipt.braintrustExperimentName),
+      );
+  } catch {
+    referencesValid = false;
+  }
+  const usedSandboxes = new Set([
+    ...Object.values(session.sandboxIdsByCandidate),
+    ...(session.revalidationSandboxIds ?? []),
+  ]);
+  const freshSandbox = !usedSandboxes.has(receipt.sandboxId);
   const repairedHeadChanged =
     session.pullRequest === undefined ||
     receipt.commitSha.toLowerCase() !== session.pullRequest.headSha.toLowerCase();
   if (
+    session.mode !== "live" ||
+    receipt.validationPurpose !== "review-repair" ||
     receipt.candidateId !== session.selectedCandidateId ||
+    receipt.mode !== "live" ||
+    receipt.sessionId !== session.sessionId ||
+    receipt.policyVersion !== session.policyVersion ||
+    receipt.pullRequestTarget.owner !== session.pullRequestTarget?.owner ||
+    receipt.pullRequestTarget.repository !==
+      session.pullRequestTarget?.repository ||
+    receipt.pullRequestTarget.baseBranch !==
+      session.pullRequestTarget?.baseBranch ||
     receipt.patchDigest !== session.currentPatchDigest ||
     receipt.evidenceDigest === session.currentEvidenceDigest ||
+    !isFullRevalidationReceiptStructurallyValid(receipt) ||
+    receipt.sourceKind !== "live-provider-evidence" ||
     !isFullGitObjectId(receipt.commitSha) ||
+    !isFullGitObjectId(receipt.validatedTreeSha) ||
+    !/^[0-9a-f]{64}$/iu.test(receipt.evidenceDigest) ||
+    !/^[0-9a-f]{64}$/iu.test(receipt.attestationDigest) ||
+    computeFullRevalidationAttestationDigest(attestedEvidence) !==
+      receipt.attestationDigest ||
     receipt.executionProvider !== "daytona" ||
     receipt.evaluationProvider !== "braintrust" ||
-    !referencesPresent ||
+    !receiptHasUniqueReservedAttempt(session, receipt) ||
+    !referencesValid ||
     !freshSandbox ||
     !repairedHeadChanged ||
     !everyGatePassed
@@ -379,6 +539,58 @@ function requireFullRevalidationReceipt(
       "Review repair must pass build, unit, safety, integrity, and Braintrust eligibility in a fresh Daytona sandbox.",
     );
   }
+}
+
+function requireInitialValidationReceipt(
+  session: ValidationSession,
+  event: Extract<WorkflowEvent, { type: "CANDIDATE_SELECTED" }>,
+): FullRevalidationReceipt {
+  const receipt = event.receipt;
+  if (receipt === undefined) {
+    throw new InvalidWorkflowTransitionError(
+      session.state,
+      event.type,
+      "Live candidate selection requires server-normalized Daytona and Braintrust evidence.",
+    );
+  }
+  const { attestationDigest, ...attestedEvidence } = receipt;
+  const mappedSandbox = session.sandboxIdsByCandidate[event.candidateId];
+  const everyGatePassed =
+    receipt.buildPassed &&
+    receipt.unitTestsPassed &&
+    receipt.safetyTestsPassed &&
+    receipt.integrityChecksPassed &&
+    receipt.braintrustScored &&
+    receipt.candidateEligible;
+  if (
+    receipt.validationPurpose !== "initial-selection" ||
+    receipt.mode !== "live" ||
+    receipt.sessionId !== session.sessionId ||
+    receipt.policyVersion !== session.policyVersion ||
+    receipt.candidateId !== event.candidateId ||
+    receipt.patchDigest !== event.patchDigest ||
+    receipt.evidenceDigest !== event.evidenceDigest ||
+    receipt.commitSha.toLowerCase() !== event.commitSha.toLowerCase() ||
+    receipt.commitSha.toLowerCase() === session.repository.commitSha.toLowerCase() ||
+    receipt.pullRequestTarget.owner !== session.pullRequestTarget?.owner ||
+    receipt.pullRequestTarget.repository !== session.pullRequestTarget?.repository ||
+    receipt.pullRequestTarget.baseBranch !== session.pullRequestTarget?.baseBranch ||
+    mappedSandbox === undefined ||
+    receipt.sandboxId !== mappedSandbox ||
+    !receiptHasUniqueReservedAttempt(session, receipt) ||
+    session.revalidationSandboxIds.includes(receipt.sandboxId) ||
+    !isFullRevalidationReceiptStructurallyValid(receipt) ||
+    computeFullRevalidationAttestationDigest(attestedEvidence) !==
+      attestationDigest ||
+    !everyGatePassed
+  ) {
+    throw new InvalidWorkflowTransitionError(
+      session.state,
+      event.type,
+      "Live candidate selection must use the exact eligible receipt from its mapped Daytona sandbox and Braintrust Experiment.",
+    );
+  }
+  return receipt;
 }
 
 function requireExpectedEvent(session: ValidationSession, event: WorkflowEvent): void {
@@ -401,7 +613,10 @@ export function transitionValidationSession(
   session: ValidationSession,
   event: WorkflowEvent,
 ): ValidationSession {
-  if (TERMINAL_STATES.has(session.state)) {
+  if (
+    TERMINAL_STATES.has(session.state) &&
+    !(session.state === "FAILED" && event.type === "DAYTONA_ATTEMPT_RECORDED")
+  ) {
     throw new InvalidWorkflowTransitionError(session.state, event.type);
   }
 
@@ -418,6 +633,77 @@ export function transitionValidationSession(
 
   if (event.type === "CANCEL") {
     return withState(session, "CANCELLED_BY_HUMAN", event.at);
+  }
+
+  if (event.type === "DAYTONA_ATTEMPT_RECORDED") {
+    const history = session.sandboxAttemptHistory ?? [];
+    const attempt = event.attempt;
+    const attemptState =
+      session.state === "FAILED" ? session.failure?.failedFrom : session.state;
+    const stageAllowsPurpose =
+      (attempt.purpose === "initial-candidate" &&
+        attemptState === "PROVISIONING_SANDBOXES") ||
+      (attempt.purpose === "profile-replacement" &&
+        attemptState === "PROVISIONING_SANDBOXES") ||
+      (attempt.purpose === "review-repair" &&
+        attemptState !== undefined &&
+        ["REPAIRING_REVIEW_FINDINGS", "REVALIDATING"].includes(attemptState));
+    const identifierIsValid = (value: string) =>
+      value === value.trim() &&
+      value.length > 0 &&
+      value.length <= 256 &&
+      !/[\u0000-\u001f\u007f]/u.test(value);
+    const dispositionIsValid =
+      [
+        "completed",
+        "failed-destroyed",
+        "failed-retained",
+        "cleanup-failed",
+      ].includes(attempt.disposition) &&
+      typeof attempt.retryable === "boolean" &&
+      (attempt.disposition !== "completed" || attempt.retryable === false);
+    const duplicateSandbox = history.some(
+      (item) => item.sandboxId === attempt.sandboxId,
+    );
+    const duplicateRun = history.some((item) => item.runId === attempt.runId);
+    if (
+      session.mode !== "live" ||
+      !stageAllowsPurpose ||
+      !session.candidateIds.includes(attempt.candidateId) ||
+      !identifierIsValid(attempt.sandboxId) ||
+      !identifierIsValid(attempt.runId) ||
+      Number.isNaN(Date.parse(attempt.capturedAt)) ||
+      !dispositionIsValid
+    ) {
+      throw new InvalidWorkflowTransitionError(
+        session.state,
+        event.type,
+        "Every Daytona response must reserve a globally unique sandbox ID and run ID before its evidence is used.",
+      );
+    }
+    const recordedAttempt = {
+      ...attempt,
+      reservationStatus:
+        duplicateSandbox || duplicateRun ? "rejected-reuse" : "reserved",
+      duplicateSandbox,
+      duplicateRun,
+    } as const;
+    if (duplicateSandbox || duplicateRun) {
+      return withState(session, "FAILED", event.at, {
+        sandboxAttemptHistory: [...history, recordedAttempt],
+        failure:
+          session.failure ??
+          {
+            reason:
+              "Daytona reused a sandbox ID or run ID that was already observed in this live session.",
+            recoverable: false,
+            failedFrom: session.state,
+          },
+      });
+    }
+    return withState(session, session.state, event.at, {
+      sandboxAttemptHistory: [...history, recordedAttempt],
+    });
   }
 
   if (session.state === "AWAITING_HUMAN_APPROVAL") {
@@ -489,11 +775,22 @@ export function transitionValidationSession(
       const candidateIds = [...session.candidateIds].sort();
       const mappedCandidates = Object.keys(event.sandboxIdsByCandidate).sort();
       const sandboxIds = Object.values(event.sandboxIdsByCandidate);
+      const recordedAttempts = session.sandboxAttemptHistory ?? [];
       if (
         candidateIds.length !== mappedCandidates.length ||
         candidateIds.some((candidate, index) => candidate !== mappedCandidates[index]) ||
         new Set(sandboxIds).size !== sandboxIds.length ||
-        sandboxIds.some((sandboxId) => sandboxId.trim() === "")
+        sandboxIds.some((sandboxId) => sandboxId.trim() === "") ||
+        (session.mode === "live" &&
+          Object.entries(event.sandboxIdsByCandidate).some(
+            ([candidateId, sandboxId]) =>
+              !recordedAttempts.some(
+                (attempt) =>
+                  attempt.candidateId === candidateId &&
+                  attempt.sandboxId === sandboxId &&
+                  attempt.purpose !== "review-repair",
+              ),
+          ))
       ) {
         throw new InvalidWorkflowTransitionError(
           session.state,
@@ -526,25 +823,50 @@ export function transitionValidationSession(
           "Selected candidate must be bound to a full Git commit SHA",
         );
       }
+      if (
+        !isSha256Digest(event.patchDigest) ||
+        !isSha256Digest(event.evidenceDigest)
+      ) {
+        throw new InvalidWorkflowTransitionError(
+          session.state,
+          event.type,
+          "Selected candidate must be bound to SHA-256 patch and evidence digests",
+        );
+      }
+      const liveReceipt =
+        session.mode === "live"
+          ? requireInitialValidationReceipt(session, event)
+          : undefined;
       return withState(session, "AWAITING_HUMAN_APPROVAL", event.at, {
         selectedCandidateId: event.candidateId,
         currentPatchDigest: event.patchDigest,
         currentEvidenceDigest: event.evidenceDigest,
         currentCommitSha: event.commitSha,
+        currentValidatedTreeSha: liveReceipt?.validatedTreeSha,
+        lastRevalidation: liveReceipt,
         validationRound: session.validationRound + 1,
       });
     case "PR_CREATED_OR_UPDATED": {
       const binding = currentBinding(session);
+      const target = session.pullRequestTarget;
       if (
         event.pullRequest.sessionId !== session.sessionId ||
         event.pullRequest.candidateId !== session.selectedCandidateId ||
         event.pullRequest.provider !== "github" ||
         event.pullRequest.status !== "open" ||
-        event.pullRequest.number <= 0 ||
         !isCanonicalGitHubPullRequest(event.pullRequest) ||
+        target === undefined ||
+        event.pullRequest.owner !== target.owner ||
+        event.pullRequest.repository !== target.repository ||
+        event.pullRequest.baseBranch !== target.baseBranch ||
+        event.pullRequest.baseSha.toLowerCase() !==
+          session.repository.commitSha.toLowerCase() ||
         binding === undefined ||
         !isApprovalValid(session.approval, binding) ||
-        event.pullRequest.headSha.toLowerCase() !== binding.commitSha.toLowerCase()
+        event.pullRequest.headSha.toLowerCase() !== binding.commitSha.toLowerCase() ||
+        (session.currentValidatedTreeSha !== undefined &&
+          event.pullRequest.headTreeSha.toLowerCase() !==
+            session.currentValidatedTreeSha.toLowerCase())
       ) {
         throw new InvalidWorkflowTransitionError(
           session.state,
@@ -568,6 +890,13 @@ export function transitionValidationSession(
           "Repaired candidate was not evaluated in this session",
         );
       }
+      if (!isSha256Digest(event.patchDigest)) {
+        throw new InvalidWorkflowTransitionError(
+          session.state,
+          event.type,
+          "Repaired candidate must be bound to a SHA-256 patch digest",
+        );
+      }
       const existingApproval = session.approval;
       const invalidationBinding: ApprovalBinding | undefined = existingApproval
         ? {
@@ -577,12 +906,14 @@ export function transitionValidationSession(
             policyVersion: session.policyVersion,
             commitSha:
               session.currentCommitSha ?? session.repository.commitSha,
+            pullRequestTarget: session.pullRequestTarget,
           }
         : undefined;
       return withState(session, "REVALIDATING", event.at, {
         selectedCandidateId: event.candidateId,
         currentPatchDigest: event.patchDigest,
         currentCommitSha: undefined,
+        currentValidatedTreeSha: undefined,
         approval: invalidationBinding
           ? invalidateApprovalWhenEvidenceChanges(
               existingApproval,
@@ -603,17 +934,23 @@ export function transitionValidationSession(
               evidenceDigest: event.receipt.evidenceDigest,
               policyVersion: session.policyVersion,
               commitSha: event.receipt.commitSha,
+              pullRequestTarget: session.pullRequestTarget,
             }
           : undefined;
       return withState(session, "AWAITING_HUMAN_APPROVAL", event.at, {
         currentEvidenceDigest: event.receipt.evidenceDigest,
         currentPatchDigest: event.receipt.patchDigest,
         currentCommitSha: event.receipt.commitSha,
+        currentValidatedTreeSha: event.receipt.validatedTreeSha,
         approval: binding
           ? invalidateApprovalWhenEvidenceChanges(existingApproval, binding, event.at)
           : existingApproval,
         validationRound: session.validationRound + 1,
         lastRevalidation: event.receipt,
+        revalidationSandboxIds: [
+          ...(session.revalidationSandboxIds ?? []),
+          event.receipt.sandboxId,
+        ],
       });
     }
     case "MARK_READY_TO_MERGE": {

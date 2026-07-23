@@ -13,6 +13,7 @@ export type IntegrityViolationCode =
   | "SAFETY_THRESHOLD_MODIFICATION"
   | "BINARY_PATCH"
   | "SYMLINK_PATCH"
+  | "UNSAFE_FILE_MODE"
   | "FILE_DELETION"
   | "RENAME_OR_COPY"
   | "MALICIOUS_SHELL";
@@ -242,10 +243,35 @@ export function validatePatchIntegrity(
         line: lineNumber,
       });
     }
-    if (/^(?:old mode|new mode) 120000$/u.test(line)) {
+    const modeDeclaration = /^(old mode|new mode|new file mode|deleted file mode) ([0-7]{6})$/u.exec(
+      line,
+    );
+    const indexMode = /^index [0-9a-f]+\.\.[0-9a-f]+ ([0-7]{6})$/iu.exec(
+      line,
+    )?.[1];
+    if (
+      modeDeclaration?.[2] === "120000" ||
+      modeDeclaration?.[2] === "160000" ||
+      indexMode === "120000" ||
+      indexMode === "160000"
+    ) {
       addViolation({
         code: "SYMLINK_PATCH",
-        message: "Symlink patches are forbidden.",
+        message: "Symlink and Git submodule patches are forbidden.",
+        filePath: currentPath,
+        line: lineNumber,
+      });
+    } else if (
+      (modeDeclaration?.[1] === "new file mode" &&
+        modeDeclaration[2] !== "100644") ||
+      modeDeclaration?.[1] === "old mode" ||
+      modeDeclaration?.[1] === "new mode" ||
+      (indexMode !== undefined && indexMode !== "100644")
+    ) {
+      addViolation({
+        code: "UNSAFE_FILE_MODE",
+        message:
+          "File-mode changes are forbidden and new source files must use mode 100644.",
         filePath: currentPath,
         line: lineNumber,
       });

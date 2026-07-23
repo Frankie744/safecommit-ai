@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 
 import {
   computeCommandHash,
+  computeEvidenceDigest,
   parseCandidatePatch,
   sha256,
   type CandidatePatch,
@@ -13,6 +14,7 @@ import { validatePatchIntegrity } from "@safeflash/safety-policy";
 
 import {
   ProviderResponseError,
+  registerOfficialTransport,
   requireLiveConfiguration,
   transportEnvelope,
   type Environment,
@@ -20,13 +22,14 @@ import {
   type ProviderTransport,
 } from "./provider";
 
-const REPOSITORY_PATH = "/workspace/safeflash-repository";
+export const DAYTONA_REPOSITORY_PATH = "/workspace/safeflash-repository";
 const PATCH_PATH = "/tmp/safeflash-candidate.patch";
 
 export type DaytonaCommandId =
   | "verify-commit"
   | "patch-check"
   | "patch-apply"
+  | "validated-tree"
   | "configure"
   | "build"
   | "artifact-manifest"
@@ -55,6 +58,11 @@ export const DEFAULT_DAYTONA_COMMAND_POLICY: readonly DaytonaCommandDefinition[]
     {
       id: "patch-apply",
       command: `git apply --index ${PATCH_PATH}`,
+      timeoutSeconds: 10,
+    },
+    {
+      id: "validated-tree",
+      command: "git write-tree",
       timeoutSeconds: 10,
     },
     {
@@ -91,6 +99,11 @@ export const DEFAULT_DAYTONA_COMMAND_POLICY: readonly DaytonaCommandDefinition[]
     },
   ];
 
+for (const definition of DEFAULT_DAYTONA_COMMAND_POLICY) {
+  Object.freeze(definition);
+}
+Object.freeze(DEFAULT_DAYTONA_COMMAND_POLICY);
+
 const REQUIRED_COMMAND_ORDER = DEFAULT_DAYTONA_COMMAND_POLICY.map(
   (definition) => definition.id,
 );
@@ -113,6 +126,12 @@ export interface DaytonaValidationRequest {
   repository: {
     repoUrl: string;
     commitSha: string;
+  };
+  policy: {
+    policyVersion: string;
+    allowedPatchPaths: readonly string[];
+    maxChangedFiles: number;
+    maxChangedLines: number;
   };
 }
 
@@ -168,12 +187,45 @@ export interface DaytonaValidationEvidence {
   candidateId: string;
   sandboxId: string;
   commitSha: string;
+  patchDigest: string;
+  policyDigest: string;
+  validatedTreeSha?: string;
   isolatedFilesystem: true;
   networkBlockedBeforePatch: true;
   retained: boolean;
   destroyed: boolean;
   passed: boolean;
   commands: readonly CommandEvidence[];
+}
+
+export interface DaytonaAttemptFailureEvidence {
+  sandboxId: string;
+  runId: string;
+  candidateId: string;
+  capturedAt: string;
+  disposition: "failed-destroyed" | "failed-retained" | "cleanup-failed";
+}
+
+/**
+ * Sanitized evidence that a sandbox existed even though no complete validation
+ * envelope could be produced. Provider causes remain internal Error metadata;
+ * callers receive only identifiers needed to reserve the failed attempt.
+ */
+export class DaytonaAttemptError extends ProviderResponseError {
+  readonly attempt: Readonly<DaytonaAttemptFailureEvidence>;
+
+  constructor(input: {
+    attempt: DaytonaAttemptFailureEvidence;
+    retryable: boolean;
+  }) {
+    super(
+      "daytona",
+      "Daytona validation failed after sandbox creation",
+      input.retryable,
+    );
+    this.name = "DaytonaAttemptError";
+    this.attempt = Object.freeze({ ...input.attempt });
+  }
 }
 
 export interface DaytonaSmokeEvidence {
@@ -183,6 +235,36 @@ export interface DaytonaSmokeEvidence {
   output: "SAFEFLASH_DAYTONA_SMOKE";
   networkBlocked: true;
   destroyed: true;
+}
+
+function assertOfficialDaytonaApiUrl(apiUrl: string | undefined): void {
+  if (apiUrl === undefined) return;
+  let parsed: URL;
+  try {
+    parsed = new URL(apiUrl);
+  } catch {
+    throw new ProviderResponseError(
+      "daytona",
+      "DAYTONA_API_URL must be the official https://app.daytona.io/api endpoint",
+      false,
+    );
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.hostname.toLowerCase() !== "app.daytona.io" ||
+    parsed.port !== "" ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    !["/api", "/api/"].includes(parsed.pathname) ||
+    parsed.search !== "" ||
+    parsed.hash !== ""
+  ) {
+    throw new ProviderResponseError(
+      "daytona",
+      "DAYTONA_API_URL must be the official https://app.daytona.io/api endpoint",
+      false,
+    );
+  }
 }
 
 export function readDaytonaConfig(
@@ -196,34 +278,7 @@ export function readDaytonaConfig(
     ["DAYTONA_API_KEY"] as const,
   );
   const apiUrl = environment.DAYTONA_API_URL?.trim() || undefined;
-  if (apiUrl !== undefined) {
-    let parsed: URL;
-    try {
-      parsed = new URL(apiUrl);
-    } catch {
-      throw new ProviderResponseError(
-        "daytona",
-        "DAYTONA_API_URL must be the official https://app.daytona.io/api endpoint",
-        false,
-      );
-    }
-    if (
-      parsed.protocol !== "https:" ||
-      parsed.hostname.toLowerCase() !== "app.daytona.io" ||
-      parsed.port !== "" ||
-      parsed.username !== "" ||
-      parsed.password !== "" ||
-      !["/api", "/api/"].includes(parsed.pathname) ||
-      parsed.search !== "" ||
-      parsed.hash !== ""
-    ) {
-      throw new ProviderResponseError(
-        "daytona",
-        "DAYTONA_API_URL must be the official https://app.daytona.io/api endpoint",
-        false,
-      );
-    }
-  }
+  assertOfficialDaytonaApiUrl(apiUrl);
   return {
     mode: "live",
     apiKey: values.DAYTONA_API_KEY,
@@ -237,6 +292,14 @@ export function readDaytonaConfig(
 }
 
 export function createDaytonaClient(config: DaytonaConfig): DaytonaClientPort {
+  assertOfficialDaytonaApiUrl(config.apiUrl);
+  if (config.mode !== "live" || config.apiKey.trim() === "") {
+    throw new ProviderResponseError(
+      "daytona",
+      "Official Daytona transport requires a non-empty live configuration",
+      false,
+    );
+  }
   const sdk = new Daytona({
     apiKey: config.apiKey,
     apiUrl: config.apiUrl,
@@ -245,7 +308,7 @@ export function createDaytonaClient(config: DaytonaConfig): DaytonaClientPort {
     // and this also avoids exposing an inbound Jaeger propagation surface.
     otelEnabled: false,
   });
-  return {
+  return registerOfficialTransport({
     transport: "official-sdk",
     async create(params, options) {
       return (await sdk.create(params, options)) as DaytonaSandboxPort;
@@ -253,7 +316,7 @@ export function createDaytonaClient(config: DaytonaConfig): DaytonaClientPort {
     async delete(sandbox, timeoutSeconds, wait) {
       await sdk.delete(sandbox as Sandbox, timeoutSeconds, wait);
     },
-  };
+  } satisfies DaytonaClientPort);
 }
 
 function validateRepository(repository: DaytonaValidationRequest["repository"]): void {
@@ -295,16 +358,15 @@ function validateCommandPolicy(
       false,
     );
   }
-  for (const definition of policy) {
+  for (const [index, definition] of policy.entries()) {
+    const frozen = DEFAULT_DAYTONA_COMMAND_POLICY[index]!;
     if (
-      definition.command.trim() === "" ||
-      !Number.isInteger(definition.timeoutSeconds) ||
-      definition.timeoutSeconds <= 0 ||
-      definition.timeoutSeconds > 300
+      definition.command !== frozen.command ||
+      definition.timeoutSeconds !== frozen.timeoutSeconds
     ) {
       throw new ProviderResponseError(
         "daytona",
-        `Invalid trusted command definition: ${definition.id}`,
+        `Trusted Daytona command policy was modified: ${definition.id}`,
         false,
       );
     }
@@ -319,10 +381,12 @@ function outputSummary(output: string): string {
 }
 
 export class DaytonaAdapter {
+  private readonly commandPolicy = DEFAULT_DAYTONA_COMMAND_POLICY;
+
   constructor(
     private readonly config: DaytonaConfig,
     private readonly client: DaytonaClientPort = createDaytonaClient(config),
-    private readonly commandPolicy: readonly DaytonaCommandDefinition[] =
+    commandPolicy: readonly DaytonaCommandDefinition[] =
       DEFAULT_DAYTONA_COMMAND_POLICY,
     private readonly clock: () => Date = () => new Date(),
   ) {
@@ -367,7 +431,7 @@ export class DaytonaAdapter {
         true,
       );
       destroyed = true;
-      return transportEnvelope("daytona", this.client.transport, {
+      return transportEnvelope("daytona", this.client, {
         sandboxId: sandbox.id,
         command: "node -e",
         exitCode: 0,
@@ -407,7 +471,27 @@ export class DaytonaAdapter {
   ): Promise<ProviderEnvelope<DaytonaValidationEvidence>> {
     validateRepository(request.repository);
     const candidate = parseCandidatePatch(request.candidate);
-    const integrity = validatePatchIntegrity(candidate.unifiedDiff);
+    if (
+      request.policy.policyVersion.trim() === "" ||
+      request.policy.allowedPatchPaths.length === 0 ||
+      !Number.isSafeInteger(request.policy.maxChangedFiles) ||
+      request.policy.maxChangedFiles < 1 ||
+      !Number.isSafeInteger(request.policy.maxChangedLines) ||
+      request.policy.maxChangedLines < 1
+    ) {
+      throw new ProviderResponseError(
+        "daytona",
+        "Daytona validation requires exact positive session policy limits",
+        false,
+      );
+    }
+    const integrity = validatePatchIntegrity(candidate.unifiedDiff, {
+      allowedPathPrefixes: request.policy.allowedPatchPaths.map((path) =>
+        path.replace(/\*\*?$/u, "").replace(/\/+$/u, ""),
+      ),
+      maxChangedFiles: request.policy.maxChangedFiles,
+      maxChangedLines: request.policy.maxChangedLines,
+    });
     if (!integrity.valid) {
       throw new ProviderResponseError(
         "daytona",
@@ -419,6 +503,7 @@ export class DaytonaAdapter {
     }
     let sandbox: DaytonaSandboxPort | undefined;
     let destroyed = false;
+    let validatedTreeSha: string | undefined;
     const commands: CommandEvidence[] = [];
 
     try {
@@ -442,7 +527,7 @@ export class DaytonaAdapter {
 
       await sandbox.git.clone(
         request.repository.repoUrl,
-        REPOSITORY_PATH,
+        DAYTONA_REPOSITORY_PATH,
         undefined,
         request.repository.commitSha,
       );
@@ -457,7 +542,7 @@ export class DaytonaAdapter {
         const startedAt = this.clock();
         const response = await sandbox.process.executeCommand(
           definition.command,
-          REPOSITORY_PATH,
+          DAYTONA_REPOSITORY_PATH,
           undefined,
           definition.timeoutSeconds,
         );
@@ -476,7 +561,7 @@ export class DaytonaAdapter {
           argv: ["/bin/sh", "-lc", definition.command],
           commandHash: computeCommandHash(
             ["/bin/sh", "-lc", definition.command],
-            REPOSITORY_PATH,
+            DAYTONA_REPOSITORY_PATH,
           ),
           artifactHash:
             definition.id === "artifact-manifest"
@@ -502,12 +587,25 @@ export class DaytonaAdapter {
             false,
           );
         }
+        if (definition.id === "validated-tree" && response.exitCode === 0) {
+          const tree = output.trim();
+          if (!/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/iu.test(tree)) {
+            throw new ProviderResponseError(
+              "daytona",
+              "Sandbox did not return a full immutable post-patch Git tree SHA",
+              false,
+            );
+          }
+          validatedTreeSha = tree;
+        }
         if (response.exitCode !== 0) break;
       }
 
       const completedAll = commands.length === this.commandPolicy.length;
       const passed =
-        completedAll && commands.every((command) => command.exitCode === 0);
+        completedAll &&
+        validatedTreeSha !== undefined &&
+        commands.every((command) => command.exitCode === 0);
 
       if (!this.config.retainSandboxes) {
         await this.client.delete(
@@ -518,12 +616,15 @@ export class DaytonaAdapter {
         destroyed = true;
       }
 
-      return transportEnvelope("daytona", this.client.transport, {
+      return transportEnvelope("daytona", this.client, {
         runId: request.runId,
         sessionId: request.sessionId,
         candidateId: candidate.candidateId,
         sandboxId: sandbox.id,
         commitSha: request.repository.commitSha,
+        patchDigest: sha256(candidate.unifiedDiff),
+        policyDigest: computeEvidenceDigest(request.policy),
+        validatedTreeSha,
         isolatedFilesystem: true,
         networkBlockedBeforePatch: true,
         retained: this.config.retainSandboxes,
@@ -532,6 +633,7 @@ export class DaytonaAdapter {
         commands,
       });
     } catch (error) {
+      let cleanupFailed = false;
       if (sandbox !== undefined && !this.config.retainSandboxes && !destroyed) {
         try {
           await this.client.delete(
@@ -541,13 +643,30 @@ export class DaytonaAdapter {
           );
           destroyed = true;
         } catch (cleanupError) {
-          throw new ProviderResponseError(
-            "daytona",
-            "Daytona validation failed and sandbox cleanup also failed",
-            true,
-            { cause: cleanupError },
-          );
+          cleanupFailed = true;
+          error = cleanupError;
         }
+      }
+      if (sandbox !== undefined) {
+        const retryable = cleanupFailed
+          ? true
+          : error instanceof ProviderResponseError
+            ? error.retryable
+            : true;
+        throw new DaytonaAttemptError({
+          attempt: {
+            sandboxId: sandbox.id,
+            runId: request.runId,
+            candidateId: candidate.candidateId,
+            capturedAt: this.clock().toISOString(),
+            disposition: cleanupFailed
+              ? "cleanup-failed"
+              : this.config.retainSandboxes
+                ? "failed-retained"
+                : "failed-destroyed",
+          },
+          retryable,
+        });
       }
       if (error instanceof ProviderResponseError) throw error;
       throw new ProviderResponseError(

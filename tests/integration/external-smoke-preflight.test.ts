@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   configurationBlockers,
   runProvider,
+  runSelectedProviders,
   selectedProviders,
 } from "../../scripts/smoke-external";
 
@@ -97,5 +98,36 @@ describe("external provider smoke preflight", () => {
     expect(() => selectedProviders(["--provider=unknown"])).toThrow(
       /Unknown --provider/u,
     );
+  });
+
+  it("preflights every requested provider before running any external operation", async () => {
+    const calls: string[] = [];
+    const results = await runSelectedProviders(
+      ["fireworks", "daytona"],
+      {
+        SAFEFLASH_ALLOW_LIVE: "true",
+        FIREWORKS_API_KEY: "configured-but-must-not-be-used",
+        FIREWORKS_MODEL: "accounts/fireworks/models/example",
+      },
+      async (provider) => {
+        calls.push(provider);
+        throw new Error("runner must not be reached when aggregate preflight fails");
+      },
+    );
+
+    expect(calls).toEqual([]);
+    expect(results).toHaveLength(2);
+    expect(results[0]).toMatchObject({
+      provider: "fireworks",
+      status: "blocked",
+      blockers: [
+        "Aggregate preflight aborted because another requested provider is not configured",
+      ],
+    });
+    expect(results[1]).toMatchObject({
+      provider: "daytona",
+      status: "blocked",
+      blockers: ["DAYTONA_API_KEY is required"],
+    });
   });
 });

@@ -9,7 +9,11 @@ import {
 } from "@safeflash/evals";
 import {
   BraintrustAdapter,
+  evaluateBraintrustCandidateScorers,
+  normalizeBraintrustReturnedResults,
   type BraintrustConfig,
+  type BraintrustPreparedExperimentCase,
+  type BraintrustReturnedExperimentResult,
   type BraintrustSdkPort,
 } from "@safeflash/integrations";
 
@@ -54,6 +58,7 @@ class FakeBraintrustSdk implements BraintrustSdkPort {
   seededCases = 0;
   traces = 0;
   experiments = 0;
+  lastExperimentCases: readonly BraintrustPreparedExperimentCase[] = [];
 
   async seedDataset(
     _config: BraintrustConfig,
@@ -82,9 +87,10 @@ class FakeBraintrustSdk implements BraintrustSdkPort {
   async runExperiment(
     _config: BraintrustConfig,
     experimentName: string,
-    cases: readonly unknown[],
+    cases: readonly BraintrustPreparedExperimentCase[],
   ) {
     this.experiments += 1;
+    this.lastExperimentCases = cases;
     return {
       projectName: CONFIG.projectName,
       experimentName,
@@ -92,6 +98,13 @@ class FakeBraintrustSdk implements BraintrustSdkPort {
       experimentId: "fake-contract-experiment-id",
       experimentUrl: "https://www.braintrust.dev/app/fake-contract-experiment",
       resultCount: cases.length,
+      candidateResults: cases.map((testCase) => ({
+        candidateId: testCase.candidateId,
+        evidenceDigest: testCase.output.evidenceDigest,
+        evaluationEvidence: structuredClone(testCase.evaluationEvidence),
+        scores: [...testCase.output.scores],
+        metadata: { ...testCase.metadata },
+      })),
     };
   }
 }
@@ -146,6 +159,129 @@ describe("Braintrust dataset and deterministic scorers", () => {
     expect(missingEvidence.values.patchIntegrity).toBe(0);
   });
 
+  it("accepts only error-free Braintrust-returned rows with exact scorer values", () => {
+    const evaluated = evaluateDeterministicScorers(evidence());
+    const testCase: BraintrustPreparedExperimentCase = {
+      candidateId: "candidate-score",
+      input: { incident: "sensor-disconnect" },
+      evaluationEvidence: evidence(),
+      output: {
+        scores: evaluated.scores,
+        evidenceDigest: "a".repeat(64),
+      },
+      expected: { safe: true },
+      metadata: { sessionId: "session-braintrust" },
+    };
+    const returned: BraintrustReturnedExperimentResult = {
+      input: testCase,
+      output: testCase.output,
+      expected: testCase.expected,
+      metadata: {
+        ...testCase.metadata,
+        candidateId: testCase.candidateId,
+      },
+      error: null,
+      scores: Object.fromEntries(
+        evaluated.scores.map((score) => [score.name, score.score]),
+      ),
+    };
+
+    expect(normalizeBraintrustReturnedResults([testCase], [returned])).toEqual([
+      {
+        candidateId: testCase.candidateId,
+        evidenceDigest: testCase.output.evidenceDigest,
+        evaluationEvidence: testCase.evaluationEvidence,
+        scores: testCase.output.scores,
+        metadata: testCase.metadata,
+      },
+    ]);
+
+    expect(() =>
+      normalizeBraintrustReturnedResults(
+        [testCase],
+        [{ ...returned, error: new Error("remote scorer failed") }],
+      ),
+    ).toThrow(/errored/u);
+
+    expect(() =>
+      normalizeBraintrustReturnedResults(
+        [testCase],
+        [
+          {
+            ...returned,
+            scores: { ...returned.scores, SafetyInvariant: 0 },
+          },
+        ],
+      ),
+    ).toThrow(/scorer results/u);
+  });
+
+  it("recomputes scores server-side instead of accepting caller output", async () => {
+    const fake = new FakeBraintrustSdk();
+    const adapter = new BraintrustAdapter(CONFIG, fake);
+    const unsafeEvidence = evidence({
+      safetyTests: {
+        passed: 0,
+        total: 1,
+        criticalFailures: ["actuator remained enabled"],
+      },
+    });
+    await adapter.runCandidateExperiment("server-owned-scorers", [
+      {
+        candidateId: unsafeEvidence.candidateId,
+        input: { incident: "sensor-disconnect" },
+        evaluationEvidence: unsafeEvidence,
+        evidenceDigest: "b".repeat(64),
+        metadata: { sessionId: "session-braintrust" },
+        output: {
+          scores: evaluateDeterministicScorers(evidence()).scores,
+          evidenceDigest: "b".repeat(64),
+        },
+      } as Parameters<BraintrustAdapter["runCandidateExperiment"]>[1][number] & {
+        output: unknown;
+      },
+    ]);
+    expect(
+      fake.lastExperimentCases[0]?.output.scores.find(
+        (score) => score.name === "SafetyInvariant",
+      )?.score,
+    ).toBe(0);
+  });
+
+  it("runs Braintrust scorers from raw evaluation evidence rather than echoing task output", () => {
+    const rawEvidence = evidence({
+      safetyTests: {
+        passed: 0,
+        total: 1,
+        criticalFailures: ["actuator remained enabled"],
+      },
+    });
+    const recomputed = evaluateDeterministicScorers(rawEvidence).scores;
+    const testCase: BraintrustPreparedExperimentCase = {
+      candidateId: rawEvidence.candidateId,
+      input: { incident: "sensor-disconnect" },
+      evaluationEvidence: rawEvidence,
+      output: { scores: recomputed, evidenceDigest: "c".repeat(64) },
+      metadata: { sessionId: "session-braintrust" },
+    };
+
+    expect(
+      evaluateBraintrustCandidateScorers(testCase, testCase.output).find(
+        (score) => score.name === "SafetyInvariant",
+      )?.score,
+    ).toBe(0);
+
+    const forgedOutput = {
+      ...testCase.output,
+      scores: testCase.output.scores.map((score) =>
+        score.name === "SafetyInvariant" ? { ...score, score: 1 } : score,
+      ),
+    };
+    expect(() =>
+      evaluateBraintrustCandidateScorers(testCase, forgedOutput),
+    ).toThrow(/scorer-recomputed evidence/u);
+  });
+
   it("uses the final dataset, trace, and Experiment ports in a smoke run", async () => {
     const fake = new FakeBraintrustSdk();
     const adapter = new BraintrustAdapter(
@@ -160,5 +296,11 @@ describe("Braintrust dataset and deterministic scorers", () => {
     expect(fake.experiments).toBe(1);
     expect(result.data.dataset.totalRecords).toBe(10);
     expect(result.data.experiment.resultCount).toBe(1);
+    expect(fake.lastExperimentCases[0]?.output.scores).toHaveLength(8);
+    expect(
+      fake.lastExperimentCases[0]?.output.scores.find(
+        (score) => score.name === "SafetyInvariant",
+      )?.score,
+    ).toBe(1);
   });
 });

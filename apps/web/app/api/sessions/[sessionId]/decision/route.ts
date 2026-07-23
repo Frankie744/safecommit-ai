@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { getActiveSessionService } from "../../../../../server/active-session-service";
 import { apiErrorResponse, readJsonBody } from "../../../../../server/http";
-import { getSessionService } from "../../../../../server/session-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ export async function POST(
 ): Promise<NextResponse> {
   try {
     const { sessionId } = await context.params;
-    const session = await getSessionService().decide(
+    const session = await getActiveSessionService().decide(
       sessionId,
       await readJsonBody(request),
     );

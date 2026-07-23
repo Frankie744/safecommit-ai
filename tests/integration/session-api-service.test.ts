@@ -121,11 +121,45 @@ describe("Phase 4 persisted local session API service", () => {
     });
   });
 
+  it("migrates version-1 local snapshots before validating new commit fields", async () => {
+    const path = join(storageDirectory, `${created.id}.json`);
+    const stored = JSON.parse(await readFile(path, "utf8")) as {
+      storeVersion: number;
+      session: {
+        currentCommitSha?: string;
+        revalidationSandboxIds?: string[];
+      };
+    };
+    stored.storeVersion = 1;
+    delete stored.session.currentCommitSha;
+    delete stored.session.revalidationSandboxIds;
+    await writeFile(path, `${JSON.stringify(stored, null, 2)}\n`, "utf8");
+
+    const restarted = new SessionService({
+      workspaceRoot: resolve(process.cwd()),
+      storageDirectory,
+    });
+    await expect(restarted.get(created.id)).resolves.toMatchObject({ id: created.id });
+    const migrated = JSON.parse(await readFile(path, "utf8")) as {
+      storeVersion: number;
+      session: { currentCommitSha?: string; revalidationSandboxIds?: string[] };
+    };
+    expect(migrated).toMatchObject({
+      storeVersion: 2,
+      session: {
+        currentCommitSha: created.repository.commitSha,
+        revalidationSandboxIds: [],
+      },
+    });
+  });
+
   it("fails closed when a persisted snapshot no longer matches the event chain", async () => {
     const path = join(storageDirectory, `${created.id}.json`);
     const stored = JSON.parse(await readFile(path, "utf8")) as {
+      storeVersion: number;
       view: { currentEvidenceDigest?: string };
     };
+    stored.storeVersion = 1;
     stored.view.currentEvidenceDigest = "0".repeat(64);
     await writeFile(path, `${JSON.stringify(stored, null, 2)}\n`, "utf8");
 
@@ -137,5 +171,9 @@ describe("Phase 4 persisted local session API service", () => {
       status: 500,
       code: "CORRUPT_SESSION",
     });
+    const unchanged = JSON.parse(await readFile(path, "utf8")) as {
+      storeVersion: number;
+    };
+    expect(unchanged.storeVersion).toBe(1);
   });
 });
