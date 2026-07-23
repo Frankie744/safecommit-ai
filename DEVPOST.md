@@ -244,8 +244,9 @@ the successful diff.
 
 ## What's next
 
-1. Compose the five provider adapters into the production session state
-   machine and capture a complete authorized live run.
+1. Supply the external credentials/repository authorization and capture a
+   complete authorized run through the implemented five-provider production
+   state machine.
 2. Add hardware-in-the-loop validation against real development boards and
    programmable fault injection.
 3. Support MCU/RTOS build systems, cross-compilers, and timing/resource
@@ -289,7 +290,9 @@ npm run verify:p0
 npm run dev
 ```
 
-The local UI is intentionally labelled not provider-verified. See
+The default local UI is intentionally labelled not provider-verified. The
+server-only live composition and API bridge are implemented and contract-tested,
+but no complete external provider run has been captured. See
 [`docs/runbook.md`](docs/runbook.md) for toolchain setup, production commands,
 external smoke checks, evidence verification, and the precise live-path
 limitation.

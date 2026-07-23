@@ -33,8 +33,9 @@ npm run dev
 
 Run `npm run verify` while developing. After all intended changes are committed
 and `git status --short` is empty, `npm run verify:p0` captures typecheck,
-Vitest, production build, Chrome Playwright, and the exact 14-test P0 matrix in
-a hash-manifested Phase 6 evidence package. This is a local-test claim only.
+production build, Vitest, Chrome Playwright, a final bundle/staging secret scan,
+and the exact 14-test P0 matrix in a hash-manifested Phase 6 evidence package.
+This is a local-test claim only.
 
 Project handoff:
 

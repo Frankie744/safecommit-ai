@@ -49,8 +49,8 @@ claims remain blocked. “Implemented” is not treated as “verified live.”
 | `human_approval_required_before_pr` | `tests/unit/workflow.test.ts`; GitHub adapter tests | PR transition is impossible without a current evidence-bound approval. | local contract; no live PR |
 | `approval_invalidated_when_patch_changes` | `tests/unit/evidence-approval.test.ts` | Changing the patch or other binding data invalidates prior approval. | local contract |
 | `critical_review_finding_blocks_ready_to_merge` | `tests/unit/workflow.test.ts`; CodeRabbit adapter tests | Blocking review findings prevent readiness. | local contract; no live review |
-| `review_fix_reenters_full_validation_pipeline` | `tests/unit/workflow.test.ts` | A review repair must return through revalidation rather than jump to readiness. | local state-machine contract; no live loop |
-| `secrets_are_not_exposed_to_frontend_or_git` | `tests/adversarial/secrets.test.ts` | Client files and tracked text do not contain provider secret variables/known credential shapes. | local adversarial scan |
+| `review_fix_reenters_full_validation_pipeline` | `tests/unit/workflow.test.ts`; `tests/integration/provider-revalidation.test.ts` | A review repair must return through revalidation, use a never-reused sandbox, and derive its receipt from exact live-provider envelopes rather than caller booleans. | local state/integration contract; no live loop |
+| `secrets_are_not_exposed_to_frontend_or_git` | `tests/adversarial/secrets.test.ts` | Client files, current tracked text, and full reachable Git patches are checked against every configured local/environment secret value; synthetic provider tokens also verify redaction. | local adversarial scan |
 | `demo_session_can_be_replayed_from_recorded_evidence` | `tests/integration/tournament.local.test.ts`; Phase 4 `replay.txt` | The 27-event local chain replays to the same three-candidate winner. | local-test evidence, not recorded-live provider evidence |
 
 The matrix closes the deterministic P0 contracts. It does **not** close the
@@ -100,10 +100,10 @@ the five honestly blocked providers.
 
 ### Phase 1 — real unsafe firmware
 
-- [`summary.json`](../artifacts/evidence/phase-1/20260722T192339273Z/summary.json)
-- [`build.log`](../artifacts/evidence/phase-1/20260722T192339273Z/build.log)
-- [`unit-tests.log`](../artifacts/evidence/phase-1/20260722T192339273Z/unit-tests.log)
-- [`safety-tests.log`](../artifacts/evidence/phase-1/20260722T192339273Z/safety-tests.log)
+- [`summary.json`](../artifacts/evidence/phase-1/20260723T004428654Z/summary.json)
+- [`build.log`](../artifacts/evidence/phase-1/20260723T004428654Z/build.log)
+- [`unit-tests.log`](../artifacts/evidence/phase-1/20260723T004428654Z/unit-tests.log)
+- [`safety-tests.log`](../artifacts/evidence/phase-1/20260723T004428654Z/safety-tests.log)
 
 MSVC/CMake build passed; 5/5 unit assertions passed; the safety executable
 reported 3 passes and 3 expected failures.
@@ -137,6 +137,15 @@ claim boundary explicitly excludes all external providers.
 Records a production Next.js session at 1440×900, 4/4 Chrome E2E tests, zero
 console errors/warnings, stopped polling after bound approval, reload
 persistence, and no PR creation.
+
+### Phase 5 — live-provider fail-closed preflight
+
+- [`external-smoke.json`](../artifacts/evidence/phase-5/phase5-preflight-20260723T010926245Z/external-smoke.json)
+- [`manifest.sha256`](../artifacts/evidence/phase-5/phase5-preflight-20260723T010926245Z/manifest.sha256)
+
+The aggregate smoke preflight stopped before constructing any provider client
+because live authorization and credentials were absent. It records every
+required next action and makes no external-success claim.
 
 ### Phase 6 — final local P0 capture
 

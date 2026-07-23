@@ -152,8 +152,12 @@ Any failure can enter `FAILED`; a human can cancel the workflow. Approval binds
 the candidate ID, patch digest, evidence digest, policy version, source commit,
 approver, and timestamp. A change to any bound value invalidates approval.
 Critical/High CodeRabbit findings block readiness, and a repair must present a
-new full-validation result before it can return to approval. SafeFlash has no
-merge operation.
+new server-normalized receipt derived from live Daytona command evidence and a
+live Braintrust Experiment result before it can return to approval. The receipt
+binds the session, policy, patch digest, current sandbox, post-patch Git tree,
+scorer values, Experiment identity, repaired commit, target repository, and
+sponsor evidence references. Session state separately tracks the complete
+sandbox history and rejects reuse. SafeFlash has no merge operation.
 
 The current local session stops at `AWAITING_HUMAN_APPROVAL` after recording
 the decision. Its UI says **Approve evidence (no live PR)** and the backend
@@ -174,7 +178,8 @@ contract tests but no committed live request ID.
 
 The adapter creates one private sandbox per candidate, clones an exact commit,
 blocks network after the clone, uploads only a prevalidated patch, executes a
-fixed server-owned command policy, captures structured command evidence, and
+byte-for-byte frozen server-owned command policy, captures the patch digest and
+post-patch `git write-tree` identity with structured command evidence, and
 destroys the sandbox unless retention is explicitly enabled. Model-provided
 test names are descriptive and never become commands. The managed API endpoint
 is pinned to `https://app.daytona.io/api` to prevent key exfiltration. This code
@@ -191,10 +196,33 @@ exist in committed evidence.
 ### GitHub and CodeRabbit
 
 GitHub PR creation requires a current approval whose candidate, evidence
-digest, and commit exactly match the requested remote branch head. The adapter
-requires a public repository with reported push permission and creates or
-updates one stable session PR with fresh evidence, keeps it open and unmerged,
-and exposes no merge API.
+digest, commit, trusted Daytona/Braintrust receipt, and validated Git tree
+exactly match the published remote branch head. Before approval, a read-only
+preparation step fetches the immutable GitHub base tree and only the
+server-registered source blobs, applies the integrity-approved LF unified diff
+as pure data, and computes the resulting blob, tree, and deterministic commit
+object IDs. The computed tree must equal Daytona's `git write-tree` result;
+this step creates no GitHub object, branch, or PR. After approval, the adapter
+creates and verifies each blob, tree, and commit, then creates or fast-forwards
+the stable `safeflash/<session>` ref without requiring an externally pushed
+branch. It checks the configured base and stable ref before and after mutation
+to fail closed on races. The session fixes owner, repository, base branch, and
+base commit before approval. The adapter requires a public repository with
+reported push permission, keeps the PR open and unmerged, and exposes no merge
+API.
+
+Create/update additionally requires a short-lived, server-only
+`PublishAuthorization`. Its HMAC-SHA256 claims bind the session, candidate,
+patch and evidence digests, publication parent and target-base commits,
+approved commit, validated tree, complete prepared-publication digest, policy,
+exact owner/repository/base target, stable head branch, PR content digest,
+approval binding, validation receipt, and Daytona/Braintrust IDs and references. The
+GitHub adapter validates and atomically consumes the nonce before its first
+network call in the publication transaction; read-only source ingestion and
+preparation are separate and cannot mutate refs. Production uses an exclusive-create replay store below
+`.safeflash/`, so the same capability cannot be retried after success or
+failure; a new mutation needs a newly minted authorization. Test authorities
+are runtime-branded and cannot authorize an official SDK transport.
 
 The CodeRabbit adapter accepts only official bot/app identities, evidence for
 the exact PR head SHA, and an open unmerged PR against the configured base. It
@@ -210,8 +238,10 @@ real PR nor a CodeRabbit review has been verified in this workspace.
 | `live` | Captured from the named provider through its official SDK/API. | yes |
 | `recorded-live` | Replay of a prior live artifact with capture time and evidence reference. | only as recorded evidence |
 | `manual-verified` | Human attestation tied to a concrete review URL and actor. | no |
+| `server-owned` | A SafeFlash server state transition, not evidence from an external provider or human attestation. | no |
 | `local-test` | Real local execution or adapter contract test. | no |
 | `mock` | Fixture-generated behavior. | no |
+| `unknown` | Missing or unavailable capability/evidence; always unverified. | no |
 
 Live adapters require both `SAFEFLASH_ALLOW_LIVE=true` and their complete
 credential set. They fail closed and never silently downgrade to cached,
@@ -231,15 +261,32 @@ local-test, or mock results.
 - Daytona commands are fixed by the server, bounded by timeouts, and executed
   after network blocking.
 - Evidence is canonicalized and SHA-256 bound; persisted UI state is rejected
-  if it diverges from the event log.
+  if it diverges from the event log. These public SHA-256 digests detect
+  mutation but are not signatures and do not establish who produced evidence.
+- The PR publication trust boundary is the server-secret HMAC authorization,
+  exact approval/provider binding, and one-time nonce consumption; it is not
+  the public revalidation receipt digest.
 - Approval and review evidence are exact-revision objects, not mutable labels.
 - PR creation and merge are separate; SafeFlash never merges.
 
+### Current operator-authentication boundary
+
+The hackathon console is intended for localhost or an access-controlled demo
+network. Its create, decision, and retry endpoints do not yet authenticate an
+end user; `SAFEFLASH_APPROVER_ID` identifies the configured demo operator but
+is not an identity proof. Evidence binding prevents stale or changed patches
+from being approved, but it does not stop another caller who can reach the API
+from submitting a decision. Do not expose this build as a public approval
+service. A public deployment requires an identity/session layer, same-origin
+request enforcement, and an operator authorization policy; that product layer
+is outside the current P0 demo boundary.
+
 ## Known gaps
 
-1. The production session route currently runs the deterministic local
-   tournament only. Provider adapters are not yet composed into one live UI
-   orchestration path.
+1. The production live composition, async session API, progress observer,
+   approval binding, publication/review resume, and UI bridge are implemented
+   and locally contract-tested. This internal closure is not external provider
+   evidence.
 2. No Fireworks candidate, Daytona sandbox, Braintrust Dataset/Trace/
    Experiment, public GitHub PR, or CodeRabbit review is verified live.
 3. CopilotKit v2 state/HITL hooks are present, but `/api/copilotkit` returns a

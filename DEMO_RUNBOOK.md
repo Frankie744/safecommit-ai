@@ -219,14 +219,16 @@ Say:
 
 ## Live-mode promotion gate
 
-The current UI is not a full live-provider workflow. Do not choose a “Live”
-story merely because individual smoke checks pass. Promote the demo only after:
+The UI and production composition now implement the full live-provider control
+path and are locally contract-tested, but the committed demo evidence is still
+`local-test`. Do not choose a “Live” story merely because the code exists or
+individual smoke checks pass. Promote the demo only after:
 
 1. all five `npm run smoke:external -- --provider=...` commands return live,
    verified evidence;
-2. the server composes Fireworks generation, three Daytona validations,
-   Braintrust evaluation, approval-gated GitHub PR creation, and exact-head
-   CodeRabbit inspection into one state machine;
+2. the implemented server composition completes Fireworks generation, three
+   Daytona validations, Braintrust evaluation, approval-gated GitHub PR
+   creation, and exact-head CodeRabbit inspection in one real run;
 3. the UI displays the real request/sandbox/trace/experiment/PR/review IDs;
 4. a blocking CodeRabbit round causes a repair and full revalidation;
 5. the resulting run is captured, redacted, hashed, and replayable;
@@ -272,4 +274,3 @@ independent review gate.
 No. Patch integrity rejects test, CI, build-script, safety-policy, threshold,
 binary, symlink, delete, rename, traversal, shell, and network-download changes
 before execution.
-

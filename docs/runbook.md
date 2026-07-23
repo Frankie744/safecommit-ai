@@ -34,6 +34,12 @@ npm run typecheck
 Do not create `.env.local` for the local path. The deterministic local
 tournament does not need provider keys.
 
+Keep the demo bound to localhost or an access-controlled network. The current
+hackathon build evidence-binds approval actions but does not authenticate the
+caller of the create/decision/retry API routes. Do not expose those routes as a
+public approval service until an identity/session and operator-authorization
+layer is added.
+
 ## 3. Reproduce the unsafe baseline
 
 ```powershell
@@ -151,17 +157,20 @@ npm run verify:p0
 ```
 
 `verify:p0` refuses a dirty tree, strips provider credentials from child
-processes, binds the run to `git rev-parse HEAD`, and captures these four
+processes, binds the run to `git rev-parse HEAD`, and captures these five
 commands in order:
 
 1. `npm run typecheck`
-2. `npm run test`
-3. `npm run build`
+2. `npm run build` with non-secret server-only sentinel values
+3. `npm run test`
 4. `npm run test:e2e`
+5. `npm run test:secrets`
 
-It also reads the Vitest JSON report and requires all 14 specification P0 test
-names to be present and passing. The resulting redacted logs, Vitest report,
-P0 matrix, summary, and SHA-256 manifest are written below a timestamped
+It also requires all 14 specification P0 test names to be present and passing,
+rescans the final production bundle, saves only a redacted Vitest name/status
+projection, scans the staging package for actual environment secret values,
+and rechecks both `HEAD` and the clean tree before publication. The resulting
+redacted logs, P0 matrix, summary, and SHA-256 manifest are written below a timestamped
 `artifacts/evidence/phase-6/p0-verification-*/` directory, with
 `phase-6/latest-run.txt` pointing to the latest capture. A pass proves the full
 local contract only; its provenance notice explicitly excludes external live
@@ -207,6 +216,35 @@ Required live switch:
 ```text
 SAFEFLASH_ALLOW_LIVE=true
 ```
+
+GitHub PR create/update also requires a server-only publication capability
+key. Generate it locally; never paste it into the browser, evidence, logs, or a
+`NEXT_PUBLIC_` variable:
+
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
+```
+
+Store the result only in the untracked server environment:
+
+```text
+SAFEFLASH_PUBLISH_AUTH_SECRET=<generated base64url value>
+SAFEFLASH_PUBLISH_AUTH_TTL_MS=120000
+SAFEFLASH_PUBLISH_AUTH_REPLAY_DIR=.safeflash/publish-authorization-replay
+```
+
+The server mints an authorization only after validating the current approval
+and live Daytona/Braintrust receipt. A prior read-only GitHub preparation step
+applies the selected patch to immutable base blobs and requires its computed
+tree to equal Daytona; it does not pre-push a branch. The one-use authorization
+binds both base commits and the complete prepared-publication digest. GitHub
+consumes its nonce before the first request in the blob/tree/commit/ref/PR
+publication transaction, then verifies every returned object ID and rereads
+the configured base and stable branch around the ref update. After any
+create/update attempt, issue a fresh authorization rather than retrying the old
+token. The receipt's
+public SHA-256 `attestationDigest` is an integrity checksum, not an
+authenticity signature and not a substitute for this HMAC boundary.
 
 Provider variables:
 
@@ -262,16 +300,20 @@ Exit codes:
 - `1`: a provider call failed.
 
 At the current committed checkpoint, the expected result is exit code `2` with
-all five services blocked. Do not edit that output into a pass.
+all five services blocked. The redacted aggregate result is saved under
+`artifacts/evidence/phase-5/phase5-preflight-20260723T010926245Z/`. Do not edit
+that output into a pass.
 
 ### Important live-path limitation
 
-Passing the smoke checks validates individual provider adapters. It does **not**
-turn the current production session route into a full live orchestration path.
-`SessionService.create()` currently invokes the local deterministic tournament
-and marks it `mock/local-test`. A real end-to-end provider demo requires the
-adapters to be composed into the server workflow and then verified with fresh
-provider IDs, a PR URL, and an exact-head CodeRabbit result.
+The production live composition and `/api/sessions` mode selector are
+implemented and locally contract-tested. Exact `SAFEFLASH_DEFAULT_MODE=live`
+selects the server-only Fireworks -> Daytona -> Braintrust -> approval-gated
+GitHub -> CodeRabbit workflow; `mock` retains the deterministic local service,
+while unimplemented `cached` and unknown modes fail closed. This is not proof
+of an external live run. A real provider demo still requires credentials and
+repository/App authorization, then fresh provider IDs, a public PR URL, an
+exact-head CodeRabbit result, and captured evidence from one complete run.
 
 ## 9. Offline evidence fallback
 

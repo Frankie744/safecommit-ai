@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-23T01:09:26.245Z",
+  "provenance": "local-test",
+  "result": "blocked",
+  "services": [
+    {
+      "provider": "fireworks",
+      "status": "blocked",
+      "operation": "Generate one structured CandidatePatch using Fireworks inference.",
+      "externalEffects": [
+        "One metered model inference request; no repository mutation."
+      ],
+      "blockers": [
+        "SAFEFLASH_ALLOW_LIVE must equal true",
+        "FIREWORKS_API_KEY is required",
+        "FIREWORKS_MODEL is required"
+      ],
+      "reason": "Aggregate configuration preflight blocked before any provider client was constructed: SAFEFLASH_ALLOW_LIVE must equal true; FIREWORKS_API_KEY is required; FIREWORKS_MODEL is required.",
+      "nextAction": "Create a Fireworks API key, choose a structured-output model, then set FIREWORKS_API_KEY and FIREWORKS_MODEL."
+    },
+    {
+      "provider": "daytona",
+      "status": "blocked",
+      "operation": "Create one private, network-blocked ephemeral sandbox, run an exact local command, and delete it.",
+      "externalEffects": [
+        "One short-lived Daytona sandbox is created and synchronously deleted."
+      ],
+      "blockers": [
+        "SAFEFLASH_ALLOW_LIVE must equal true",
+        "DAYTONA_API_KEY is required"
+      ],
+      "reason": "Aggregate configuration preflight blocked before any provider client was constructed: SAFEFLASH_ALLOW_LIVE must equal true; DAYTONA_API_KEY is required.",
+      "nextAction": "Create a Daytona API key and set DAYTONA_API_KEY; leave DAYTONA_API_URL empty or set the official https://app.daytona.io/api endpoint, and optionally set DAYTONA_TARGET."
+    },
+    {
+      "provider": "braintrust",
+      "status": "blocked",
+      "operation": "Verify the safety dataset and write one smoke trace plus one one-case Experiment.",
+      "externalEffects": [
+        "Test-labelled Dataset rows, one Trace, and one Experiment are written to the configured Braintrust project."
+      ],
+      "blockers": [
+        "SAFEFLASH_ALLOW_LIVE must equal true",
+        "BRAINTRUST_API_KEY is required"
+      ],
+      "reason": "Aggregate configuration preflight blocked before any provider client was constructed: SAFEFLASH_ALLOW_LIVE must equal true; BRAINTRUST_API_KEY is required.",
+      "nextAction": "Create a Braintrust API key and set BRAINTRUST_API_KEY; optionally choose the smoke project and dataset names."
+    },
+    {
+      "provider": "github",
+      "status": "blocked",
+      "operation": "Read the authenticated identity and configured repository metadata/permissions.",
+      "externalEffects": [
+        "Read-only GitHub API calls; no branch, issue, PR, or merge mutation."
+      ],
+      "blockers": [
+        "SAFEFLASH_ALLOW_LIVE must equal true",
+        "GITHUB_TOKEN is required",
+        "GITHUB_OWNER is required",
+        "GITHUB_REPO is required"
+      ],
+      "reason": "Aggregate configuration preflight blocked before any provider client was constructed: SAFEFLASH_ALLOW_LIVE must equal true; GITHUB_TOKEN is required; GITHUB_OWNER is required; GITHUB_REPO is required.",
+      "nextAction": "Provide a fine-grained token for the public demo repository and set GITHUB_TOKEN, GITHUB_OWNER, and GITHUB_REPO."
+    },
+    {
+      "provider": "coderabbit",
+      "status": "blocked",
+      "operation": "Read one existing open PR, its exact-head reviews/comments, and its check runs once.",
+      "externalEffects": [
+        "Read-only GitHub API calls; no review trigger, comment, PR mutation, or merge mutation."
+      ],
+      "blockers": [
+        "SAFEFLASH_ALLOW_LIVE must equal true",
+        "GITHUB_TOKEN is required",
+        "GITHUB_OWNER is required",
+        "GITHUB_REPO is required",
+        "SAFEFLASH_SMOKE_PR_NUMBER is required",
+        "SAFEFLASH_SMOKE_PR_HEAD_SHA is required"
+      ],
+      "reason": "Aggregate configuration preflight blocked before any provider client was constructed: SAFEFLASH_ALLOW_LIVE must equal true; GITHUB_TOKEN is required; GITHUB_OWNER is required; GITHUB_REPO is required; SAFEFLASH_SMOKE_PR_NUMBER is required; SAFEFLASH_SMOKE_PR_HEAD_SHA is required.",
+      "nextAction": "Install CodeRabbit on the public demo repository, provide GitHub read credentials, and set an existing PR number plus its exact full head SHA."
+    }
+  ],
+  "safetyContract": [
+    "Configuration preflight completes before any provider client is constructed.",
+    "This smoke command never creates, updates, or merges a GitHub pull request.",
+    "Provider success is reported only for live evidence returned by the requested bounded operation."
+  ],
+  "claim": "No blocked or failed provider is claimed as successful."
+}

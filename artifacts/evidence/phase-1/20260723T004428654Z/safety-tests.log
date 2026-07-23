@@ -1,0 +1,51 @@
+COMMAND: D:\visual_studio\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe --test-dir F:\desktop\hackthon\artifacts\build\phase-1\20260723T004428654Z -C Debug -V -L safety --output-on-failure --no-tests=error
+EXIT_CODE: 8
+DURATION_MS: 202.006
+
+UpdateCTestConfiguration  from :F:/desktop/hackthon/artifacts/build/phase-1/20260723T004428654Z/DartConfiguration.tcl
+Test project F:/desktop/hackthon/artifacts/build/phase-1/20260723T004428654Z
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 2
+    Start 2: battery_safety_tests
+
+2: Test command: F:\desktop\hackthon\artifacts\build\phase-1\20260723T004428654Z\Debug\battery_safety_tests.exe
+2: Working Directory: F:/desktop/hackthon/artifacts/build/phase-1/20260723T004428654Z
+2: Test timeout computed to be: 5
+2:   expected charging=OFF latched=true fault=SENSOR_DISCONNECTED; observed charging=ON latched=false fault=0
+2: [FAIL] sensor_disconnect_enters_safe_state
+2: [PASS] below_minimum_temperature_enters_safe_state
+2: [PASS] above_maximum_temperature_enters_safe_state
+2:   expected charging=OFF latched=true fault=STALE_SAMPLE after 3 cycles; observed charging=ON latched=false fault=0 cycles=3
+2: [FAIL] stale_sample_limit_enters_safe_state
+2:   expected previous fault to remain latched until reset; observed charging=ON latched=false fault=0
+2: [FAIL] normal_sample_cannot_clear_latched_fault
+2: [PASS] explicit_reset_allows_controlled_recovery
+2: [SUMMARY] 3 passed, 3 failed
+1/1 Test #2: battery_safety_tests .............***Failed    0.05 sec
+  expected charging=OFF latched=true fault=SENSOR_DISCONNECTED; observed charging=ON latched=false fault=0
+[FAIL] sensor_disconnect_enters_safe_state
+[PASS] below_minimum_temperature_enters_safe_state
+[PASS] above_maximum_temperature_enters_safe_state
+  expected charging=OFF latched=true fault=STALE_SAMPLE after 3 cycles; observed charging=ON latched=false fault=0 cycles=3
+[FAIL] stale_sample_limit_enters_safe_state
+  expected previous fault to remain latched until reset; observed charging=ON latched=false fault=0
+[FAIL] normal_sample_cannot_clear_latched_fault
+[PASS] explicit_reset_allows_controlled_recovery
+[SUMMARY] 3 passed, 3 failed
+
+
+0% tests passed, 1 tests failed out of 1
+
+Label Time Summary:
+safety    =   0.05 sec*proc (1 test)
+
+Total Test time (real) =   0.08 sec
+
+The following tests FAILED:
+	  2 - battery_safety_tests (Failed)                     safety
+Errors while running CTest
