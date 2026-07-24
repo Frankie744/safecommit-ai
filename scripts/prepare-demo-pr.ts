@@ -53,7 +53,7 @@ export async function prepareDemoPullRequest(
       "External credential names reported without values",
     ],
     nextActions: [
-      "Install CodeRabbit only on Frankie744/safeflash-ai with the minimum repository access approved by the operator.",
+      "Verify the existing CodeRabbit installation and exact-head review through npm run rehearsal.",
       "Configure server-only competition-day environment variables outside Git.",
       "Run bounded provider smoke checks and retain real evidence before any LIVE_CERTIFIED claim.",
       "Use the separately approval-gated live workflow to create or update the demo pull request.",

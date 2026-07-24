@@ -21,6 +21,8 @@ DAYTONA_API_KEY=
 BRAINTRUST_API_KEY=
 GITHUB_TOKEN=
 SAFEFLASH_PUBLISH_AUTH_SECRET=
+SAFEFLASH_RECORDED_LIVE_SIGNING_KEY=
+FIREWORKS_MODEL=
 GITHUB_OWNER=Frankie744
 GITHUB_REPO=safeflash-ai
 GITHUB_BASE_BRANCH=main
@@ -115,8 +117,11 @@ describe("Phase 7A read-only launch readiness", () => {
         "BRAINTRUST_API_KEY",
         "GITHUB_TOKEN",
         "SAFEFLASH_PUBLISH_AUTH_SECRET",
+        "SAFEFLASH_RECORDED_LIVE_SIGNING_KEY",
       ],
       configuredSecretEnvironment: ["FIREWORKS_API_KEY"],
+      missingNonSecretEnvironment: ["FIREWORKS_MODEL"],
+      configuredNonSecretEnvironment: [],
     });
     expect(output).toContain("PHASE_7A_RESULT=CREDENTIAL_READY");
     expect(output).toContain("LIVE_CERTIFIED=NO");

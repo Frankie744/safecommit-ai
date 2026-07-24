@@ -20,6 +20,11 @@ export const PHASE_7A_SECRET_ENVIRONMENT = [
   "BRAINTRUST_API_KEY",
   "GITHUB_TOKEN",
   "SAFEFLASH_PUBLISH_AUTH_SECRET",
+  "SAFEFLASH_RECORDED_LIVE_SIGNING_KEY",
+] as const;
+
+export const PHASE_7A_NON_SECRET_RUNTIME_ENVIRONMENT = [
+  "FIREWORKS_MODEL",
 ] as const;
 
 export interface ReadonlyCommandResult {
@@ -54,6 +59,8 @@ export interface DayOfCheckReport {
   authenticatedOwner: string;
   missingSecretEnvironment: readonly string[];
   configuredSecretEnvironment: readonly string[];
+  missingNonSecretEnvironment: readonly string[];
+  configuredNonSecretEnvironment: readonly string[];
 }
 
 interface RepositoryMetadata {
@@ -141,6 +148,11 @@ function assertExpectedConfiguration(
   for (const key of PHASE_7A_SECRET_ENVIRONMENT) {
     if (example.get(key) !== "") {
       fail(`.env.example ${key} must exist with an empty value`);
+    }
+  }
+  for (const key of PHASE_7A_NON_SECRET_RUNTIME_ENVIRONMENT) {
+    if (!example.has(key)) {
+      fail(`.env.example ${key} must exist`);
     }
   }
 }
@@ -384,6 +396,14 @@ export async function runDayOfCheck(
   const configuredSecretEnvironment = PHASE_7A_SECRET_ENVIRONMENT.filter(
     (key) => !missingSecretEnvironment.includes(key),
   );
+  const missingNonSecretEnvironment =
+    PHASE_7A_NON_SECRET_RUNTIME_ENVIRONMENT.filter(
+      (key) => (environment[key]?.trim().length ?? 0) === 0,
+    );
+  const configuredNonSecretEnvironment =
+    PHASE_7A_NON_SECRET_RUNTIME_ENVIRONMENT.filter(
+      (key) => !missingNonSecretEnvironment.includes(key),
+    );
 
   return {
     result: "CREDENTIAL_READY",
@@ -397,6 +417,8 @@ export async function runDayOfCheck(
     authenticatedOwner,
     missingSecretEnvironment,
     configuredSecretEnvironment,
+    missingNonSecretEnvironment,
+    configuredNonSecretEnvironment,
   };
 }
 
@@ -415,6 +437,8 @@ export function formatDayOfCheck(report: DayOfCheckReport): string {
     "REMOTE_SHA_MATCH=PASS",
     `MISSING_SECRET_ENV_VARS=${report.missingSecretEnvironment.join(",") || "NONE"}`,
     `CONFIGURED_SECRET_ENV_VARS=${report.configuredSecretEnvironment.join(",") || "NONE"}`,
+    `MISSING_NON_SECRET_ENV_VARS=${report.missingNonSecretEnvironment.join(",") || "NONE"}`,
+    `CONFIGURED_NON_SECRET_ENV_VARS=${report.configuredNonSecretEnvironment.join(",") || "NONE"}`,
     "MUTATIONS_PERFORMED=NO",
   ].join("\n");
 }
