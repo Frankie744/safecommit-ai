@@ -19,6 +19,7 @@ import {
 
 import {
   createDaytonaClient,
+  isRetryableDaytonaFailure,
   readDaytonaConfig,
   type DaytonaClientPort,
   type DaytonaConfig,
@@ -275,6 +276,32 @@ export class SafeCommitDaytonaAdapter {
   async validateCandidate(
     input: SafeCommitDaytonaRequest,
   ): Promise<ProviderEnvelope<SafeCommitDaytonaEvidence>> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        return await this.validateCandidateAttempt(input);
+      } catch (error) {
+        lastError = error;
+        if (
+          attempt >= 2 ||
+          !(error instanceof ProviderResponseError) ||
+          !error.retryable
+        ) {
+          throw error;
+        }
+      }
+    }
+    throw new ProviderResponseError(
+      "daytona",
+      "SafeCommit Daytona exhausted validation attempts",
+      false,
+      { cause: lastError },
+    );
+  }
+
+  private async validateCandidateAttempt(
+    input: SafeCommitDaytonaRequest,
+  ): Promise<ProviderEnvelope<SafeCommitDaytonaEvidence>> {
     const request = structuredClone(input);
     assertRequest(request);
     let sandbox: DaytonaSandboxPort | undefined;
@@ -401,7 +428,7 @@ export class SafeCommitDaytonaAdapter {
       throw new ProviderResponseError(
         "daytona",
         "SafeCommit Daytona validation failed",
-        false,
+        isRetryableDaytonaFailure(error),
         { cause: error },
       );
     }

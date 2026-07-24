@@ -430,7 +430,7 @@ function daytonaFailureStatus(error: unknown, depth = 0): number | undefined {
   );
 }
 
-function isRetryableDaytonaFailure(error: unknown): boolean {
+export function isRetryableDaytonaFailure(error: unknown): boolean {
   if (error instanceof ProviderResponseError) return error.retryable;
   const status = daytonaFailureStatus(error);
   if (status !== undefined) {

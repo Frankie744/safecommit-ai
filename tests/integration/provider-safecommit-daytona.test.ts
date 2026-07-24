@@ -94,6 +94,7 @@ describe("SafeCommit Daytona database adapter", () => {
     const commands: string[] = [];
     const uploads: string[] = [];
     let networkBlocked = false;
+    let creates = 0;
     let deletes = 0;
     const sandbox: DaytonaSandboxPort = {
       id: sandboxId,
@@ -125,6 +126,12 @@ describe("SafeCommit Daytona database adapter", () => {
     const client: DaytonaClientPort = {
       transport: "local-test",
       async create(params) {
+        creates += 1;
+        if (creates === 1) {
+          throw Object.assign(new Error("connection reset"), {
+            code: "ECONNRESET",
+          });
+        }
         expect(params.snapshot).toBe("safecommit-openboxes-mysql-v1");
         expect(params.ephemeral).toBe(true);
         expect(params.public).toBe(false);
@@ -164,6 +171,7 @@ describe("SafeCommit Daytona database adapter", () => {
     });
 
     expect(result.provenance.kind).toBe("local-test");
+    expect(creates).toBe(2);
     expect(result.data.destroyed).toBe(true);
     expect(result.data.planDigest).toBe(
       computeEvidenceDigest(committed.plan),
