@@ -148,55 +148,54 @@ export async function main(): Promise<void> {
     );
   }
 
-  const validated = await Promise.all(
-    generated.map(async (candidate, index) => {
-      const runId = `daytona-${index + 1}-${randomUUID()}`;
-      const result = await daytona.validateCandidate({
-        sessionId,
-        runId,
-        sourceCommitSha,
-        repositoryUrl,
-        sourceBundle,
-        sourceBundleDigest,
-        candidate: candidate.data.candidate,
-        intentContract: profile.intentContract,
-        profile: {
-          profileId: profile.profileId,
-          fixtureSourceDigest: profile.fixtureSourceDigest,
-          schemaFingerprint: profile.schemaFingerprint,
-        },
-      });
-      const qualityScores = computeDatabaseQualityScores(
-        candidate.data.candidate,
-        result.data.databaseEvidence,
-        result.data.gates,
-      );
-      return {
-        plan: candidate.data.candidate,
-        evidence: result.data.databaseEvidence,
-        gates: result.data.gates,
-        qualityScores,
-        weightedScore: computeDatabaseWeightedScore(qualityScores),
-        fireworks: {
-          requestId: candidate.data.requestId,
-          requestDigest: candidate.data.requestDigest,
-          model: candidate.data.model,
-          latencyMs: candidate.data.latencyMs,
-          totalTokens: candidate.data.totalTokens,
-          finishReason: candidate.data.finishReason,
-        },
-        daytona: {
-          sandboxId: result.data.sandboxId,
-          runId: result.data.runId,
-          snapshotName: result.data.snapshotName,
-          sourceBundleDigest: result.data.sourceBundleDigest,
-          networkBlockedBeforeExecution:
-            result.data.networkBlockedBeforeExecution,
-          destroyed: result.data.destroyed,
-        },
-      };
-    }),
-  );
+  const validated = [];
+  for (const [index, candidate] of generated.entries()) {
+    const runId = `daytona-${index + 1}-${randomUUID()}`;
+    const result = await daytona.validateCandidate({
+      sessionId,
+      runId,
+      sourceCommitSha,
+      repositoryUrl,
+      sourceBundle,
+      sourceBundleDigest,
+      candidate: candidate.data.candidate,
+      intentContract: profile.intentContract,
+      profile: {
+        profileId: profile.profileId,
+        fixtureSourceDigest: profile.fixtureSourceDigest,
+        schemaFingerprint: profile.schemaFingerprint,
+      },
+    });
+    const qualityScores = computeDatabaseQualityScores(
+      candidate.data.candidate,
+      result.data.databaseEvidence,
+      result.data.gates,
+    );
+    validated.push({
+      plan: candidate.data.candidate,
+      evidence: result.data.databaseEvidence,
+      gates: result.data.gates,
+      qualityScores,
+      weightedScore: computeDatabaseWeightedScore(qualityScores),
+      fireworks: {
+        requestId: candidate.data.requestId,
+        requestDigest: candidate.data.requestDigest,
+        model: candidate.data.model,
+        latencyMs: candidate.data.latencyMs,
+        totalTokens: candidate.data.totalTokens,
+        finishReason: candidate.data.finishReason,
+      },
+      daytona: {
+        sandboxId: result.data.sandboxId,
+        runId: result.data.runId,
+        snapshotName: result.data.snapshotName,
+        sourceBundleDigest: result.data.sourceBundleDigest,
+        networkBlockedBeforeExecution:
+          result.data.networkBlockedBeforeExecution,
+        destroyed: result.data.destroyed,
+      },
+    });
+  }
 
   const tournamentCandidates: DatabaseTournamentCandidate[] = validated.map(
     ({ plan, evidence, gates, qualityScores, weightedScore }) => ({
