@@ -356,7 +356,7 @@ async function build() {
         <div class="candidate-grid">${candidates}</div>
       </section>
       <section id="live">
-        <div class="section-head"><div><p class="eyebrow">Live sponsor provenance</p><h2>Three providers. One bound run.</h2></div><p>Run <code>${escapeHtml(liveRunId)}</code><br>Status <code>${escapeHtml(liveEvidence.status)}</code></p></div>
+        <div class="section-head"><div><p class="eyebrow">Live sponsor provenance</p><h2>Three providers. One bound run.</h2></div><p>Run <code>${escapeHtml(liveRunId)}</code><br>Provider snapshot <code>${escapeHtml(liveEvidence.status)}</code><br>Bound approval <code>${escapeHtml(approvalEvidence.status)}</code></p></div>
         <div class="boundary">
           <article><h3>Fireworks + Daytona</h3><p>Fireworks model <code>${escapeHtml(liveEvidence.candidates[0].fireworks.model)}</code> generated three structured plans. Each ran from the same MySQL snapshot in a network-blocked Daytona sandbox; all sandboxes were destroyed.</p><p>${liveRequestIds}</p><p>${liveSandboxIds}</p></article>
           <article><h3>Braintrust Direct vs Gated</h3><p>Direct selected <code>${escapeHtml(directSelection.selectedCandidateId)}</code> at ${directSelection.weightedScore.toFixed(4)}, but failed ${escapeHtml(directSelection.failedGateNames.join(" · "))}. SafeCommit selected <code>${escapeHtml(gatedSelection.selectedCandidateId)}</code> at ${gatedSelection.weightedScore.toFixed(4)} after every hard gate passed.</p><div class="actions"><a class="button" href="${escapeHtml(liveEvidence.braintrust.dataset.datasetUrl)}">Dataset</a><a class="button" href="${escapeHtml(liveEvidence.braintrust.trace.traceUrl)}">Trace</a><a class="button" href="${escapeHtml(liveEvidence.braintrust.baselineExperiment.experimentUrl)}">Direct baseline</a><a class="button primary" href="${escapeHtml(liveEvidence.braintrust.gatedExperiment.experimentUrl)}">SafeCommit gated</a></div></article>
@@ -380,6 +380,7 @@ async function build() {
           <a class="button" href="evidence/live-manifest.sha256">Live SHA-256 manifest</a>
           <a class="button" href="evidence/database-approval.json">Human approval receipt</a>
           <a class="button" href="evidence/approval-manifest.sha256">Approval SHA-256 manifest</a>
+          <a class="button" href="https://github.com/Frankie744/safeflash-ai/commit/${liveEvidence.sourceCommitSha}">Inspect live source commit</a>
           <a class="button" href="https://github.com/Frankie744/safeflash-ai/commit/${summary.sourceCommitSha}">Inspect evidence source commit</a>
         </div>
       </section>
