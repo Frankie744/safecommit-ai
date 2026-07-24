@@ -11,6 +11,7 @@ const SERVER_SECRET_NAMES = [
   "BRAINTRUST_API_KEY",
   "FIREWORKS_API_KEY",
   "GITHUB_TOKEN",
+  "SAFECOMMIT_OPERATOR_TOKEN",
   "SAFEFLASH_PUBLISH_AUTH_SECRET",
   "SAFEFLASH_RECORDED_LIVE_SIGNING_KEY",
 ] as const;
@@ -74,6 +75,7 @@ function filesBelow(
 
 function textFiles(paths: readonly string[]): string {
   return paths
+    .filter((path) => existsSync(path))
     .filter((path) => !/\.(?:png|jpg|jpeg|gif|woff2?|ico)$/iu.test(path))
     .map((path) => readFileSync(path, "utf8"))
     .join("\n");

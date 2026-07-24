@@ -1,10 +1,10 @@
-import { SafeFlashCopilotProvider } from "../components/copilot-provider";
-import { SafeFlashConsole } from "../components/safeflash-console";
+import { SafeCommitCopilotProvider } from "../components/copilot-provider";
+import { SafeCommitConsole } from "../components/safecommit-console";
 
 export default function HomePage() {
   return (
-    <SafeFlashCopilotProvider>
-      <SafeFlashConsole />
-    </SafeFlashCopilotProvider>
+    <SafeCommitCopilotProvider>
+      <SafeCommitConsole />
+    </SafeCommitCopilotProvider>
   );
 }

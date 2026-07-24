@@ -12,6 +12,12 @@ const nextConfig: NextConfig = {
       "../../fixtures/battery-controller/**/*",
       "../../demo/candidate-patches/**/*",
     ],
+    "/api/database-sessions": [
+      "../../fixtures/logistics-mysql/**/*",
+    ],
+    "/api/database-sessions/*": [
+      "../../fixtures/logistics-mysql/**/*",
+    ],
   },
   outputFileTracingExcludes: {
     "/api/sessions": ["../../apps/web/next.config.ts"],

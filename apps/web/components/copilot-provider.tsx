@@ -3,7 +3,7 @@
 import { CopilotKitProvider, HttpAgent } from "@copilotkit/react-core/v2";
 import { useMemo, type ReactNode } from "react";
 
-export function SafeFlashCopilotProvider({
+export function SafeCommitCopilotProvider({
   children,
 }: {
   children: ReactNode;
@@ -11,14 +11,14 @@ export function SafeFlashCopilotProvider({
   const agent = useMemo(
     () =>
       new HttpAgent({
-        agentId: "safeflash",
+        agentId: "safecommit",
         description:
-          "SafeFlash evidence console agent. High-risk decisions remain server-gated.",
+          "SafeCommit database evidence agent. Hard gates and approval remain server-owned.",
         url: "/api/copilotkit",
       }),
     [],
   );
-  const agents = useMemo(() => ({ safeflash: agent }), [agent]);
+  const agents = useMemo(() => ({ safecommit: agent }), [agent]);
 
   return (
     <CopilotKitProvider agents__unsafe_dev_only={agents}>
@@ -26,3 +26,5 @@ export function SafeFlashCopilotProvider({
     </CopilotKitProvider>
   );
 }
+
+export const SafeFlashCopilotProvider = SafeCommitCopilotProvider;

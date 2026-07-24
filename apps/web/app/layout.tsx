@@ -4,9 +4,9 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SafeFlash — Firmware Safety Gate",
+  title: "SafeCommit — Database State Gate",
   description:
-    "Executable safety evidence for AI-generated firmware patches before hardware.",
+    "The commit gate for AI database agents: execute, prove, approve.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
