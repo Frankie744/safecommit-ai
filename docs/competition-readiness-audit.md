@@ -89,7 +89,7 @@ IDs they remain `BLOCKED`, not `LIVE`.
    `DAYTONA_DATABASE_SNAPSHOT`, `DAYTONA_DATABASE_MYSQL_URL`,
    `BRAINTRUST_API_KEY`.
 3. Confirm CodeRabbit GitHub App authorization on
-   `Frankie744/safeflash-ai`.
+   `Frankie744/safecommit-ai`.
 4. Authorize a Daytona App Sandbox deployment and operator access strategy.
 5. Restore the Codex runtime package `@oai/artifact-tool` for PPTX generation.
 

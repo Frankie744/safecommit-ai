@@ -4,7 +4,7 @@
 
 This installation is authorized only for:
 
-<https://github.com/Frankie744/safeflash-ai>
+<https://github.com/Frankie744/safecommit-ai>
 
 The repository owner must complete the GitHub App login, permission review, and
 installation themselves. SafeFlash and its automation must not install the App,
@@ -25,7 +25,7 @@ completed their real external smoke checks with recorded provider evidence.
    `Frankie744`. Do not select an organization.
 3. Under repository access, choose **Only select repositories**. Do not choose
    **All repositories**.
-4. Select only `safeflash-ai` and confirm that no other repository is listed.
+4. Select only `safecommit-ai` and confirm that no other repository is listed.
 5. Review GitHub's permission screen before accepting. CodeRabbit's official
    guide currently documents read-only access to Actions, checks, discussions,
    members, and metadata, plus read/write access to code, commit statuses,
@@ -34,7 +34,7 @@ completed their real external smoke checks with recorded provider evidence.
    an existing installation). The agent must not perform or widen this
    authorization on the user's behalf.
 7. Return to the installation settings and verify that repository access still
-   lists only `Frankie744/safeflash-ai`.
+   lists only `Frankie744/safecommit-ai`.
 
 If an existing installation includes additional repositories, stop. Do not
 remove or alter those grants as part of SafeFlash Phase 7A; the account owner
@@ -43,7 +43,7 @@ must decide how to handle them.
 ## Verify a review on the exact PR head
 
 Use a real, open, unmerged pull request in
-`Frankie744/safeflash-ai` whose base branch is `main`. CodeRabbit normally
+`Frankie744/safecommit-ai` whose base branch is `main`. CodeRabbit normally
 reviews a new pull request automatically and performs incremental reviews after
 new commits, as described in its [pull-request review
 overview](https://docs.coderabbit.ai/overview/pull-request-review). If a manual
@@ -56,7 +56,7 @@ After CodeRabbit finishes:
 
 1. Read the PR number and its current immutable Git head SHA from GitHub.
 2. Confirm the PR is still open and unmerged, targets `main`, and belongs to
-   exactly `Frankie744/safeflash-ai`.
+   exactly `Frankie744/safecommit-ai`.
 3. Set these server-only runtime variables locally; do not commit them:
 
    ```text

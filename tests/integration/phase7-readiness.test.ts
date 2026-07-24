@@ -24,7 +24,7 @@ SAFEFLASH_PUBLISH_AUTH_SECRET=
 SAFEFLASH_RECORDED_LIVE_SIGNING_KEY=
 FIREWORKS_MODEL=
 GITHUB_OWNER=Frankie744
-GITHUB_REPO=safeflash-ai
+GITHUB_REPO=safecommit-ai
 GITHUB_BASE_BRANCH=main
 GITHUB_EXPECT_PUBLIC=true
 SAFEFLASH_CERTIFIED_MAIN_SHA=${HEAD}
@@ -56,10 +56,10 @@ function successfulHarness(): {
     ["gh auth status --hostname github.com --active", ""],
     ["gh api user --jq .login", "Frankie744"],
     [
-      "gh repo view Frankie744/safeflash-ai --json owner,name,visibility,isFork,isArchived,url,defaultBranchRef",
+      "gh repo view Frankie744/safecommit-ai --json owner,name,visibility,isFork,isArchived,url,defaultBranchRef",
       JSON.stringify({
         owner: { login: "Frankie744" },
-        name: "safeflash-ai",
+        name: "safecommit-ai",
         visibility: "PUBLIC",
         isFork: false,
         isArchived: false,
@@ -140,7 +140,7 @@ describe("Phase 7A read-only launch readiness", () => {
       "git ls-remote --exit-code origin refs/heads/main",
       "gh auth status --hostname github.com --active",
       "gh api user --jq .login",
-      "gh repo view Frankie744/safeflash-ai --json owner,name,visibility,isFork,isArchived,url,defaultBranchRef",
+      "gh repo view Frankie744/safecommit-ai --json owner,name,visibility,isFork,isArchived,url,defaultBranchRef",
     ]);
   });
 
@@ -198,7 +198,7 @@ describe("Phase 7A read-only launch readiness", () => {
       }),
     ).rejects.toThrow(/not authenticated as Frankie744/u);
     expect(harness.calls).not.toContain(
-      "gh repo view Frankie744/safeflash-ai --json owner,name,visibility,isFork,isArchived,url,defaultBranchRef",
+      "gh repo view Frankie744/safecommit-ai --json owner,name,visibility,isFork,isArchived,url,defaultBranchRef",
     );
   });
 

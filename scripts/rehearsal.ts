@@ -16,8 +16,8 @@ const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const EXPECTED = Object.freeze({
   owner: "Frankie744",
-  repository: "safeflash-ai",
-  remote: "https://github.com/Frankie744/safeflash-ai.git",
+  repository: "safecommit-ai",
+  remote: "https://github.com/Frankie744/safecommit-ai.git",
   baseBranch: "main",
   certifiedMain: "6402e26db834069946aaab4391e8ef2dd224ad5e",
   pullNumber: 1,

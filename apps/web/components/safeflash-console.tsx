@@ -76,7 +76,7 @@ const NARRATIVE_SECTIONS = [
 ] as const;
 
 const CERTIFIED_REVIEW_BOUNDARY = {
-  pullRequestUrl: "https://github.com/Frankie744/safeflash-ai/pull/1",
+  pullRequestUrl: "https://github.com/Frankie744/safecommit-ai/pull/1",
   certifiedMainSha: "6402e26db834069946aaab4391e8ef2dd224ad5e",
   approvedRepairHead: "5b418b7eeac67e433609d0a0ca5ab6309bd4fe32",
 } as const;
@@ -974,7 +974,7 @@ function RepairLoopSection({ session }: { session: SessionView | null }) {
             rel="noreferrer"
             target="_blank"
           >
-            Frankie744/safeflash-ai · PR #1 ↗
+            Frankie744/safecommit-ai · PR #1 ↗
           </a>
           <ol className="review-rounds">
             <li>

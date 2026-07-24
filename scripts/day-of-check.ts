@@ -8,10 +8,10 @@ const execFile = promisify(execFileCallback);
 
 export const PHASE_7A_REPOSITORY = {
   owner: "Frankie744",
-  name: "safeflash-ai",
+  name: "safecommit-ai",
   baseBranch: "main",
-  url: "https://github.com/Frankie744/safeflash-ai",
-  remote: "https://github.com/Frankie744/safeflash-ai.git",
+  url: "https://github.com/Frankie744/safecommit-ai",
+  remote: "https://github.com/Frankie744/safecommit-ai.git",
 } as const;
 
 export const PHASE_7A_SECRET_ENVIRONMENT = [

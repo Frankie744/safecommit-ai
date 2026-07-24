@@ -164,7 +164,7 @@ review gate capable of challenging the agent's selected patch.
 
 **Current proof boundary:** GitHub/CodeRabbit behavior is contract-tested and
 the public source repository is available at
-`https://github.com/Frankie744/safeflash-ai`. No demo PR or live CodeRabbit
+`https://github.com/Frankie744/safecommit-ai`. No demo PR or live CodeRabbit
 review is claimed because a server-side GitHub token and the repository-scoped
 App installation are not configured.
 
@@ -351,7 +351,7 @@ blindly trust it.”
 ## Submission fields still blocked
 
 - Public GitHub repository URL:
-  **https://github.com/Frankie744/safeflash-ai**
+  **https://github.com/Frankie744/safecommit-ai**
 - Live Fireworks request/model evidence: **requires API key and model choice**
 - Live Daytona sandbox evidence: **requires API key/account**
 - Live Braintrust Dataset/Trace/Experiment links: **requires API key/account**

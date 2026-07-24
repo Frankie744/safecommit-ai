@@ -126,7 +126,7 @@ Then:
 1. Stop waiting for the provider UI.
 2. Open the deterministic console or last committed screenshot.
 3. Show the candidate hard-gate decision and evidence-bound approval.
-4. Open [PR #1](https://github.com/Frankie744/safeflash-ai/pull/1) only if the
+4. Open [PR #1](https://github.com/Frankie744/safecommit-ai/pull/1) only if the
    page is already available; otherwise use the prepared captured artifact.
 5. Close with `LIVE_CERTIFIED=NO`.
 

@@ -380,8 +380,8 @@ async function build() {
           <a class="button" href="evidence/live-manifest.sha256">Live SHA-256 manifest</a>
           <a class="button" href="evidence/database-approval.json">Human approval receipt</a>
           <a class="button" href="evidence/approval-manifest.sha256">Approval SHA-256 manifest</a>
-          <a class="button" href="https://github.com/Frankie744/safeflash-ai/commit/${liveEvidence.sourceCommitSha}">Inspect live source commit</a>
-          <a class="button" href="https://github.com/Frankie744/safeflash-ai/commit/${summary.sourceCommitSha}">Inspect evidence source commit</a>
+          <a class="button" href="https://github.com/Frankie744/safecommit-ai/commit/${liveEvidence.sourceCommitSha}">Inspect live source commit</a>
+          <a class="button" href="https://github.com/Frankie744/safecommit-ai/commit/${summary.sourceCommitSha}">Inspect evidence source commit</a>
         </div>
       </section>
     </main>

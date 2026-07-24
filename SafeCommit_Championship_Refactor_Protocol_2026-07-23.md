@@ -3,7 +3,7 @@
 版本：1.0  
 日期：2026-07-23  
 目标仓库：`F:\desktop\hackthon`  
-远程仓库：`https://github.com/Frankie744/safeflash-ai`  
+远程仓库：`https://github.com/Frankie744/safecommit-ai`
 目标产品名：**SafeCommit**  
 产品副标题：**The commit gate for AI database agents.**
 
@@ -751,7 +751,7 @@ SafeCompletionRate =
 
 - 分支：`safeflash/competition-hardening-20260723`
 - HEAD：`afe304b8562d0e9b84c881c4aab8b005637e5138`
-- 远程：`https://github.com/Frankie744/safeflash-ai.git`
+- 远程：`https://github.com/Frankie744/safecommit-ai.git`
 - 完整 Provider 链仍不得宣称 `LIVE_CERTIFIED=YES`
 
 执行时必须重新验证，因为这些值可能已经变化。
@@ -891,7 +891,7 @@ DAYTONA_API_KEY
 BRAINTRUST_API_KEY
 GITHUB_TOKEN
 GITHUB_OWNER=Frankie744
-GITHUB_REPO=safeflash-ai
+GITHUB_REPO=safecommit-ai
 GITHUB_BASE_BRANCH=main
 SAFEFLASH_ALLOW_LIVE=true
 SAFEFLASH_PUBLISH_AUTH_SECRET
@@ -899,7 +899,7 @@ SAFEFLASH_RECORDED_LIVE_SIGNING_KEY
 SAFECOMMIT_OPERATOR_TOKEN
 ```
 
-`Frankie744/safeflash-ai` 是仓库坐标，不是 GitHub 认证 Key。必须另行提供具备最小 Repository 权限的 `GITHUB_TOKEN`，或使用已登录的 GitHub CLI。CodeRabbit GitHub App 也必须对该仓库完成授权。
+`Frankie744/safecommit-ai` 是仓库坐标，不是 GitHub 认证 Key。必须另行提供具备最小 Repository 权限的 `GITHUB_TOKEN`，或使用已登录的 GitHub CLI。CodeRabbit GitHub App 也必须对该仓库完成授权。
 
 ### 14.2 重构前安全保存
 
