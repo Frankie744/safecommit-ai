@@ -81,12 +81,17 @@ export interface SafeCommitBraintrustExperimentEvidence {
   }[];
 }
 
+export interface SafeCommitBraintrustDatasetEvidence
+  extends BraintrustDatasetEvidence {
+  corpusVersion: typeof LOGISTICS_MUTATION_DATASET_VERSION;
+}
+
 export interface SafeCommitBraintrustPort {
   readonly transport: ProviderTransport;
   seedDataset(
     config: BraintrustConfig,
     cases: readonly LogisticsMutationCase[],
-  ): Promise<BraintrustDatasetEvidence>;
+  ): Promise<SafeCommitBraintrustDatasetEvidence>;
   writeTrace(
     config: BraintrustConfig,
     event: {
@@ -301,6 +306,7 @@ export function createSafeCommitBraintrustPort(): SafeCommitBraintrustPort {
         datasetId: assertRemote("dataset ID", datasetId),
         datasetName: assertRemote("dataset name", summary.datasetName),
         datasetVersion: assertRemote("dataset version", version),
+        corpusVersion: LOGISTICS_MUTATION_DATASET_VERSION,
         datasetUrl: assertRemote("dataset URL", summary.datasetUrl, true),
         rowIds: rowIds.map((id) => assertRemote("Dataset row ID", id)),
         totalRecords: summary.dataSummary.totalRecords,
@@ -471,12 +477,14 @@ export function createSafeCommitBraintrustPort(): SafeCommitBraintrustPort {
 }
 
 function validateDataset(
-  evidence: BraintrustDatasetEvidence,
-): BraintrustDatasetEvidence {
+  evidence: SafeCommitBraintrustDatasetEvidence,
+): SafeCommitBraintrustDatasetEvidence {
   assertRemote("dataset ID", evidence.datasetId);
+  assertRemote("dataset name", evidence.datasetName);
+  assertRemote("dataset version", evidence.datasetVersion);
   assertRemote("dataset URL", evidence.datasetUrl, true);
   if (
-    evidence.datasetVersion !== LOGISTICS_MUTATION_DATASET_VERSION ||
+    evidence.corpusVersion !== LOGISTICS_MUTATION_DATASET_VERSION ||
     evidence.totalRecords < LOGISTICS_MUTATION_CASES.length ||
     evidence.rowIds.length < LOGISTICS_MUTATION_CASES.length ||
     new Set(evidence.rowIds).size !== evidence.rowIds.length

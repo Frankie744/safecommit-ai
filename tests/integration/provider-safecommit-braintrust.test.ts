@@ -63,7 +63,8 @@ describe("SafeCommit Braintrust integration", () => {
         return {
           datasetId: "dataset-safecommit-1",
           datasetName: CONFIG.datasetName,
-          datasetVersion: LOGISTICS_MUTATION_DATASET_VERSION,
+          datasetVersion: "remote-version-1",
+          corpusVersion: LOGISTICS_MUTATION_DATASET_VERSION,
           datasetUrl: "https://www.braintrust.dev/app/dataset-safecommit-1",
           rowIds: cases.map((item) => `row-${item.id}`),
           totalRecords: cases.length,
