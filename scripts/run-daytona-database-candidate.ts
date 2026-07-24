@@ -4,10 +4,8 @@ import {
   CandidateChangePlanSchema,
   IntentContractSchema,
 } from "@safeflash/domain";
-import {
-  loadSafeCommitDatabaseProfile,
-  runLocalMysqlCandidate,
-} from "@safeflash/orchestrator";
+import { loadSafeCommitDatabaseProfile } from "../apps/orchestrator/src/database-profile";
+import { runLocalMysqlCandidate } from "../apps/orchestrator/src/mysql-runner";
 
 function required(name: string): string {
   const value = process.env[name]?.trim();

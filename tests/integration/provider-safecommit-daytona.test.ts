@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 
 import {
@@ -93,7 +94,6 @@ describe("SafeCommit Daytona database adapter", () => {
     };
     const commands: string[] = [];
     const uploads: string[] = [];
-    let networkBlocked = false;
     let creates = 0;
     let deletes = 0;
     const sandbox: DaytonaSandboxPort = {
@@ -107,6 +107,15 @@ describe("SafeCommit Daytona database adapter", () => {
       process: {
         async executeCommand(command) {
           commands.push(command);
+          if (command.startsWith("node -e")) {
+            return { exitCode: 0, result: "" };
+          }
+          if (command.startsWith("git checkout --detach")) {
+            return { exitCode: 0, result: "" };
+          }
+          if (command.startsWith("git clone /tmp/")) {
+            return { exitCode: 0, result: "" };
+          }
           if (command === "git rev-parse HEAD") {
             return { exitCode: 0, result: SOURCE_SHA };
           }
@@ -119,9 +128,7 @@ describe("SafeCommit Daytona database adapter", () => {
           };
         },
       },
-      async updateNetworkSettings(settings) {
-        networkBlocked = settings.networkBlockAll;
-      },
+      async updateNetworkSettings() {},
     };
     const client: DaytonaClientPort = {
       transport: "local-test",
@@ -135,6 +142,8 @@ describe("SafeCommit Daytona database adapter", () => {
         expect(params.snapshot).toBe("safecommit-openboxes-mysql-v1");
         expect(params.ephemeral).toBe(true);
         expect(params.public).toBe(false);
+        expect(params.networkBlockAll).toBe(true);
+        expect(params.domainAllowList).toBeUndefined();
         expect(params.envVars).toMatchObject({
           MYSQL_DATABASE: "safecommit",
           MYSQL_USER: "safecommit",
@@ -161,6 +170,10 @@ describe("SafeCommit Daytona database adapter", () => {
       runId: evidence.runId,
       sourceCommitSha: SOURCE_SHA,
       repositoryUrl: "https://github.com/example/safeflash.git",
+      sourceBundle: Buffer.from("test Git bundle"),
+      sourceBundleDigest: createHash("sha256")
+        .update("test Git bundle")
+        .digest("hex"),
       candidate: committed.plan,
       intentContract: profile.intentContract,
       profile: {
@@ -176,8 +189,18 @@ describe("SafeCommit Daytona database adapter", () => {
     expect(result.data.planDigest).toBe(
       computeEvidenceDigest(committed.plan),
     );
-    expect(networkBlocked).toBe(true);
+    expect(commands.some((command) => command.startsWith("node -e"))).toBe(
+      true,
+    );
+    expect(
+      commands.some((command) => command.startsWith("iptables -F OUTPUT")),
+    ).toBe(true);
+    expect(commands).toContain(
+      "git clone /tmp/safecommit-source.bundle /workspace/safecommit-repository",
+    );
+    expect(commands).toContain(`git checkout --detach ${SOURCE_SHA}`);
     expect(uploads).toEqual([
+      "/tmp/safecommit-source.bundle",
       "/tmp/safecommit-plan.json",
       "/tmp/safecommit-intent.json",
     ]);
@@ -237,6 +260,10 @@ describe("SafeCommit Daytona database adapter", () => {
         runId: "safecommit-cleanup-run",
         sourceCommitSha: SOURCE_SHA,
         repositoryUrl: "https://github.com/example/safeflash.git",
+        sourceBundle: Buffer.from("test Git bundle"),
+        sourceBundleDigest: createHash("sha256")
+          .update("test Git bundle")
+          .digest("hex"),
         candidate: committed.plan,
         intentContract: profile.intentContract,
         profile: {

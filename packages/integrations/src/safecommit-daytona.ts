@@ -34,10 +34,15 @@ import {
 } from "./provider";
 
 const REPOSITORY_PATH = "/workspace/safecommit-repository";
+const SOURCE_BUNDLE_PATH = "/tmp/safecommit-source.bundle";
 const PLAN_PATH = "/tmp/safecommit-plan.json";
 const INTENT_PATH = "/tmp/safecommit-intent.json";
 const RUN_COMMAND =
   "/workspace/node_modules/.bin/tsx scripts/run-daytona-database-candidate.ts";
+const NETWORK_BLOCK_COMMAND =
+  "iptables -F OUTPUT && iptables -A OUTPUT -o lo -j ACCEPT && iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT && iptables -P OUTPUT DROP";
+const NETWORK_BLOCK_PROBE_COMMAND =
+  "node -e \"const net=require('node:net');let pending=2;for(const host of ['1.1.1.1','8.8.8.8']){const socket=net.createConnection({host,port:443});let settled=false;const blocked=()=>{if(settled)return;settled=true;socket.destroy();pending-=1;if(pending===0)process.exit(0)};socket.setTimeout(4000);socket.once('connect',()=>process.exit(10));socket.once('error',blocked);socket.once('timeout',blocked)}setTimeout(()=>process.exit(0),6000)\"";
 
 export interface SafeCommitDaytonaConfig extends DaytonaConfig {
   databaseSnapshot: string;
@@ -49,6 +54,8 @@ export interface SafeCommitDaytonaRequest {
   runId: string;
   sourceCommitSha: string;
   repositoryUrl: string;
+  sourceBundle: Uint8Array;
+  sourceBundleDigest: string;
   candidate: CandidateChangePlan;
   intentContract: IntentContract;
   profile: {
@@ -65,6 +72,7 @@ export interface SafeCommitDaytonaEvidence {
   sandboxId: string;
   snapshotName: string;
   sourceCommitSha: string;
+  sourceBundleDigest: string;
   planDigest: string;
   intentContractDigest: string;
   fixtureSourceDigest: string;
@@ -179,6 +187,11 @@ function assertRequest(request: SafeCommitDaytonaRequest): void {
     repository.username !== "" ||
     repository.password !== "" ||
     request.profile.profileId !== intent.databaseProfile ||
+    request.sourceBundle.byteLength < 1 ||
+    request.sourceBundle.byteLength > 25 * 1024 * 1024 ||
+    !/^[0-9a-f]{64}$/iu.test(request.sourceBundleDigest) ||
+    createHash("sha256").update(request.sourceBundle).digest("hex") !==
+      request.sourceBundleDigest.toLowerCase() ||
     !/^[0-9a-f]{64}$/iu.test(request.profile.fixtureSourceDigest) ||
     !/^[0-9a-f]{64}$/iu.test(request.profile.schemaFingerprint) ||
     !integrity.passed
@@ -324,18 +337,42 @@ export class SafeCommitDaytonaAdapter {
           ephemeral: true,
           autoStopInterval: 5,
           ttlMinutes: this.config.ttlMinutes,
-          domainAllowList: "github.com,*.githubusercontent.com",
+          networkBlockAll: true,
         },
         { timeout: this.config.createTimeoutSeconds },
       );
-      await sandbox.git.clone(
-        request.repositoryUrl,
-        REPOSITORY_PATH,
+      const networkBlock = await sandbox.process.executeCommand(
+        NETWORK_BLOCK_COMMAND,
+        "/workspace",
         undefined,
-        request.sourceCommitSha,
+        15,
       );
-      await sandbox.updateNetworkSettings({ networkBlockAll: true });
+      if (networkBlock.exitCode !== 0) {
+        throw new ProviderResponseError(
+          "daytona",
+          "SafeCommit Daytona could not enforce container-level network isolation",
+          false,
+        );
+      }
+      const networkProbe = await sandbox.process.executeCommand(
+        NETWORK_BLOCK_PROBE_COMMAND,
+        "/workspace",
+        undefined,
+        15,
+      );
+      if (networkProbe.exitCode !== 0) {
+        throw new ProviderResponseError(
+          "daytona",
+          "SafeCommit Daytona did not prove outbound network isolation",
+          false,
+        );
+      }
       await Promise.all([
+        sandbox.fs.uploadFile(
+          Buffer.from(request.sourceBundle),
+          SOURCE_BUNDLE_PATH,
+          60,
+        ),
         sandbox.fs.uploadFile(
           Buffer.from(canonicalJson(request.candidate), "utf8"),
           PLAN_PATH,
@@ -347,6 +384,32 @@ export class SafeCommitDaytonaAdapter {
           30,
         ),
       ]);
+      const clone = await sandbox.process.executeCommand(
+        `git clone ${SOURCE_BUNDLE_PATH} ${REPOSITORY_PATH}`,
+        "/workspace",
+        undefined,
+        60,
+      );
+      if (clone.exitCode !== 0) {
+        throw new ProviderResponseError(
+          "daytona",
+          "SafeCommit Daytona could not clone the offline source bundle",
+          false,
+        );
+      }
+      const checkout = await sandbox.process.executeCommand(
+        `git checkout --detach ${request.sourceCommitSha}`,
+        REPOSITORY_PATH,
+        undefined,
+        30,
+      );
+      if (checkout.exitCode !== 0) {
+        throw new ProviderResponseError(
+          "daytona",
+          "SafeCommit Daytona could not checkout the exact source commit",
+          false,
+        );
+      }
 
       const head = await sandbox.process.executeCommand(
         "git rev-parse HEAD",
@@ -402,6 +465,7 @@ export class SafeCommitDaytonaAdapter {
         sandboxId: sandbox.id,
         snapshotName: this.config.databaseSnapshot,
         sourceCommitSha: request.sourceCommitSha,
+        sourceBundleDigest: request.sourceBundleDigest,
         planDigest: computeEvidenceDigest(request.candidate),
         intentContractDigest: computeEvidenceDigest(request.intentContract),
         fixtureSourceDigest: request.profile.fixtureSourceDigest,

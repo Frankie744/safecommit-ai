@@ -33,6 +33,15 @@ function git(...args: string[]): string {
   }).trim();
 }
 
+function gitBuffer(...args: string[]): Buffer {
+  return execFileSync("git", args, {
+    cwd: process.cwd(),
+    encoding: "buffer",
+    maxBuffer: 25 * 1024 * 1024,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
 function assertCleanRemoteHead(): {
   sourceCommitSha: string;
   branch: string;
@@ -96,6 +105,15 @@ export async function main(): Promise<void> {
     throw new Error("SAFEFLASH_ALLOW_LIVE must equal true");
   }
   const { sourceCommitSha, branch, repositoryUrl } = assertCleanRemoteHead();
+  const sourceBundle = gitBuffer(
+    "bundle",
+    "create",
+    "-",
+    "HEAD",
+  );
+  const sourceBundleDigest = createHash("sha256")
+    .update(sourceBundle)
+    .digest("hex");
   const profile = await loadSafeCommitDatabaseProfile();
   const sessionId = `safecommit-live-${randomUUID()}`;
   const fireworks = new SafeCommitFireworksAdapter(
@@ -138,6 +156,8 @@ export async function main(): Promise<void> {
         runId,
         sourceCommitSha,
         repositoryUrl,
+        sourceBundle,
+        sourceBundleDigest,
         candidate: candidate.data.candidate,
         intentContract: profile.intentContract,
         profile: {
@@ -169,6 +189,7 @@ export async function main(): Promise<void> {
           sandboxId: result.data.sandboxId,
           runId: result.data.runId,
           snapshotName: result.data.snapshotName,
+          sourceBundleDigest: result.data.sourceBundleDigest,
           networkBlockedBeforeExecution:
             result.data.networkBlockedBeforeExecution,
           destroyed: result.data.destroyed,

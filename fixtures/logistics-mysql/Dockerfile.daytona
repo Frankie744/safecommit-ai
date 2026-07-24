@@ -9,6 +9,9 @@ RUN npm ci --omit=optional --no-audit --no-fund
 
 FROM mysql:8.0.36
 
+RUN microdnf install -y git iptables \
+  && microdnf clean all
+
 COPY --from=safecommit_dependencies /usr/local/bin/node /usr/local/bin/node
 COPY --from=safecommit_dependencies /workspace/node_modules /workspace/node_modules
 COPY schema/001_schema.sql /docker-entrypoint-initdb.d/001_schema.sql
