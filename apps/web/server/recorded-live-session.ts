@@ -1,6 +1,4 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 
 import { computeEvidenceDigest } from "@safeflash/domain";
 
@@ -9,6 +7,14 @@ import type {
   DatabaseRowDeltaView,
   DatabaseSessionView,
 } from "../lib/database-session-types";
+import {
+  approvalArtifactBody,
+  approvalArtifactManifest,
+  approvalRunId,
+  liveArtifactBody,
+  liveArtifactManifest,
+  liveRunId,
+} from "./embedded-recorded-live-evidence.generated";
 
 interface JsonRecord {
   readonly [key: string]: unknown;
@@ -18,23 +24,6 @@ interface RecordedArtifacts {
   readonly live: JsonRecord;
   readonly approval: JsonRecord;
 }
-
-const runtimeCwd = process.cwd().replaceAll("\\", "/");
-const workspaceRoot = runtimeCwd.endsWith("/apps/web")
-  ? resolve(process.cwd(), "../..")
-  : process.cwd();
-const evidenceRoot = resolve(
-  workspaceRoot,
-  "artifacts",
-  "evidence",
-  "safecommit-database-live",
-);
-const approvalRoot = resolve(
-  workspaceRoot,
-  "artifacts",
-  "evidence",
-  "safecommit-database-approval",
-);
 
 function record(value: unknown, label: string): JsonRecord {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -76,20 +65,15 @@ function sha256(value: string): string {
 }
 
 async function verifiedJson(
-  root: string,
+  runId: string,
+  body: string,
+  manifest: string,
   runPrefix: string,
   artifactName: string,
 ): Promise<{ runId: string; digest: string; value: JsonRecord }> {
-  const runId = (await readFile(resolve(root, "latest-run.txt"), "utf8")).trim();
   if (!new RegExp(`^${runPrefix}[A-Za-z0-9-]+$`, "u").test(runId)) {
     throw new Error("Recorded Live latest-run pointer is unsafe");
   }
-  const artifactPath = resolve(root, runId, artifactName);
-  const manifestPath = resolve(root, runId, "manifest.sha256");
-  const [body, manifest] = await Promise.all([
-    readFile(artifactPath, "utf8"),
-    readFile(manifestPath, "utf8"),
-  ]);
   const digest = sha256(body);
   if (manifest.trim() !== `${digest}  ${artifactName}`) {
     throw new Error(`Recorded Live manifest rejected ${artifactName}`);
@@ -104,12 +88,16 @@ async function verifiedJson(
 async function loadArtifacts(): Promise<RecordedArtifacts> {
   const [liveArtifact, approvalArtifact] = await Promise.all([
     verifiedJson(
-      evidenceRoot,
+      liveRunId,
+      liveArtifactBody,
+      liveArtifactManifest,
       "safecommit-live-",
       "database-live-evidence.json",
     ),
     verifiedJson(
-      approvalRoot,
+      approvalRunId,
+      approvalArtifactBody,
+      approvalArtifactManifest,
       "safecommit-approval-",
       "database-approval.json",
     ),
