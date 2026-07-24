@@ -1,324 +1,103 @@
-# SafeFlash competition readiness audit
+# SafeCommit competition readiness audit
 
-Audit snapshot: 2026-07-22, America/Los_Angeles.
-
-This is a claim-boundary and operator-readiness audit. It does not replace a
-fresh verification run on the final clean commit.
+Audit snapshot: 2026-07-24, America/Los_Angeles.
 
 ## Executive result
 
-| Presentation path | Status | Decision |
+| Boundary | Status | Evidence |
 |---|---|---|
-| Deterministic local product demo | Implemented; final clean-commit verification and rehearsal still required after hardening | **Conditional GO** |
-| Real CodeRabbit PR #1 segment | Real public review exists; it is a prior external boundary, not a full replay artifact | **GO with explicit boundary wording** |
-| Complete live sponsor path | No single jointly verified uninterrupted evidence package | **NO-GO / `LIVE_CERTIFIED=NO`** |
-| Real hardware/HIL claim | Native C software fixture only | **NO-GO for hardware-validated wording** |
+| Local MySQL tournament | `PASS / LOCAL_TEST` | clean source-bound evidence package |
+| Intent, SQL policy, hard gates, rollback | `PASS / LOCAL_TEST` | unit, adversarial, integration tests |
+| SafeCommit console and HITL | `PASS / LOCAL_TEST` | production build and four Playwright flows |
+| Fireworks database plans | `BLOCKED` | adapter contract passes; no current request ID |
+| Daytona database snapshots | `BLOCKED` | adapter contract passes; no sandbox IDs/cleanup receipts |
+| Braintrust evaluation | `BLOCKED` | 12-case contract passes; no Dataset/Trace/Experiment URL |
+| GitHub competition branch | `PENDING` | local branch not yet pushed |
+| Current CodeRabbit review | `BLOCKED` | GitHub App authorization/review not confirmed |
+| Public app | `BLOCKED` | no authorized deployment target |
+| PDF and speaker notes | `PASS` | rendered 10-page PDF, visual QA complete |
+| PPTX | `BLOCKED` | required host `@oai/artifact-tool` package missing |
 
-The recommended competition presentation is the deterministic console plus a
-separately explained real prior CodeRabbit boundary on
-[PR #1](https://github.com/Frankie744/safeflash-ai/pull/1).
+```text
+LOCAL_TESTS=PASS
+FIREWORKS_LIVE=BLOCKED
+DAYTONA_LIVE=BLOCKED
+BRAINTRUST_LIVE=BLOCKED
+COPILOTKIT_HITL=PASS
+GITHUB_PUSH=PENDING
+CODERABBIT_REVIEW=BLOCKED
+PUBLIC_URL=BLOCKED
+RECORDED_LIVE=NOT_AVAILABLE
+LIVE_CERTIFIED=NO
+```
 
-## Current claim boundary
+## Verified local result
 
-### Verified or directly demonstrable
+The committed run `safecommit-mysql-20260724T064859855Z` used MySQL 8.0.36
+against the OpenBoxes-derived fixture and was captured from a clean source
+commit.
 
-- The public repository is
-  [`Frankie744/safeflash-ai`](https://github.com/Frankie744/safeflash-ai).
-- A native C battery-controller fixture compiles and exposes unsafe behavior
-  through executable tests.
-- The local Parallel Safety Tournament preserves distinct candidates, hard-gate
-  rejection, deterministic selection, evidence binding, and human approval.
-- Provider adapters and fail-closed orchestration boundaries have local
-  contract and adversarial coverage.
-- GitHub/CodeRabbit [PR #1](https://github.com/Frankie744/safeflash-ai/pull/1)
-  completed a real changes-requested → repair → approved exact-head cycle.
-- SafeFlash has no merge operation.
-- Phase 7A public-repository readiness evidence is committed at
-  [`phase7a-readiness-20260723T043444961Z`](../artifacts/evidence/phase-7/phase7a-readiness-20260723T043444961Z/summary.json).
+- Candidate A: score `0.975000`; ineligible for warehouse and tenant scope.
+- Candidate B: score `0.991667`; ineligible for protected order history.
+- Candidate C: score `0.962500`; eligible winner; two affected rows.
+- Winner: thirteen hard gates passed.
+- Winner: before and rollback state digests match.
+- Provider calls in this artifact: zero.
 
-### Not yet permitted as an aggregate claim
+This proves the local product and safety contracts. It does not prove
+Fireworks, Daytona, or Braintrust execution.
 
-- one complete live Fireworks → Daytona → Braintrust → approval → GitHub →
-  CodeRabbit run;
-- a repeatable full-path live rehearsal within the presentation budget;
-- a complete all-provider artifact eligible for the recorded-live replay mode;
-- authenticated operator identity beyond an access-controlled audit label;
-- hardware-in-the-loop or production-board validation;
-- provider-signed or public-key provenance beyond SafeFlash's server-side HMAC
-  capture attestation;
-- Policy Composer as an implemented policy conversion or activation feature.
+## Implemented sponsor boundaries
 
-## Evidence-label audit
+### Fireworks
 
-| Requirement | Status | Required action |
-|---|---|---|
-| `LIVE` means current external calls | Defined | Keep exact provider references and current capture time visible. |
-| `RECORDED_LIVE` means immutable prior live evidence | Authority-gated, HMAC-attested capture and read-only loader implemented; `RECORDED_LIVE_PROVENANCE=NOT_AVAILABLE` until a complete real artifact exists | `demo:live` may capture only after a complete in-memory READY run; `cached` requires the artifact path and server signing key, validates both digest and attestation, and never falls back to mock. |
-| `MOCK` means local fixture/contract behavior | Implemented default | Keep `MOCK • NOT PROVIDER-VERIFIED` visible in the console. |
-| No silent live fallback | Fail-closed contract exists | Recheck during the final integration suite. |
-| Aggregate live certification | Not satisfied | Keep `LIVE_CERTIFIED=NO`. |
-
-## Competition artifact audit
-
-| Artifact | Readiness | Notes |
-|---|---|---|
-| README first two screens | Drafted in the competition-hardening branch | Includes value, GIF placeholder, architecture, sponsor map, guarantees, one-command demo, provenance, and HackSprint attribution. |
-| Three-minute script | Drafted | Separates mock UI, the real prior PR #1 boundary, and unavailable formal recorded-live provenance. |
-| Operator runbook | Drafted | Separates deterministic, optional live, and fallback paths. |
-| Judge Q&A | Drafted | Covers product, sponsors, safety, evidence, hardware, and remaining gaps. |
-| Failure recovery | Drafted | Preserves evidence and forbids unsafe retry shortcuts. |
-| Hardware demo explanation | Drafted | Calls the target a native C fixture, not a connected device. |
-| Policy Composer | Reservation only | Server-only flag, empty state, strict fixture, proposed interfaces, and exit criteria; no conversion. |
-| Final GIF | Missing placeholder replacement | Capture only after UI and script freeze; do not add a broken asset link. |
-| CodeRabbit live evidence | Public PR exists; local evidence package requires durable promotion | Redact and verify before committing or attaching to a release without changing the reviewed PR head. |
-| Recorded-live replay service | Implemented read-only HMAC-attested contract; no complete all-provider artifact yet | Invalid, missing, wrong-key, and fixture artifacts fail closed; a real all-provider artifact is still required. |
-| Final source-bound acceptance evidence | Must be refreshed after all hardening changes | Run only on a clean committed revision. |
-
-## Sponsor-readiness audit
-
-### Fireworks AI
-
-Implemented:
-
-- official-endpoint guard;
-- structured CandidatePatch output and local schema validation;
-- strategy diversity and duplicate-patch rejection;
-- immutable source/policy context;
-- bounded malformed-output repair;
-- telemetry fields carried into evidence.
-
-Before a full live claim:
-
-- confirm the authorized model supports the required structured output;
-- run bounded external smoke with current credentials/quota;
-- capture current request/model/token references;
-- exercise provider timeout, rate-limit, and transient-network recovery in the
-  final rehearsal.
+- official endpoint allowlist;
+- JSON Schema structured `CandidateChangePlan`;
+- required candidate identity and strategy binding;
+- local Zod and MySQL AST revalidation;
+- provider request ID, model, token, latency, and request digest evidence;
+- fail closed on missing credentials, malformed output, or unsafe SQL.
 
 ### Daytona
 
-Implemented:
-
-- exact commit clone;
-- network block before untrusted patch;
-- frozen server-owned command sequence;
-- patch-integrity checks before sandbox creation;
-- structured command/artifact receipts;
-- fresh attempt identities and cleanup tracking.
-
-Before a full live claim:
-
-- confirm account quota and cold-start behavior;
-- retain three current unique sandbox receipts for the selected tournament;
-- prove cleanup status for every successful, failed, and discarded attempt;
-- rehearse an interrupted attempt without identifier reuse.
+- immutable GitHub source commit;
+- named database snapshot requirement;
+- one ephemeral private sandbox per candidate;
+- uploaded plan/intent as data;
+- frozen runner command;
+- network blocked before candidate execution;
+- bound sandbox/run/session/source evidence;
+- bounded cleanup retries; cleanup failure invalidates the run.
 
 ### Braintrust
 
-Implemented:
+- twelve-case SafeCommit logistics Dataset contract;
+- Dataset, Trace, Experiment, project, and result ID/URL validation;
+- deterministic hard-gate scorers recomputed from DatabaseEvidence;
+- quality score separated from hard-gate eligibility;
+- incomplete or duplicated remote results rejected.
 
-- stable Firmware Safety Incidents Dataset contract;
-- raw-evidence-derived custom scorers;
-- hard gates before ranking;
-- server-side score/eligibility recomputation;
-- Trace and Experiment adapter contracts;
-- strict Dataset, row, Trace/Span, Experiment, Project, and Eval-result ID/URL
-  validation;
-- classified 401/403/422/429/timeout and malformed-response tests.
+These are implemented and contract-tested interfaces. Without current remote
+IDs they remain `BLOCKED`, not `LIVE`.
 
-Braintrust does not expose a separate immutable provider ID for each named
-score. SafeFlash therefore records the provider-owned Eval root/result row ID
-from the scorer trace and binds the complete named-score set to that row. A
-local evidence digest is never presented as a Braintrust resource ID.
+## Required user/external inputs
 
-Before a full live claim:
+1. Revoke the Daytona and Braintrust keys previously exposed in chat.
+2. Inject newly rotated credentials outside Git and chat:
+   `FIREWORKS_API_KEY`, `FIREWORKS_MODEL`, `DAYTONA_API_KEY`,
+   `DAYTONA_DATABASE_SNAPSHOT`, `DAYTONA_DATABASE_MYSQL_URL`,
+   `BRAINTRUST_API_KEY`.
+3. Confirm CodeRabbit GitHub App authorization on
+   `Frankie744/safeflash-ai`.
+4. Authorize a Daytona App Sandbox deployment and operator access strategy.
+5. Restore the Codex runtime package `@oai/artifact-tool` for PPTX generation.
 
-- write and capture the current Dataset, Trace, and Experiment;
-- confirm returned rows match local recomputation;
-- preserve exact project and experiment references;
-- rehearse partial-write and provider-unavailable behavior.
+## Prohibited claims
 
-### CopilotKit
-
-Implemented:
-
-- shared session state in the evidence console;
-- visible candidate/timeline/provenance state;
-- evidence-bound human decision;
-- server-side validation independent of client display.
-
-Boundary:
-
-- the approver name is an audit label, not strong authentication;
-- the Copilot chat model route must not be presented as live if its server model
-  runtime is unavailable.
-
-### GitHub and CodeRabbit
-
-Implemented and externally demonstrated at the boundary:
-
-- public repository and real PR;
-- approval-gated GitHub publication contract;
-- exact base/head checks and one-use publish authorization;
-- official CodeRabbit identity filtering;
-- stale evidence rejection;
-- blocking review → repair → repaired-head approval on PR #1.
-
-Before aggregate certification:
-
-- include this stage in the same end-to-end live evidence package as Fireworks,
-  Daytona, and Braintrust;
-- verify the current base and head immediately before and after publication;
-- preserve the exact review IDs and cleanup status;
-- do not merge.
-
-## Safety-contract audit
-
-| Contract | Competition status |
-|---|---|
-| Failed hard gate cannot be compensated by score | Implemented; rerun final acceptance evidence |
-| Tests, CI, policy, and thresholds are protected | Implemented; rerun adversarial suite |
-| Model output cannot authorize host commands | Live authority is server-owned frozen commands |
-| Every validation attempt has a unique identity | Implemented contract; include current receipts in live evidence |
-| Approval is exact-evidence-bound | Implemented |
-| Patch/evidence change invalidates approval | Implemented |
-| Exact PR head/base required | Implemented |
-| CodeRabbit blocker re-enters full validation | Implemented contract and real boundary demonstration |
-| No automatic merge | Implemented architectural boundary |
-| Secrets absent from client/Git/evidence | Automated checks exist; rerun against final bundle and history |
-
-## Hardware-readiness audit
-
-Current status:
-
-- real compiled native C;
-- deterministic controller and safety tests;
-- software-modeled sensor, charging state, stale counter, and fault latch;
-- optional strict HTTP/serial-frame telemetry adapter for the two display
-  fields, with a five-second freshness window;
-- automatic `SIMULATED DEVICE` fallback that does not block the workflow;
-- no physical device.
-
-The telemetry adapter is presentation data only. It does not authenticate a
-board, feed approval evidence, or upgrade the result to hardware-in-the-loop.
-
-Required wording:
-
-> SafeFlash validates a hardware-risk firmware fixture. Hardware-in-the-loop is
-> the next evidence adapter, not a completed capability.
-
-See [hardware-demo.md](hardware-demo.md) for the exact proof boundary and HIL
-plan.
-
-## Remaining risks ranked for competition
-
-### P0 — blocks a full live claim
-
-1. External Fireworks, Daytona, and Braintrust evidence is not yet captured
-   together with GitHub/CodeRabbit in one uninterrupted run.
-2. Final source-bound verification must be recaptured after competition
-   hardening is frozen.
-3. The CodeRabbit live evidence package must be durably promoted after
-   redaction and manifest verification; a local exclusion is not a public
-   evidence strategy.
-4. The full path needs repeated timed rehearsals with provider references,
-   cleanup, and recovery recorded.
-
-### P0 — blocks a reliable stage demo
-
-1. Final GIF/screenshot and projector framing are not frozen.
-2. The operator must rehearse the exact handoff from `MOCK` UI to the separate
-   real prior PR #1 boundary without calling it a formal recorded-live replay.
-3. Network and toolchain fallback artifacts must be openable without private
-   credentials.
-4. Day-of checks must run before server credential injection.
-
-### P1 — valuable after the core is stable
-
-- repeated real-provider latency and quota fault drills;
-- CI dependency/security gate and SBOM;
-- authenticated operator identity;
-- hardware-in-the-loop adapter and target cross-compile;
-- KMS/public-key capture attestation and provider-signed receipts.
-
-### Design only
-
-- Policy Composer conversion. The reserved flag and empty state must not be
-  expanded into a runtime-conversion claim until the draft-only contract,
-  fixtures, and activation separation have independent evidence.
-
-## Final verification sequence
-
-Run this sequence only after all intended source and documentation changes are
-complete:
-
-1. Review `git diff` and confirm no secrets or unrelated user changes.
-2. Commit the intended hardening revision through the normal project process.
-3. Confirm `git status --short` is empty.
-4. Run:
-
-   ```powershell
-   npm run verify
-    git diff --check
-   ```
-
-5. Run `npm run verify:p0` on the clean commit.
-6. Inspect the summary’s source commit, command results, P0 matrix, secret scan,
-   and SHA-256 manifest.
-7. Run the no-quota rehearsal and Phase 8 evidence capture:
-
-   ```powershell
-   npm run rehearsal
-   npm run verify:phase8
-   npm run evidence:verify -- artifacts/evidence/phase-8/<run-id>
-   ```
-
-8. With no repository-root credential file, run:
-
-   ```powershell
-   npm run day-of:check
-   npm run prepare:demo-pr -- --dry-run
-   ```
-
-9. Inject authorized live credentials only into the server environment.
-10. Run bounded provider smokes individually.
-11. Complete repeated timed rehearsals. Record mode labels, provider references,
-    duration, cleanup, exact PR head/base, review outcome, and fallback result.
-
-Do not replace a failed result by editing an artifact.
-
-## Go/no-go gates
-
-### Deterministic competition demo: GO only if
-
-- final verification passes on the intended committed revision;
-- the console starts with one command after installation;
-- the mock provenance badge is visible;
-- the unsafe incident, candidate rejections, selected evidence, and approval
-  fit the rehearsed viewport;
-- the operator can finish using only the deterministic path;
-- the fallback screenshot/evidence opens without network.
-
-### Real prior CodeRabbit segment: GO only if
-
-- PR #1 remains publicly readable or an immutable captured artifact is ready;
-- the operator says it is a real prior external boundary;
-- the reviewed head and repair sequence are identifiable;
-- the segment is not described as a fresh full live workflow or the complete
-  `RECORDED_LIVE` artifact.
-
-### Full live product claim: GO only if
-
-- every named provider stage is live in the same run;
-- exact provider references and cleanup are captured;
-- human approval binds the current live receipt;
-- GitHub and CodeRabbit base/head checks remain exact;
-- the repair round re-enters fresh Daytona and Braintrust validation;
-- the complete evidence package and manifest are independently verified;
-- repeated rehearsals finish inside the presentation budget.
-
-Until every full-live gate is satisfied:
-
-```text
-LIVE_CERTIFIED=NO
-```
+- Do not call the fixture a full OpenBoxes deployment.
+- Do not call local transactions Daytona sandboxes.
+- Do not call local plans Fireworks output.
+- Do not call UI scores a Braintrust Experiment.
+- Do not say `LIVE_CERTIFIED=YES` until one uninterrupted, source-bound run
+  supplies every required provider ID and URL.
+- Do not auto-merge a pull request.

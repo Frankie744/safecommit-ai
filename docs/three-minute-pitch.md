@@ -1,118 +1,72 @@
-# SafeFlash three-minute pitch
+# SafeCommit speaking scripts
 
-Use this script with the [competition demo runbook](demo-runbook.md). Bracketed
-text is an operator cue, not spoken narration.
+## Three-minute version
 
-## 0:00–0:20 — Compilation is not safety
+### 0:00–0:25 — The risk
 
-[Show the disconnected battery-sensor incident.]
+AI agents can produce valid SQL and still create an invalid business. The
+problem is not syntax alone. It is giving an agent execution authority without
+proving the resulting inventory, orders, and tenant boundaries remain correct.
 
-> This controller still compiles. That is exactly the problem. When its
-> temperature sensor disconnects, missing evidence can look like a plausible
-> reading while charging stays enabled. In firmware, a patch can be syntactically
-> correct, highly rated by a model, and still damage a physical device.
+### 0:25–0:45 — The product
 
-## 0:20–0:40 — The product
+SafeCommit is the commit gate for AI database agents. The agent may propose a
+change, but only a state transition that has been executed, measured, rolled
+back, and approved against an explicit intent contract can become
+`SAFE_TO_COMMIT`.
 
-[Point to the SafeFlash title, provenance label, and policy invariants. Click
-**Run Safety Tournament**.]
+### 0:45–1:15 — The task
 
-> SafeFlash is the safety gate for AI-generated firmware. It does not trust one
-> patch or one model answer. It makes several repair strategies compete on
-> executable evidence, rejects anything that violates a non-negotiable physical
-> safety rule, and requires a human to approve the exact evidence before a pull
-> request can be published.
+Our logistics task asks to merge one duplicate SKU in Los Angeles and release
+inventory allocated to cancelled orders—without touching another warehouse,
+another tenant, shipped orders, lots, serials, or expiration dates.
 
-Pre-event operator note: Cross-Device Assurance Profiles are existing core
-work. Do not describe them as built during this HackSprint.
+The competition dataset is an OpenBoxes-derived executable MySQL fixture, not a
+full OpenBoxes deployment.
 
-Only after the post-start Judge Challenge Mode commit and evidence exist, say:
+### 1:15–1:50 — The tournament
 
-> During this HackSprint we added Judge Challenge Mode. You can choose the
-> Battery or Motor fault, and the same evidence-first gate proves why the
-> highest-scoring unsafe patch still cannot ship.
+SafeCommit compares three plans against the same verified database baseline.
+Each statement is AST-checked and bounded. The system captures row-level
+before and after state, runs deterministic business invariants, checks the
+second execution for idempotency, executes rollback, and verifies that the
+rollback digest equals the initial digest.
 
-## 0:40–1:25 — The tournament
+### 1:50–2:20 — Magic moment
 
-[Keep all candidate cards visible. Open a rejected candidate, then the selected
-candidate.]
+The highest-scoring plan scored 0.991667 and successfully executed its SQL, but
+it rewrote a shipped order. `ProtectedOrderState` failed, so the plan became
+ineligible. A lower-scoring plan at 0.962500 changed only the two intended rows
+and passed every hard gate.
 
-> Fireworks generates schema-constrained strategies from the incident, source,
-> and immutable safety policy. Each candidate gets a fresh Daytona isolation
-> boundary at an exact commit. Network access is blocked before untrusted code is
-> applied, and only server-owned build and test commands can run.
+High score cannot compensate for broken business state.
 
-> Braintrust turns every result into a repeatable evaluation: Dataset cases,
-> traceable execution, an Experiment, and custom scorers. But the score is not
-> sovereign. Build, integrity, and physical-safety checks are hard gates. A
-> dangerous patch cannot buy its way through with a high average.
+### 2:20–2:45 — Human control
 
-> The failed candidates stay visible. Evidence, not confidence, explains why
-> one repair survives.
+CopilotKit pauses before the final action. Approval binds the exact intent,
+candidate, snapshot, evidence, policy, and source commit. Revalidation changes
+the evidence binding and immediately invalidates the old approval. Humans can
+choose among safe candidates, but cannot waive a failed hard gate.
 
-When the screen is the deterministic fallback, add:
+### 2:45–3:00 — Close
 
-> This screen is labelled `MOCK`. It runs the real native C fixture and local
-> safety workflow, but I am not presenting these IDs as live sponsor evidence.
+Today’s committed proof is honest local MySQL evidence, labelled `LOCAL_TEST`.
+The same architecture is prepared for Fireworks structured plans, three
+Daytona snapshots, and Braintrust experiments, which remain blocked until
+fresh provider credentials and remote evidence are available.
 
-## 1:25–1:55 — Human control
+Let AI move fast. Make data safety non-negotiable.
 
-[Show the selected diff and the approval binding. Record the local approval.]
+## 60-second backup
 
-> CopilotKit keeps the workflow and the operator on the same state. Approval is
-> bound to this candidate, patch digest, evidence digest, policy version, and
-> source commit. Change any of them and the approval is invalid.
-
-> SafeFlash can create or update a pull request only after that current
-> approval. It has no merge operation.
-
-## 1:55–2:30 — Independent review
-
-Operator cue: open
-[public PR #1](https://github.com/Frankie744/safeflash-ai/pull/1).
-
-> CodeRabbit is a genuinely independent second reviewer. On this real public
-> pull request, the first exact-head review requested changes. The repair was
-> validated, the pull request head changed, stale evidence was rejected, and
-> CodeRabbit approved the repaired head.
-
-> This public PR is real prior external CodeRabbit evidence. It is not the
-> current mock run and, by itself, is not the complete five-provider artifact
-> required for formal `RECORDED_LIVE` replay. That provenance is currently not
-> available. The complete product remains `LIVE_CERTIFIED=NO` until Fireworks,
-> Daytona, Braintrust, GitHub publication, and CodeRabbit complete one
-> uninterrupted, jointly captured run.
-
-## 2:30–3:00 — Close
-
-[Return to the SafeFlash final state.]
-
-> Remove Daytona and the agent executes untrusted firmware without a strong
-> isolation boundary. Remove Braintrust and “safe” becomes an opinion instead
-> of a repeatable experiment. Remove CodeRabbit and the selecting agent reviews
-> itself. Fireworks provides diverse strategies; CopilotKit keeps the human
-> decision explicit.
-
-> Today these are executable simulated Battery and Motor controllers, not
-> connected boards. The same evidence-first gate can protect medical devices,
-> robots, vehicles, and industrial controls before code reaches hardware.
-> SafeFlash lets AI move toward the physical world without asking us to trust
-> it blindly.
-
-## If interrupted
-
-Use these one-sentence answers, then return to the current screen:
-
-- **What is new?** Before day-of verification, do not claim the reserved
-  feature. After verification: “Judge Challenge Mode lets a judge choose a
-  Battery or Motor fault and receive a bound explanation of the hard-gate
-  decision.”
-- **Is this live?** “The current badge is authoritative: `MOCK` is local,
-  `RECORDED_LIVE` is prior real evidence, and `LIVE` means a provider call in
-  this run. The recorded-live mechanism exists, but no complete artifact is
-  currently available.”
-- **Did CodeRabbit really review it?** “Yes, PR #1 has a real two-round review;
-  that proves the CodeRabbit boundary, not full-path live certification.”
-- **Is that real hardware?** “It is real compiled C and native tests, but the
-  device is a deterministic software fixture; HIL is future work.”
-- **Can it merge?** “No. SafeFlash deliberately has no merge operation.”
+Valid SQL can still modify the wrong warehouse, cross a tenant boundary, or
+rewrite shipped order history. SafeCommit is the commit gate for AI database
+agents. It turns a natural-language task into a strict intent contract, compares
+multiple plans in database snapshots, and checks the real resulting state with
+non-compensable business invariants. In our local MySQL proof, the
+highest-scoring plan scored 0.991667 and executed successfully, but changed a
+protected shipped order, so it was rejected. A lower-scoring plan changed only
+the two intended rows, passed every gate, proved idempotency and rollback, and
+became eligible for evidence-bound human approval. We do not claim the local
+run as Fireworks, Daytona, or Braintrust live evidence. SafeCommit lets AI keep
+its speed while making data safety non-negotiable.

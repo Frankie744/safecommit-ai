@@ -1,8 +1,8 @@
 {
-  "name": "safeflash",
+  "name": "safecommit",
   "version": "0.1.0",
   "private": true,
-  "description": "The safety gate for AI-generated firmware.",
+  "description": "The commit gate for AI database agents.",
   "workspaces": [
     "apps/*",
     "packages/*"

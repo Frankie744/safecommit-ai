@@ -1,165 +1,154 @@
-# SafeFlash
+# SafeCommit
 
-> **The safety gate for AI-generated firmware.**
+> The commit gate for AI database agents.
 
-SafeFlash makes firmware repairs compete on executable safety evidence before
-any patch can approach a real device. A convincing patch that violates a
-physical-safety invariant cannot win on average score.
+SafeCommit turns a natural-language database request into an explicit intent
+contract, compares multiple candidate change plans in isolated database
+snapshots, rejects any plan that violates a deterministic business invariant,
+and binds human approval to the exact plan and evidence.
 
-> 🎬 **Demo GIF placeholder**
->
-> Final capture: unsafe incident → candidates → hard-gate rejection → bound
-> approval → review/revalidation. Replace only after the rehearsal is frozen.
+The competition profile is deliberately narrow: one logistics workflow against
+an **OpenBoxes-derived executable MySQL 8 fixture**. It is not a full OpenBoxes
+deployment. OpenBoxes uses MySQL as its primary database; this fixture pins the
+upstream source revision and preserves only the tables required for the demo.
 
-**Pre-event competition baseline for the Daytona HackSprint w/ Braintrust,
-July 2026.** The core now includes **Cross-Device Assurance Profiles**:
-executable simulated Battery and Motor controllers use the same hard-gate
-selector—one safety gate, multiple classes of physical devices. This is
-pre-event work, not a competition-day claim. The reserved post-start feature
-is the small **Judge Challenge Mode** described in the new-feature plan.
-Policy Composer remains a disabled roadmap surface.
+## The magic moment
 
-## One-command demo
+The current clean local run executes three plans against the same verified
+database baseline:
 
-After the one-time `npm ci`, start the deterministic, no-credential console:
+| Candidate | Quality score | Result | Why |
+|---|---:|---|---|
+| A — aggressive cleanup | 0.975000 | Rejected | Crosses warehouse and tenant boundaries |
+| B — rewrite shipped order | **0.991667** | Rejected | Changes protected order history |
+| C — relationship preserving | 0.962500 | Eligible winner | All hard gates pass |
 
-```powershell
-npm run dev:competition
-```
+The highest-scoring plan cannot win when it is unsafe.
 
-Open `http://127.0.0.1:3018`, click **Run Safety Tournament**, and keep
-`MOCK • NOT PROVIDER-VERIFIED` visible. Battery-only CLI evidence remains
-available through `npm run demo:local`.
+Evidence:
+[`artifacts/evidence/safecommit-database-local`](artifacts/evidence/safecommit-database-local).
+It is labelled `LOCAL_TEST`; no Fireworks, Daytona, or Braintrust call is
+implied.
 
-For the two executable simulated device classes, run:
-
-```powershell
-npm run demo:cross-device
-```
-
-## How the safety gate works
-
-```mermaid
-flowchart LR
-  I[Unsafe incident] --> F[Fireworks<br/>strategies] --> D[Daytona<br/>fresh sandbox each]
-  D --> B[Braintrust<br/>evidence + scorers] --> G{Hard gates}
-  G -->|fail| R[Rejected with evidence]
-  G -->|winner| U[CopilotKit<br/>human approval] --> P[GitHub PR]
-  P --> C[CodeRabbit<br/>exact-head review]
-  C -->|blocker: repair + revalidate| F
-  C -->|pass| M[READY_TO_MERGE<br/>never auto-merge]
-```
-
-### Sponsor map
-
-| Boundary | Why it is necessary |
-|---|---|
-| **Fireworks AI** | Schema-constrained, diverse repair strategies. |
-| **Daytona** | Exact-commit isolation, network block, server-owned commands. |
-| **Braintrust** | Repeatable Dataset, Trace, Experiment, Eval-result provenance, scorers, and hard gates. |
-| **CopilotKit** | Shared agent state and evidence-bound human control. |
-| **GitHub** | One-use, approval-gated publication to an exact base. |
-| **CodeRabbit** | Independent exact-head review and repair loop. |
-
-### Safety guarantees enforced by the design
-
-- Hard-gate failure is ineligible; score cannot compensate.
-- Model output is data; frozen commands and patch boundaries protect tests,
-  CI, policy, thresholds, binaries, and host execution.
-- Every attempt has a unique sandbox identity; failed IDs cannot become proof.
-- Approval binds exact patch/evidence/policy/source and is invalidated by change.
-- Publication is one-use and exact-revision; SafeFlash has no merge operation.
-- Missing, stale, unknown, or failed evidence stops rather than silently falls
-  back.
-
-## Evidence labels and current truth
-
-| Label | Meaning | Allowed claim |
-|---|---|---|
-| `LIVE` | The current run called the named external provider and returned exact provider IDs/evidence. | Claim only that named boundary for that run. |
-| `RECORDED_LIVE` | Immutable evidence replayed from an earlier real external run, including capture time and provider references. | Say “recorded live evidence,” never imply a fresh call. |
-| `MOCK` | Deterministic local fixture, contract fake, or local process evidence. | Claim product behavior and local tests only, never sponsor execution. |
-
-SafeFlash never silently falls back from `LIVE` to another label.
-`SAFEFLASH_DEFAULT_MODE=cached` is reserved for the read-only recorded-live
-service: it requires a schema-valid, digest-bound artifact at
-`SAFEFLASH_RECORDED_LIVE_PATH` plus the server-only
-`SAFEFLASH_RECORDED_LIVE_SIGNING_KEY`, verifies the HMAC-SHA-256 capture
-attestation, rejects missing/invalid/wrong-key artifacts, and cannot accept
-decisions. It never turns arbitrary cached or mock data into `RECORDED_LIVE`.
-
-The interactive `npm run demo:live` path can mint that artifact only after the
-same in-memory workflow reaches `READY_TO_MERGE` with authority-bearing
-Fireworks, Daytona, Braintrust, GitHub, and CodeRabbit envelopes. It writes a
-redacted, digest-bound and server-attested file below
-`.safeflash/recorded-live/`; pre-READY, mock-shaped, stale-head, unsigned, or
-wrong-key capture/replay attempts fail closed. The HMAC proves possession of
-the capture secret; it is not public-key nonrepudiation.
-
-A real public [CodeRabbit review on PR #1](https://github.com/Frankie744/safeflash-ai/pull/1)
-completed a changes-requested → repair → approved exact-head cycle. That is real
-external evidence for the GitHub/CodeRabbit boundary. It is not, by itself, the
-complete five-provider artifact required by the recorded-live replay service.
-
-```text
-MOCK_DEMO=AVAILABLE
-RECORDED_LIVE_PROVENANCE=NOT_AVAILABLE
-LIVE_CERTIFIED=NO
-```
-
-**`LIVE_CERTIFIED=NO` for the complete product path.** The project does not yet
-claim one uninterrupted Fireworks → Daytona → Braintrust → human approval →
-GitHub publication → CodeRabbit repair/revalidation run with all provider
-evidence captured together. The default demo therefore remains honestly
-labelled `MOCK`.
-
-## Development and verification
+## Run locally
 
 Prerequisites:
 
 - Node.js 22+
 - npm 10+
-- Visual Studio C++ build tools with CMake for the native firmware fixture
+- MySQL 8.0.36 for executable database evidence
+
+Install and run the read-only console:
 
 ```powershell
 npm ci
-npm run verify
+$env:SAFECOMMIT_OPERATOR_TOKEN="<random server-only value>"
+npm run dev:competition
 ```
 
-After all intended changes are committed and `git status --short` is empty,
-`npm run verify:p0` captures typecheck, production build, Vitest, Chrome
-Playwright, the named P0 acceptance matrix, and secret scans in a
-source-commit-bound SHA-256 evidence package. This proves the local contract; it
-does not certify external providers.
+Open `http://127.0.0.1:3018`. Browsing existing evidence is public/read-only;
+creating a session, approving, rejecting, or revalidating requires the
+server-only operator token and same-origin request checks.
 
-On the clean competition branch, the read-only day-of drill is:
+Run the complete local validation:
 
 ```powershell
-npm run rehearsal
-npm run verify:phase8
-npm run evidence:verify -- artifacts/evidence/phase-8/<run-id>
+npm run typecheck
+npm test
+npm run build
+npm run test:e2e
 ```
 
-`verify:phase8` runs TypeScript, unit/integration/adversarial tests, Playwright
-Chrome, production build, secret scan, `npm audit`, P0 verification, and the
-rehearsal before publishing a self-verified SHA-256 manifest. It does not create
-a PR, push, merge, or call the live sponsor workflow.
+Run real local MySQL tournament evidence:
 
-Provider credentials belong only in an ignored server environment. Never put a
-secret in source, evidence, logs, Git history, or a `NEXT_PUBLIC_` variable.
+```powershell
+$env:SAFECOMMIT_MYSQL_URL="mysql://<fixture-user>:<fixture-password>@127.0.0.1:<port>/safecommit"
+npm run demo:database-local
+```
 
-## Demo and judge handoff
+The local runner accepts loopback MySQL only, verifies the fixture baseline,
+executes each plan in a transaction, captures row-level before/after evidence,
+runs every hard gate, verifies idempotency, executes rollback, and proves the
+rollback digest equals the initial digest.
 
-- [Competition demo runbook](docs/demo-runbook.md)
-- [Three-minute pitch](docs/three-minute-pitch.md)
-- [Judge questions](docs/judge-questions.md)
-- [Failure recovery](docs/failure-recovery.md)
-- [Honest hardware demo boundary](docs/hardware-demo.md)
-- [HackSprint new-feature plan](docs/hacksprint-new-feature-plan.md)
-- [Competition readiness audit](docs/competition-readiness-audit.md)
+## Hard gates
+
+Safety is eligibility, not a weighted score:
+
+- SQL plan integrity and bounded mutation scope
+- warehouse scope and tenant isolation
+- inventory conservation and no negative inventory
+- allocation bounds
+- lot and serial preservation
+- referential integrity
+- protected order states
+- contract blast radius
+- idempotency
+- verified rollback
+
+Any failed hard gate makes a candidate ineligible. A human cannot override a
+failed gate.
+
+## Sponsor-native live architecture
+
+```mermaid
+flowchart LR
+  I[Intent Contract] --> F[Fireworks<br/>3 structured plans]
+  F --> D1[Daytona snapshot A]
+  F --> D2[Daytona snapshot B]
+  F --> D3[Daytona snapshot C]
+  D1 --> B[Braintrust<br/>Dataset / Trace / Experiment]
+  D2 --> B
+  D3 --> B
+  B --> G{Deterministic hard gates}
+  G -->|fail| R[Ineligible]
+  G -->|pass| H[CopilotKit HITL]
+  H --> C[SAFE_TO_COMMIT]
+  C -. optional .-> P[GitHub PR + CodeRabbit exact-head review]
+```
+
+Current authority labels:
+
+```text
+SAFECOMMIT_DATABASE_LOCAL=PASS
+FIREWORKS_LIVE=BLOCKED
+DAYTONA_LIVE=BLOCKED
+BRAINTRUST_LIVE=BLOCKED
+LIVE_CERTIFIED=NO
+```
+
+Live mode never silently falls back to local or mock evidence. Provider
+credentials are server-only and must never use `NEXT_PUBLIC_`. The older
+SafeFlash firmware provider chain remains in the repository as a regression
+profile and is preserved on the `archive/safeflash-firmware-20260724` branch.
+
+## Source and evidence boundaries
+
+- Fixture source:
+  [`fixtures/logistics-mysql`](fixtures/logistics-mysql)
+- Intent and plan contracts:
+  [`packages/domain/src`](packages/domain/src)
+- SQL and business gates:
+  [`packages/safety-policy/src`](packages/safety-policy/src)
+- MySQL execution and tournament:
+  [`apps/orchestrator/src`](apps/orchestrator/src)
+- Evidence/approval console:
+  [`apps/web`](apps/web)
+- Twelve-case evaluation contract:
+  [`packages/evals/src/logistics-dataset.ts`](packages/evals/src/logistics-dataset.ts)
+
+OpenBoxes upstream:
+[openboxes/openboxes](https://github.com/openboxes/openboxes).
+The pinned source revision and license notice are recorded in
+[`fixtures/logistics-mysql/NOTICE.md`](fixtures/logistics-mysql/NOTICE.md).
+
+## Judge and operator handoff
+
 - [Architecture](docs/architecture.md)
-- [Setup and external smoke runbook](docs/runbook.md)
-- [P0 judging map](docs/judging-map.md)
-- [Historical build ledger](HACKATHON_BUILD.md)
+- [Demo runbook](docs/demo-runbook.md)
+- [Judge Q&A](docs/judge-questions.md)
+- [Three-minute and 60-second scripts](docs/three-minute-pitch.md)
+- [Known limitations](docs/competition-readiness-audit.md)
+- [Environment template](.env.example)
 
-Public source: [`Frankie744/safeflash-ai`](https://github.com/Frankie744/safeflash-ai).
+SafeCommit never writes production data and never auto-merges a pull request.
