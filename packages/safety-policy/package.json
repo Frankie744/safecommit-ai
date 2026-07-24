@@ -5,5 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@safeflash/domain": "0.1.0",
+    "node-sql-parser": "5.4.0"
   }
 }
