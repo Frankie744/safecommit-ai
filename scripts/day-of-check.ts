@@ -47,7 +47,9 @@ export interface DayOfCheckReport {
   liveCertified: false;
   repositoryUrl: string;
   origin: string;
+  branch: string;
   localHead: string;
+  remoteBranchHead: string;
   remoteMainHead: string;
   authenticatedOwner: string;
   missingSecretEnvironment: readonly string[];
@@ -143,21 +145,25 @@ function assertExpectedConfiguration(
   }
 }
 
-function parseRemoteMain(output: string): string {
+function parseRemoteBranch(
+  output: string,
+  expectedRef: string,
+  label: string,
+): string {
   const rows = output
     .split(/\r?\n/u)
     .map((row) => row.trim())
     .filter(Boolean);
-  if (rows.length !== 1) fail("origin/main did not resolve to exactly one ref");
+  if (rows.length !== 1) fail(`${label} did not resolve to exactly one ref`);
   const [sha, ref, ...extra] = rows[0]!.split(/\s+/u);
   if (
     sha === undefined ||
-    ref !== "refs/heads/main" ||
+    ref !== expectedRef ||
     extra.length > 0
   ) {
-    fail("origin/main returned an unexpected ref");
+    fail(`${label} returned an unexpected ref`);
   }
-  assertSha(sha, "origin/main");
+  assertSha(sha, label);
   return sha;
 }
 
@@ -279,16 +285,59 @@ export async function runDayOfCheck(
     "HEAD",
   ]);
   assertSha(localHead, "local HEAD");
-  const remoteMainHead = parseRemoteMain(
+  const branch = await commandOutput(runner, cwd, "git", [
+    "symbolic-ref",
+    "--quiet",
+    "--short",
+    "HEAD",
+  ]);
+  if (
+    !/^(?:main|safeflash\/[A-Za-z0-9][A-Za-z0-9._/-]{0,120})$/u.test(
+      branch,
+    )
+  ) {
+    fail("current branch is not main or an authorized safeflash/* branch");
+  }
+  const branchRef = `refs/heads/${branch}`;
+  const remoteBranchHead = parseRemoteBranch(
+    await commandOutput(runner, cwd, "git", [
+      "ls-remote",
+      "--exit-code",
+      "origin",
+      branchRef,
+    ]),
+    branchRef,
+    `origin/${branch}`,
+  );
+  if (localHead !== remoteBranchHead) {
+    fail(`local HEAD does not exactly match origin/${branch}`);
+  }
+  const remoteMainHead = parseRemoteBranch(
     await commandOutput(runner, cwd, "git", [
       "ls-remote",
       "--exit-code",
       "origin",
       "refs/heads/main",
     ]),
+    "refs/heads/main",
+    "origin/main",
   );
-  if (localHead !== remoteMainHead) {
-    fail("local HEAD does not exactly match origin/main");
+  const certifiedMainHead = example.get("SAFEFLASH_CERTIFIED_MAIN_SHA");
+  if (certifiedMainHead === undefined) {
+    fail(".env.example SAFEFLASH_CERTIFIED_MAIN_SHA is missing");
+  }
+  assertSha(certifiedMainHead, "SAFEFLASH_CERTIFIED_MAIN_SHA");
+  const certifiedMainOverride =
+    environment.SAFEFLASH_CERTIFIED_MAIN_SHA?.trim();
+  if (
+    certifiedMainOverride !== undefined &&
+    certifiedMainOverride.length > 0 &&
+    certifiedMainOverride !== certifiedMainHead
+  ) {
+    fail("SAFEFLASH_CERTIFIED_MAIN_SHA override does not match .env.example");
+  }
+  if (remoteMainHead !== certifiedMainHead) {
+    fail("origin/main moved away from SAFEFLASH_CERTIFIED_MAIN_SHA");
   }
 
   await commandOutput(runner, cwd, "gh", [
@@ -341,7 +390,9 @@ export async function runDayOfCheck(
     liveCertified: false,
     repositoryUrl: PHASE_7A_REPOSITORY.url,
     origin,
+    branch,
     localHead,
+    remoteBranchHead,
     remoteMainHead,
     authenticatedOwner,
     missingSecretEnvironment,
@@ -357,7 +408,9 @@ export function formatDayOfCheck(report: DayOfCheckReport): string {
     `GITHUB_REPOSITORY=${report.repositoryUrl}`,
     `GITHUB_OWNER=${report.authenticatedOwner}`,
     `GIT_ORIGIN=${report.origin}`,
+    `GIT_BRANCH=${report.branch}`,
     `LOCAL_HEAD=${report.localHead}`,
+    `REMOTE_BRANCH_HEAD=${report.remoteBranchHead}`,
     `REMOTE_MAIN_HEAD=${report.remoteMainHead}`,
     "REMOTE_SHA_MATCH=PASS",
     `MISSING_SECRET_ENV_VARS=${report.missingSecretEnvironment.join(",") || "NONE"}`,

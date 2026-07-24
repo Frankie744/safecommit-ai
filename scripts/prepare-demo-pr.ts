@@ -48,7 +48,8 @@ export async function prepareDemoPullRequest(
       "SafeFlash repository root and clean worktree",
       "Authenticated GitHub owner is Frankie744",
       "Public non-fork, non-archived target repository",
-      "Local HEAD exactly equals origin/main",
+      "Local HEAD exactly equals its authorized origin branch",
+      "Certified origin/main has not moved",
       "External credential names reported without values",
     ],
     nextActions: [

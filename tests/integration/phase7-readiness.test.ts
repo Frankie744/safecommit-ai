@@ -25,6 +25,7 @@ GITHUB_OWNER=Frankie744
 GITHUB_REPO=safeflash-ai
 GITHUB_BASE_BRANCH=main
 GITHUB_EXPECT_PUBLIC=true
+SAFEFLASH_CERTIFIED_MAIN_SHA=${HEAD}
 `;
 
 function commandKey(command: string, args: readonly string[]): string {
@@ -45,6 +46,7 @@ function successfulHarness(): {
     ["git remote get-url --all origin", PHASE_7A_REPOSITORY.remote],
     ["git remote get-url --push --all origin", PHASE_7A_REPOSITORY.remote],
     ["git rev-parse HEAD", HEAD],
+    ["git symbolic-ref --quiet --short HEAD", "main"],
     [
       "git ls-remote --exit-code origin refs/heads/main",
       `${HEAD}\trefs/heads/main`,
@@ -105,6 +107,8 @@ describe("Phase 7A read-only launch readiness", () => {
       result: "CREDENTIAL_READY",
       liveCertified: false,
       localHead: HEAD,
+      branch: "main",
+      remoteBranchHead: HEAD,
       remoteMainHead: HEAD,
       missingSecretEnvironment: [
         "DAYTONA_API_KEY",
@@ -126,11 +130,50 @@ describe("Phase 7A read-only launch readiness", () => {
       "git remote get-url --all origin",
       "git remote get-url --push --all origin",
       "git rev-parse HEAD",
+      "git symbolic-ref --quiet --short HEAD",
+      "git ls-remote --exit-code origin refs/heads/main",
       "git ls-remote --exit-code origin refs/heads/main",
       "gh auth status --hostname github.com --active",
       "gh api user --jq .login",
       "gh repo view Frankie744/safeflash-ai --json owner,name,visibility,isFork,isArchived,url,defaultBranchRef",
     ]);
+  });
+
+  it("accepts a clean pushed safeflash branch while independently pinning certified main", async () => {
+    const harness = successfulHarness();
+    const original = harness.runCommand;
+    const competitionHead = "8d180bb2e93a3505e64017de650ce27714d4a8a7";
+    const competitionRef =
+      "refs/heads/safeflash/competition-hardening-20260723";
+    harness.runCommand = async (command, args, cwd) => {
+      switch (commandKey(command, args)) {
+        case "git rev-parse HEAD":
+          harness.calls.push(commandKey(command, args));
+          return { stdout: competitionHead };
+        case "git symbolic-ref --quiet --short HEAD":
+          harness.calls.push(commandKey(command, args));
+          return { stdout: "safeflash/competition-hardening-20260723" };
+        case `git ls-remote --exit-code origin ${competitionRef}`:
+          harness.calls.push(commandKey(command, args));
+          return { stdout: `${competitionHead}\t${competitionRef}` };
+        default:
+          return original(command, args, cwd);
+      }
+    };
+
+    const report = await runDayOfCheck({
+      cwd: ROOT,
+      environment: {},
+      runCommand: harness.runCommand,
+      readTextFile: harness.readTextFile,
+    });
+
+    expect(report).toMatchObject({
+      branch: "safeflash/competition-hardening-20260723",
+      localHead: competitionHead,
+      remoteBranchHead: competitionHead,
+      remoteMainHead: HEAD,
+    });
   });
 
   it("fails closed on an unexpected authenticated owner", async () => {
