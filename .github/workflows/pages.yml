@@ -10,6 +10,7 @@ on:
       - ".github/workflows/pages.yml"
       - "scripts/build-public-demo.mjs"
       - "artifacts/evidence/safecommit-database-local/**"
+      - "artifacts/evidence/safecommit-database-live/**"
       - "artifacts/presentation/SafeCommit_Championship_Deck_LOCAL_TEST.pdf"
 
 permissions:

@@ -9,6 +9,12 @@ const evidenceRoot = path.join(
   "evidence",
   "safecommit-database-local",
 );
+const liveEvidenceRoot = path.join(
+  root,
+  "artifacts",
+  "evidence",
+  "safecommit-database-live",
+);
 const outputRoot = path.join(root, "_site");
 
 function escapeHtml(value) {
@@ -62,6 +68,19 @@ async function build() {
   const summary = JSON.parse(
     await readFile(path.join(runRoot, "summary.json"), "utf8"),
   );
+  const liveRunId = (
+    await readFile(path.join(liveEvidenceRoot, "latest-run.txt"), "utf8")
+  ).trim();
+  if (!/^safecommit-live-\d{8}T\d{9}Z$/u.test(liveRunId)) {
+    throw new Error("Invalid SafeCommit live evidence run identifier");
+  }
+  const liveRunRoot = path.join(liveEvidenceRoot, liveRunId);
+  const liveEvidence = JSON.parse(
+    await readFile(
+      path.join(liveRunRoot, "database-live-evidence.json"),
+      "utf8",
+    ),
+  );
   if (
     summary.status !== "LOCAL_TEST" ||
     summary.liveCertified !== false ||
@@ -71,6 +90,35 @@ async function build() {
   ) {
     throw new Error(
       "Public evidence must remain an explicit three-candidate LOCAL_TEST result",
+    );
+  }
+  const liveGateCounts = liveEvidence.candidates.map(
+    (candidate) => candidate.gates.results.length,
+  );
+  const liveProviderEvidenceIsComplete =
+    liveEvidence.status === "AWAITING_HUMAN_APPROVAL" &&
+    liveEvidence.liveCertified === false &&
+    liveEvidence.candidates.length === 3 &&
+    typeof liveEvidence.winnerCandidateId === "string" &&
+    liveGateCounts.every((count) => count === liveGateCounts[0]) &&
+    liveEvidence.candidates.every(
+      (candidate) =>
+        candidate.fireworks.requestId.startsWith("chatcmpl-") &&
+        candidate.daytona.destroyed === true &&
+        candidate.daytona.networkBlockedBeforeExecution === true,
+    ) &&
+    liveEvidence.braintrust.dataset.datasetUrl.startsWith(
+      "https://www.braintrust.dev/",
+    ) &&
+    liveEvidence.braintrust.trace.traceUrl.startsWith(
+      "https://www.braintrust.dev/",
+    ) &&
+    liveEvidence.braintrust.experiment.experimentUrl.startsWith(
+      "https://www.braintrust.dev/",
+    );
+  if (!liveProviderEvidenceIsComplete) {
+    throw new Error(
+      "Public live evidence must be complete, destroyed, network-isolated, and awaiting human approval",
     );
   }
 
@@ -88,6 +136,14 @@ async function build() {
     path.join(outputRoot, "evidence", "manifest.sha256"),
   );
   await copyFile(
+    path.join(liveRunRoot, "database-live-evidence.json"),
+    path.join(outputRoot, "evidence", "database-live-evidence.json"),
+  );
+  await copyFile(
+    path.join(liveRunRoot, "manifest.sha256"),
+    path.join(outputRoot, "evidence", "live-manifest.sha256"),
+  );
+  await copyFile(
     path.join(
       root,
       "artifacts",
@@ -100,12 +156,25 @@ async function build() {
   const candidates = summary.candidates
     .map((candidate) => candidateCard(candidate, summary.winnerCandidateId))
     .join("");
+  const liveRequestIds = liveEvidence.candidates
+    .map(
+      (candidate) =>
+        `<code>${escapeHtml(candidate.fireworks.requestId)}</code>`,
+    )
+    .join("<br>");
+  const liveSandboxIds = liveEvidence.candidates
+    .map(
+      (candidate) =>
+        `<code>${escapeHtml(candidate.daytona.sandboxId)}</code>`,
+    )
+    .join("<br>");
+  const hardGateCount = liveGateCounts[0];
   const html = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="SafeCommit read-only, reproducible local database safety evidence.">
+  <meta name="description" content="SafeCommit read-only database safety evidence with live Fireworks, Daytona, and Braintrust provenance.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23090b0e'/%3E%3Cpath d='M18 33l9 9 20-22' fill='none' stroke='%2374e39a' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <title>SafeCommit — Public Evidence</title>
   <style>
@@ -167,32 +236,39 @@ async function build() {
   <div class="wrap">
     <nav>
       <a class="brand" href="#"><span>Safe</span>Commit</a>
-      <div class="nav-links"><a href="#result">Result</a><a href="#boundary">Evidence boundary</a><a href="#artifacts">Artifacts</a></div>
+      <div class="nav-links"><a href="#result">Result</a><a href="#live">Live proof</a><a href="#boundary">Evidence boundary</a><a href="#artifacts">Artifacts</a></div>
     </nav>
     <main>
       <header class="hero">
         <div>
-          <p class="eyebrow">Public · read-only · local evidence</p>
+          <p class="eyebrow">Public · read-only · verifiable evidence</p>
           <h1>Safety before <em>commit.</em></h1>
           <p class="lede">Three database mutation plans entered the same MySQL 8 fixture. The two higher-scoring plans were rejected because hard safety invariants outrank model preference.</p>
         </div>
-        <div class="truth"><strong>No live certification claim.</strong>This page exposes reproducible LOCAL_TEST evidence. It made zero Daytona, Fireworks, or Braintrust calls and contains no operator controls or credentials.</div>
+        <div class="truth"><strong>Live providers verified; human approval pending.</strong>The public page is read-only and contains no operator controls or credentials. The recorded run remains <code>LIVE_CERTIFIED=false</code> until a human approves the evidence-bound winner.</div>
       </header>
       <div class="metrics" aria-label="Run summary">
         <div class="metric"><b>${summary.candidateCount}</b><span>candidate plans</span></div>
-        <div class="metric"><b>13</b><span>database hard gates</span></div>
+        <div class="metric"><b>${hardGateCount}</b><span>database hard gates</span></div>
         <div class="metric"><b>${escapeHtml(summary.mysql)}</b><span>MySQL version</span></div>
-        <div class="metric"><b>0</b><span>live provider calls</span></div>
+        <div class="metric"><b>${liveEvidence.candidates.length}</b><span>live isolated candidates</span></div>
       </div>
       <section id="result">
         <div class="section-head"><div><p class="eyebrow">Tournament result</p><h2>Score never overrides safety.</h2></div><p>Candidate C won despite the lowest numeric score. Candidate A crossed warehouse and tenant boundaries; Candidate B changed protected shipped-order state.</p></div>
         <div class="candidate-grid">${candidates}</div>
       </section>
+      <section id="live">
+        <div class="section-head"><div><p class="eyebrow">Live sponsor provenance</p><h2>Three providers. One bound run.</h2></div><p>Run <code>${escapeHtml(liveRunId)}</code><br>Status <code>${escapeHtml(liveEvidence.status)}</code></p></div>
+        <div class="boundary">
+          <article><h3>Fireworks + Daytona</h3><p>Fireworks model <code>${escapeHtml(liveEvidence.candidates[0].fireworks.model)}</code> generated three structured plans. Each ran from the same MySQL snapshot in a network-blocked Daytona sandbox; all sandboxes were destroyed.</p><p>${liveRequestIds}</p><p>${liveSandboxIds}</p></article>
+          <article><h3>Braintrust evaluation</h3><p>Dataset version <code>${escapeHtml(liveEvidence.braintrust.dataset.datasetVersion)}</code> contains ${liveEvidence.braintrust.dataset.totalRecords} cases. The deterministic experiment recorded ${liveEvidence.braintrust.experiment.resultCount} candidate results.</p><div class="actions"><a class="button" href="${escapeHtml(liveEvidence.braintrust.dataset.datasetUrl)}">Dataset</a><a class="button" href="${escapeHtml(liveEvidence.braintrust.trace.traceUrl)}">Trace</a><a class="button primary" href="${escapeHtml(liveEvidence.braintrust.experiment.experimentUrl)}">Experiment</a></div></article>
+        </div>
+      </section>
       <section id="boundary">
         <div class="section-head"><div><p class="eyebrow">Trust boundary</p><h2>Exactly what is proven.</h2></div></div>
         <div class="boundary">
-          <article><h3>Verified in this artifact</h3><ul><li>MySQL ${escapeHtml(summary.mysql)} executable fixture</li><li>Same baseline for all three candidates</li><li>Hard-gate eligibility and deterministic ranking</li><li>Rollback digest equals baseline for every candidate</li><li>SHA-256 manifest for published evidence</li></ul></article>
-          <article><h3>Not represented as complete</h3><ul><li>No live Fireworks candidate generation</li><li>No Daytona hosted sandbox provenance</li><li>No Braintrust hosted experiment</li><li>No physical HIL evidence</li><li>No public mutation or merge controls</li></ul></article>
+          <article><h3>Verified in these artifacts</h3><ul><li>MySQL ${escapeHtml(summary.mysql)} executable fixture</li><li>Same baseline for all three candidates</li><li>Hard-gate eligibility and deterministic ranking</li><li>Rollback digest equals baseline for every candidate</li><li>Live Fireworks, Daytona, and Braintrust provenance</li><li>SHA-256 manifests for local and live evidence</li></ul></article>
+          <article><h3>Not represented as complete</h3><ul><li>No human approval has been recorded</li><li>No production database connection or commit</li><li>No physical HIL evidence</li><li>No public mutation or merge controls</li><li><code>LIVE_CERTIFIED=false</code> until the approval boundary is completed</li></ul></article>
         </div>
       </section>
       <section id="artifacts">
@@ -202,6 +278,8 @@ async function build() {
           <a class="button" href="evidence/summary.json">Run summary</a>
           <a class="button" href="evidence/database-evidence.json">Full database evidence</a>
           <a class="button" href="evidence/manifest.sha256">SHA-256 manifest</a>
+          <a class="button" href="evidence/database-live-evidence.json">Live provider evidence</a>
+          <a class="button" href="evidence/live-manifest.sha256">Live SHA-256 manifest</a>
           <a class="button" href="https://github.com/Frankie744/safeflash-ai/commit/${summary.sourceCommitSha}">Inspect evidence source commit</a>
         </div>
       </section>
