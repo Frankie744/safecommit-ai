@@ -3,7 +3,15 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { Daytona, Image } from "@daytona/sdk";
+import {
+  Daytona,
+  DaytonaNotFoundError,
+  Image,
+} from "@daytona/sdk";
+import {
+  createDaytonaDatabaseBootstrapEnvironment,
+  type DaytonaDatabaseBootstrapEnvironment,
+} from "@safeflash/integrations";
 
 type Sandbox = Awaited<ReturnType<Daytona["create"]>>;
 type Snapshot = Awaited<ReturnType<Daytona["snapshot"]["get"]>>;
@@ -13,10 +21,11 @@ const DOCKERFILE_PATH = resolve(
 );
 const SNAPSHOT_INPUTS = [
   DOCKERFILE_PATH,
+  resolve("fixtures/logistics-mysql/docker-or-snapshot/package.json"),
+  resolve("fixtures/logistics-mysql/docker-or-snapshot/package-lock.json"),
   resolve("fixtures/logistics-mysql/schema/001_schema.sql"),
   resolve("fixtures/logistics-mysql/seed/002_seed.sql"),
 ] as const;
-const MYSQL_URI = "mysql://root@127.0.0.1:3306/safecommit";
 const MYSQL_ENTRYPOINT = [
   "docker-entrypoint.sh",
   "mysqld",
@@ -68,8 +77,12 @@ async function findSnapshot(
   client: Daytona,
   name: string,
 ): Promise<Snapshot | undefined> {
-  const page = await client.snapshot.list(1, 100);
-  return page.items.find((snapshot) => snapshot.name === name);
+  try {
+    return await client.snapshot.get(name);
+  } catch (error) {
+    if (error instanceof DaytonaNotFoundError) return undefined;
+    throw error;
+  }
 }
 
 async function createOrReuseSnapshot(
@@ -106,6 +119,7 @@ async function createOrReuseSnapshot(
 async function verifySnapshot(
   client: Daytona,
   snapshot: Snapshot,
+  bootstrapEnvironment: DaytonaDatabaseBootstrapEnvironment,
 ): Promise<{
   sandboxId: string;
   mysqlVersion: string;
@@ -119,6 +133,7 @@ async function verifySnapshot(
     sandbox = await client.create(
       {
         snapshot: snapshot.name,
+        envVars: bootstrapEnvironment,
         labels: {
           application: "safecommit",
           purpose: "database-snapshot-verification",
@@ -135,19 +150,19 @@ async function verifySnapshot(
       "set -eu;",
       "ready=0;",
       "for attempt in $(seq 1 60); do",
-      "if mysqladmin ping --protocol=tcp --host=127.0.0.1 --user=root --silent >/dev/null 2>&1; then ready=1; break; fi;",
+      "if mysqladmin ping --protocol=tcp --host=127.0.0.1 --user=safecommit --silent >/dev/null 2>&1; then ready=1; break; fi;",
       "sleep 1;",
       "done;",
       'test "$ready" = "1";',
       'node_version="$(node --version)";',
-      'mysql_version="$(mysql --protocol=tcp --host=127.0.0.1 --user=root --batch --skip-column-names --execute=\'SELECT VERSION()\')";',
+      'mysql_version="$(mysql --protocol=tcp --host=127.0.0.1 --user=safecommit --batch --skip-column-names --execute=\'SELECT VERSION()\')";',
       'tsx_version="$(/workspace/node_modules/.bin/tsx --version | head -n 1)";',
       'printf "NODE=%s\\nMYSQL=%s\\nTSX=%s\\n" "$node_version" "$mysql_version" "$tsx_version"',
     ].join(" ");
     const result = await sandbox.process.executeCommand(
       command,
       "/workspace",
-      undefined,
+      { MYSQL_PWD: bootstrapEnvironment.MYSQL_PASSWORD },
       90,
     );
     const output = new Map(
@@ -189,10 +204,17 @@ export async function main(): Promise<void> {
     throw new Error("SAFEFLASH_ALLOW_LIVE must equal true");
   }
   const apiKey = required("DAYTONA_API_KEY");
+  const bootstrapEnvironment = createDaytonaDatabaseBootstrapEnvironment(
+    required("DAYTONA_DATABASE_MYSQL_URL"),
+  );
   const client = new Daytona({ apiKey, otelEnabled: false });
   const name = await computeSnapshotName();
   const { snapshot, reused } = await createOrReuseSnapshot(client, name);
-  const verification = await verifySnapshot(client, snapshot);
+  const verification = await verifySnapshot(
+    client,
+    snapshot,
+    bootstrapEnvironment,
+  );
   process.stdout.write(
     `${JSON.stringify(
       {
@@ -208,10 +230,10 @@ export async function main(): Promise<void> {
           reused,
         },
         verification,
-        requiredLocalEnvironment: {
-          DAYTONA_DATABASE_SNAPSHOT: snapshot.name,
-          DAYTONA_DATABASE_MYSQL_URL: MYSQL_URI,
-        },
+        requiredLocalEnvironment: [
+          "DAYTONA_DATABASE_SNAPSHOT",
+          "DAYTONA_DATABASE_MYSQL_URL",
+        ],
       },
       null,
       2,

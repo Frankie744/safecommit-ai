@@ -63,7 +63,7 @@ function config(): SafeCommitDaytonaConfig {
     apiKey: "contract-test",
     databaseSnapshot: "safecommit-openboxes-mysql-v1",
     databaseConnectionUri:
-      "mysql://safecommit:fixture-only@127.0.0.1:3306/safecommit",
+      "mysql://safecommit:fixture-only-password-123456@127.0.0.1:3306/safecommit",
     retainSandboxes: false,
     createTimeoutSeconds: 90,
     deleteTimeoutSeconds: 60,
@@ -128,6 +128,17 @@ describe("SafeCommit Daytona database adapter", () => {
         expect(params.snapshot).toBe("safecommit-openboxes-mysql-v1");
         expect(params.ephemeral).toBe(true);
         expect(params.public).toBe(false);
+        expect(params.envVars).toMatchObject({
+          MYSQL_DATABASE: "safecommit",
+          MYSQL_USER: "safecommit",
+          MYSQL_PASSWORD: "fixture-only-password-123456",
+        });
+        expect(params.envVars?.MYSQL_ROOT_PASSWORD).toMatch(
+          /^[A-Za-z0-9_-]{40,}$/u,
+        );
+        expect(params.envVars?.MYSQL_ROOT_PASSWORD).not.toBe(
+          params.envVars?.MYSQL_PASSWORD,
+        );
         return sandbox;
       },
       async delete() {
@@ -176,6 +187,15 @@ describe("SafeCommit Daytona database adapter", () => {
         DAYTONA_DATABASE_SNAPSHOT: "snapshot",
         DAYTONA_DATABASE_MYSQL_URL:
           "mysql://user:password@remote.example/safecommit",
+      }),
+    ).toThrow(ProviderResponseError);
+    expect(() =>
+      readSafeCommitDaytonaConfig({
+        SAFEFLASH_ALLOW_LIVE: "true",
+        DAYTONA_API_KEY: "configured",
+        DAYTONA_DATABASE_SNAPSHOT: "snapshot",
+        DAYTONA_DATABASE_MYSQL_URL:
+          "mysql://root@127.0.0.1:3306/safecommit",
       }),
     ).toThrow(ProviderResponseError);
   });

@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 
 import {
   CandidateChangePlanSchema,
@@ -78,7 +79,17 @@ interface SandboxOutput {
   gates: DatabaseGateEvaluation;
 }
 
-function assertLoopbackMysqlUri(value: string): string {
+export interface DaytonaDatabaseBootstrapEnvironment {
+  readonly [key: string]: string;
+  readonly MYSQL_DATABASE: string;
+  readonly MYSQL_USER: string;
+  readonly MYSQL_PASSWORD: string;
+  readonly MYSQL_ROOT_PASSWORD: string;
+}
+
+export function createDaytonaDatabaseBootstrapEnvironment(
+  value: string,
+): DaytonaDatabaseBootstrapEnvironment {
   let parsed: URL;
   try {
     parsed = new URL(value);
@@ -91,14 +102,33 @@ function assertLoopbackMysqlUri(value: string): string {
   }
   if (
     parsed.protocol !== "mysql:" ||
-    !["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)
+    !["127.0.0.1", "localhost", "::1"].includes(parsed.hostname) ||
+    !["", "3306"].includes(parsed.port) ||
+    decodeURIComponent(parsed.username) !== "safecommit" ||
+    decodeURIComponent(parsed.password).length < 24 ||
+    parsed.pathname !== "/safecommit" ||
+    parsed.search !== "" ||
+    parsed.hash !== ""
   ) {
     throw new ProviderResponseError(
       "daytona",
-      "The Daytona fixture database must be loopback-local to its sandbox",
+      "The Daytona fixture database must use an authenticated safecommit user on the sandbox loopback MySQL service",
       false,
     );
   }
+  const password = decodeURIComponent(parsed.password);
+  return {
+    MYSQL_DATABASE: "safecommit",
+    MYSQL_USER: "safecommit",
+    MYSQL_PASSWORD: password,
+    MYSQL_ROOT_PASSWORD: createHash("sha256")
+      .update(`safecommit-daytona-root\u0000${password}`)
+      .digest("base64url"),
+  };
+}
+
+function assertLoopbackMysqlUri(value: string): string {
+  createDaytonaDatabaseBootstrapEnvironment(value);
   return value;
 }
 
@@ -254,6 +284,9 @@ export class SafeCommitDaytonaAdapter {
         {
           language: "typescript",
           snapshot: this.config.databaseSnapshot,
+          envVars: createDaytonaDatabaseBootstrapEnvironment(
+            this.config.databaseConnectionUri,
+          ),
           labels: {
             application: "safecommit",
             session: request.sessionId,

@@ -171,6 +171,7 @@ export interface DaytonaClientPort {
       autoStopInterval: number;
       ttlMinutes: number;
       snapshot?: string;
+      envVars?: Record<string, string>;
       networkBlockAll?: boolean;
       domainAllowList?: string;
     },
