@@ -105,6 +105,7 @@ async function build() {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="SafeCommit read-only, reproducible local database safety evidence.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23090b0e'/%3E%3Cpath d='M18 33l9 9 20-22' fill='none' stroke='%2374e39a' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <title>SafeCommit — Public Evidence</title>
   <style>
     :root { color-scheme: dark; --bg:#090b0e; --panel:#12171d; --line:#28313b; --ink:#f5f2e9; --muted:#a9b1ba; --green:#74e39a; --red:#ff6b70; --amber:#f0c76b; }
