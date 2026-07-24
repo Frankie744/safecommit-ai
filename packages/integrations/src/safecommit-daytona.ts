@@ -444,9 +444,12 @@ export class SafeCommitDaytonaAdapter {
         180,
       );
       if (result.exitCode !== 0) {
+        const runnerDetail = result.result.trim().slice(-2_000);
         throw new ProviderResponseError(
           "daytona",
-          "SafeCommit Daytona database runner failed",
+          runnerDetail === ""
+            ? "SafeCommit Daytona database runner failed"
+            : `SafeCommit Daytona database runner failed: ${runnerDetail}`,
           false,
         );
       }

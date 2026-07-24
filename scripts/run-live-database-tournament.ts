@@ -220,7 +220,9 @@ export async function main(): Promise<void> {
       } catch (error) {
         const executablePlanFailure =
           error instanceof ProviderResponseError &&
-          error.message === "SafeCommit Daytona database runner failed";
+          error.message.startsWith(
+            "SafeCommit Daytona database runner failed",
+          );
         const generatedPlanFailure =
           error instanceof ProviderResponseError &&
           error.provider === "fireworks" &&
