@@ -9,7 +9,10 @@ and binds human approval to the exact plan and evidence.
 
 ## Demo video
 
-The final three-minute submission video is available at:
+The final submission video is available at:
+[demo-video/SafeCommit_Final_Submission.mov](demo-video/SafeCommit_Final_Submission.mov).
+
+An MP4 fallback is also available at:
 [demo-video/SafeCommit_3min_Demo_Final.mp4](demo-video/SafeCommit_3min_Demo_Final.mp4).
 
 The competition profile is deliberately narrow: one logistics workflow against
