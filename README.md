@@ -7,6 +7,11 @@ contract, compares multiple candidate change plans in isolated database
 snapshots, rejects any plan that violates a deterministic business invariant,
 and binds human approval to the exact plan and evidence.
 
+## Demo video
+
+The final three-minute submission video is available at:
+[demo-video/SafeCommit_3min_Demo_Final.mp4](demo-video/SafeCommit_3min_Demo_Final.mp4).
+
 The competition profile is deliberately narrow: one logistics workflow against
 an **OpenBoxes-derived executable MySQL 8 fixture**. It is not a full OpenBoxes
 deployment. OpenBoxes uses MySQL as its primary database; this fixture pins the
