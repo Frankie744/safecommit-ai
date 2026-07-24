@@ -33,7 +33,7 @@ LIVE_CERTIFIED=NO
 
 ## Verified local result
 
-The committed run `safecommit-mysql-20260724T064859855Z` used MySQL 8.0.36
+The committed run `safecommit-mysql-20260724T071144887Z` used MySQL 8.0.36
 against the OpenBoxes-derived fixture and was captured from a clean source
 commit.
 

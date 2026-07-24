@@ -10,13 +10,8 @@ from reportlab.pdfgen.canvas import Canvas
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = (
-    ROOT
-    / "artifacts"
-    / "evidence"
-    / "safecommit-database-local"
-    / "safecommit-mysql-20260724T064859855Z"
-    / "summary.json"
+EVIDENCE_ROOT = (
+    ROOT / "artifacts" / "evidence" / "safecommit-database-local"
 )
 OUTPUT = (
     ROOT
@@ -121,7 +116,13 @@ def finish_page(canvas: Canvas) -> None:
 
 
 def build() -> None:
-    summary = json.loads(EVIDENCE.read_text(encoding="utf-8"))
+    latest_run = (EVIDENCE_ROOT / "latest-run.txt").read_text(
+        encoding="utf-8"
+    ).strip()
+    if not latest_run.startswith("safecommit-mysql-"):
+        raise ValueError("Invalid SafeCommit latest-run pointer")
+    evidence = EVIDENCE_ROOT / latest_run / "summary.json"
+    summary = json.loads(evidence.read_text(encoding="utf-8"))
     candidates = {item["candidateId"]: item for item in summary["candidates"]}
     safe = candidates["candidate-c-safe"]
     shipped = candidates["candidate-b-shipped-order"]

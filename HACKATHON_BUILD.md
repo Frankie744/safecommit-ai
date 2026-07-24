@@ -23,9 +23,9 @@ certification.
 
 ## Current clean database proof
 
-- Run: `safecommit-mysql-20260724T064859855Z`
+- Run: `safecommit-mysql-20260724T071144887Z`
 - Source commit:
-  `d497bad92696e9b699c03fb0ef219d64e0f4bab9`
+  `d133eca039797015feef2ee10aa9d33c840a2b93`
 - MySQL: `8.0.36`
 - Worktree at capture: clean
 - Three candidates: executed
