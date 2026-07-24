@@ -1,5 +1,6 @@
 import {
   createHumanApproval,
+  createRecordedLiveArtifact,
   createValidationSession,
   selectCandidate,
   sha256,
@@ -11,6 +12,8 @@ import {
   type DaytonaAttemptRecord,
   type HumanApproval,
   type PullRequestRecord,
+  type RecordedLiveArtifact,
+  type RecordedLiveCaptureInput,
   type ReviewFinding,
   type SafetyPolicy,
   type ScorerValues,
@@ -34,6 +37,7 @@ import {
   createLiveFullRevalidationReceipt,
   createLiveIndependentReviewReceipt,
   mintPullRequestPublishAuthorization,
+  isOfficialLiveEnvelope,
   readBraintrustConfig,
   readCodeRabbitConfig,
   readDaytonaConfig,
@@ -182,7 +186,8 @@ export interface LiveWorkflowDependencies {
     "seedFirmwareSafetyDataset" | "runCandidateExperiment" | "traceStage"
   >;
   publication: CandidatePublicationPort;
-  coderabbit: Pick<CodeRabbitAdapter, "waitForReview">;
+  coderabbit: Pick<CodeRabbitAdapter, "waitForReview"> &
+    Partial<Pick<CodeRabbitAdapter, "inspectReview">>;
   repository: {
     owner: string;
     name: string;
@@ -229,9 +234,11 @@ interface LiveWorkflowRecord {
   evaluationProvenanceByCandidate: Map<
     string,
     {
+      resultId: string;
       experimentId: string;
       experimentName: string;
       experimentUrl: string;
+      traceId: string;
       traceUrl: string;
       validationRound: number;
       capturedAt: string;
@@ -239,6 +246,7 @@ interface LiveWorkflowRecord {
   >;
   rankingByCandidate: Map<string, CandidateDecision["rankings"][number]>;
   lastInspection?: ProviderEnvelope<CodeRabbitInspectionEvidence>;
+  pullRequestEvidence?: ProviderEnvelope<PullRequestRecord>;
   stageTraces: ProviderEnvelope<BraintrustTraceEvidence>[];
   repairCheckpoint?: {
     blockedPullRequest: PullRequestRecord;
@@ -262,9 +270,13 @@ export interface LiveWorkflowSnapshot {
   selectedCandidate: CandidatePatch;
   candidates: readonly LiveCandidateEvidenceSummary[];
   providerEvidence: {
+    braintrustDatasetId: string;
     braintrustDatasetUrl: string;
+    braintrustExperimentId: string;
     braintrustExperimentUrl: string;
+    braintrustTraceId: string;
     braintrustTraceUrl: string;
+    stageTraceIds: readonly string[];
     stageTraceUrls: readonly string[];
     daytonaSandboxId: string;
     daytonaRunId: string;
@@ -280,7 +292,7 @@ export interface LiveCandidateEvidenceSummary {
   generation: {
     provider: "fireworks";
     model: string;
-    requestId: string | null;
+    requestId: string;
     latencyMs: number;
     totalTokens: number | null;
     sourceContextDigest: string;
@@ -317,6 +329,7 @@ export interface LiveCandidateEvidenceSummary {
   };
   scoring: {
     provider: "braintrust";
+    resultId: string;
     eligible: boolean;
     weightedScore: number;
     hardGateFailures: readonly string[];
@@ -325,6 +338,7 @@ export interface LiveCandidateEvidenceSummary {
     experimentId: string;
     experimentName: string;
     experimentUrl: string;
+    traceId: string;
     traceUrl: string;
     validationRound: number;
     capturedAt: string;
@@ -368,7 +382,9 @@ export interface LiveWorkflowProgressEvent {
     | "repair-started"
     | "repair-candidate-generated"
     | "repair-revalidation-finished"
-    | "ready-to-merge";
+    | "ready-to-merge"
+    | "readiness-refreshed"
+    | "readiness-invalidated";
   at: string;
   provider?: "github" | "fireworks" | "daytona" | "braintrust" | "coderabbit";
   candidateId?: string;
@@ -553,10 +569,12 @@ export class LiveSafetyWorkflow {
       input.envelope.provider !== "daytona" ||
       data.sessionId !== input.session.sessionId ||
       data.candidateId !== input.expectedCandidateId ||
-      data.runId !== input.expectedRunId
+      data.runId !== input.expectedRunId ||
+      data.retained ||
+      !data.destroyed
     ) {
       throw new Error(
-        "Daytona response is not bound to the requested session, candidate, and run",
+        "Daytona response is not bound to the requested session, candidate, and run, or its sandbox was not destroyed",
       );
     }
     return this.appendDaytonaAttempt({
@@ -587,7 +605,7 @@ export class LiveSafetyWorkflow {
         "Failed Daytona attempt is not bound to the requested candidate and run",
       );
     }
-    return this.appendDaytonaAttempt({
+    const reserved = this.appendDaytonaAttempt({
       session: input.session,
       purpose: input.purpose,
       candidateId: attempt.candidateId,
@@ -595,8 +613,29 @@ export class LiveSafetyWorkflow {
       runId: attempt.runId,
       capturedAt: attempt.capturedAt,
       disposition: attempt.disposition,
-      retryable: input.error.retryable,
+      retryable:
+        attempt.disposition === "cleanup-failed" ||
+        attempt.disposition === "failed-retained"
+          ? false
+          : input.error.retryable,
     });
+    if (
+      reserved.accepted &&
+      ["cleanup-failed", "failed-retained"].includes(attempt.disposition)
+    ) {
+      return {
+        accepted: true,
+        session: transitionValidationSession(reserved.session, {
+          type: "FAIL",
+          at: this.now().toISOString(),
+          reason:
+            "Daytona sandbox deletion was not confirmed; the live run is permanently fail-closed.",
+          recoverable: false,
+          retryAction: "reconcile-and-start-new-session",
+        }),
+      };
+    }
+    return reserved;
   }
 
   private appendDaytonaAttempt(input: {
@@ -815,7 +854,7 @@ export class LiveSafetyWorkflow {
         generation: {
           provider: "fireworks" as const,
           model: generation.evidence.data.model,
-          requestId: generation.evidence.data.requestId ?? null,
+          requestId: generation.evidence.data.requestId,
           latencyMs: generation.evidence.data.latencyMs,
           totalTokens: generation.evidence.data.totalTokens ?? null,
           sourceContextDigest: generation.evidence.data.sourceContextDigest,
@@ -873,9 +912,14 @@ export class LiveSafetyWorkflow {
       selectedCandidate: structuredClone(record.selectedCandidate),
       candidates,
       providerEvidence: {
+        braintrustDatasetId: record.braintrust.dataset.data.datasetId,
         braintrustDatasetUrl: record.braintrust.dataset.data.datasetUrl,
+        braintrustExperimentId:
+          record.braintrust.experiment.data.experimentId,
         braintrustExperimentUrl: record.braintrust.experiment.data.experimentUrl,
+        braintrustTraceId: record.braintrust.trace.data.traceId,
         braintrustTraceUrl: record.braintrust.trace.data.traceUrl,
+        stageTraceIds: record.stageTraces.map((trace) => trace.data.traceId),
         stageTraceUrls: record.stageTraces.map((trace) => trace.data.traceUrl),
         daytonaSandboxId: daytona.data.sandboxId,
         daytonaRunId: daytona.data.runId,
@@ -890,6 +934,44 @@ export class LiveSafetyWorkflow {
     const sessionId = safeSessionId(sessionIdValue);
     if (this.records.has(sessionId) || this.startReservations.has(sessionId)) {
       throw new Error("Live session already exists or is starting");
+    }
+    const persistedAttemptHistory =
+      this.sandboxAttemptHistoryBySession.get(sessionId) ?? [];
+    const terminalFailure = persistedAttemptHistory.find(
+      (attempt) =>
+        ["cleanup-failed", "failed-retained"].includes(attempt.disposition) ||
+        (attempt.disposition === "failed-destroyed" && !attempt.retryable),
+    );
+    if (terminalFailure !== undefined) {
+      const disposition = terminalFailure.disposition;
+      if (disposition === "completed") {
+        throw new Error(
+          "Internal Daytona attempt-history invariant rejected a completed terminal failure",
+        );
+      }
+      throw new DaytonaAttemptError({
+        attempt: {
+          sandboxId: terminalFailure.sandboxId,
+          runId: terminalFailure.runId,
+          candidateId: terminalFailure.candidateId,
+          capturedAt: terminalFailure.capturedAt,
+          disposition,
+        },
+        retryable: false,
+      });
+    }
+    const invalidReservation = persistedAttemptHistory.find(
+      (attempt) =>
+        attempt.reservationStatus !== "reserved" ||
+        attempt.duplicateSandbox ||
+        attempt.duplicateRun,
+    );
+    if (invalidReservation !== undefined) {
+      throw new ProviderResponseError(
+        "daytona",
+        "The live session ID is terminal because Daytona attempt identity was reused or rejected",
+        false,
+      );
     }
     this.startReservations.add(sessionId);
     this.emitProgress({
@@ -1027,7 +1109,7 @@ export class LiveSafetyWorkflow {
         candidates: generated.map((envelope) => ({
           candidateId: envelope.data.candidate.candidateId,
           patchDigest: sha256(envelope.data.candidate.unifiedDiff),
-          requestId: envelope.data.requestId ?? null,
+          requestId: envelope.data.requestId,
           model: envelope.data.model,
           latencyMs: envelope.data.latencyMs,
           totalTokens: envelope.data.totalTokens ?? null,
@@ -1047,7 +1129,7 @@ export class LiveSafetyWorkflow {
       stage: "candidates-generated",
       provider: "fireworks",
       evidenceId: generated
-        .map((envelope) => envelope.data.requestId ?? envelope.data.requestDigest)
+        .map((envelope) => envelope.data.requestId)
         .join(","),
       candidates: candidates.map((candidate, index) => ({
         candidateId: candidate.candidateId,
@@ -1094,6 +1176,16 @@ export class LiveSafetyWorkflow {
               throw new Error(
                 "Every Daytona response must reserve a globally unique sandbox ID and run ID",
               );
+            }
+            if (
+              ["cleanup-failed", "failed-retained"].includes(
+                error.attempt.disposition,
+              )
+            ) {
+              throw new DaytonaAttemptError({
+                attempt: { ...error.attempt },
+                retryable: false,
+              });
             }
           }
           throw error;
@@ -1168,9 +1260,16 @@ export class LiveSafetyWorkflow {
         return daytona;
       }),
     );
-    const firstRejectedDaytona = daytonaSettled.find(
+    const rejectedDaytona = daytonaSettled.filter(
       (result) => result.status === "rejected",
     );
+    const firstRejectedDaytona =
+      rejectedDaytona.find(
+        (result) =>
+          result.status === "rejected" &&
+          result.reason instanceof ProviderResponseError &&
+          !result.reason.retryable,
+      ) ?? rejectedDaytona[0];
     if (firstRejectedDaytona?.status === "rejected") {
       if (firstRejectedDaytona.reason instanceof Error) {
         throw firstRejectedDaytona.reason;
@@ -1307,7 +1406,7 @@ export class LiveSafetyWorkflow {
           seed: replacementRequest.seed,
         },
         output: {
-          requestId: replacement.data.requestId ?? null,
+          requestId: replacement.data.requestId,
           model: replacement.data.model,
           latencyMs: replacement.data.latencyMs,
           totalTokens: replacement.data.totalTokens ?? null,
@@ -1332,7 +1431,7 @@ export class LiveSafetyWorkflow {
         stage: "candidates-generated",
         provider: "fireworks",
         candidateId: replacement.data.candidate.candidateId,
-        evidenceId: replacement.data.requestId ?? replacement.data.requestDigest,
+        evidenceId: replacement.data.requestId,
         candidates: nextCandidates.map((candidate, index) => ({
           candidateId: candidate.candidateId,
           strategy: candidate.strategy,
@@ -1377,6 +1476,16 @@ export class LiveSafetyWorkflow {
             throw new Error(
               "Every Daytona response must reserve a globally unique sandbox ID and run ID",
             );
+          }
+          if (
+            ["cleanup-failed", "failed-retained"].includes(
+              error.attempt.disposition,
+            )
+          ) {
+            throw new DaytonaAttemptError({
+              attempt: { ...error.attempt },
+              retryable: false,
+            });
           }
         }
         throw error;
@@ -1636,9 +1745,11 @@ export class LiveSafetyWorkflow {
         braintrust.experiment.data.candidateResults.map((result) => [
           result.candidateId,
           {
+            resultId: result.resultId,
             experimentId: braintrust.experiment.data.experimentId,
             experimentName: braintrust.experiment.data.experimentName,
             experimentUrl: braintrust.experiment.data.experimentUrl,
+            traceId: braintrust.trace.data.traceId,
             traceUrl: braintrust.trace.data.traceUrl,
             validationRound: session.validationRound,
             capturedAt: liveCapturedAt(braintrust.experiment),
@@ -1803,6 +1914,7 @@ export class LiveSafetyWorkflow {
         at: this.now().toISOString(),
         pullRequest: published.data,
       });
+      record.pullRequestEvidence = published;
       this.emitProgress({
         sessionId,
         state: record.session.state,
@@ -1903,6 +2015,581 @@ export class LiveSafetyWorkflow {
       });
     }
     return this.snapshot(record);
+  }
+
+  /**
+   * Creates the redacted replay artifact directly from authority-bearing
+   * envelopes retained by this in-memory Live workflow. Serialized snapshots,
+   * mock fixtures, and manually assembled provider-shaped JSON cannot enter
+   * this production capture path because they do not retain envelope identity.
+   */
+  captureRecordedLiveArtifact(
+    sessionIdValue: string,
+    signingKey: string,
+  ): RecordedLiveArtifact {
+    const sessionId = safeSessionId(sessionIdValue);
+    const record = this.records.get(sessionId);
+    if (record === undefined) throw new Error("Unknown live workflow session");
+    const session = record.session;
+    const pullRequest = session.pullRequest;
+    const approval = session.approval;
+    const reviewReceipt = session.reviewReceipt;
+    const inspection = record.lastInspection;
+    const published = record.pullRequestEvidence;
+    if (
+      session.state !== "READY_TO_MERGE" ||
+      session.mode !== "live" ||
+      pullRequest === undefined ||
+      approval?.decision !== "approved" ||
+      approval.invalidatedAt !== undefined ||
+      reviewReceipt?.status !== "passed" ||
+      inspection === undefined ||
+      published === undefined
+    ) {
+      throw new Error(
+        "Recorded Live capture requires one complete current READY_TO_MERGE Live run",
+      );
+    }
+
+    const authorityEnvelopes: ProviderEnvelope<unknown>[] = [
+      ...[...record.generationByCandidate.values()].map(
+        (generation) =>
+          generation.evidence as ProviderEnvelope<unknown>,
+      ),
+      ...[...record.daytonaByCandidate.values()].map(
+        (daytona) => daytona as ProviderEnvelope<unknown>,
+      ),
+      record.braintrust.dataset as ProviderEnvelope<unknown>,
+      record.braintrust.experiment as ProviderEnvelope<unknown>,
+      record.braintrust.trace as ProviderEnvelope<unknown>,
+      ...record.stageTraces.map(
+        (trace) => trace as ProviderEnvelope<unknown>,
+      ),
+      record.prepared.publication as ProviderEnvelope<unknown>,
+      published as ProviderEnvelope<unknown>,
+      inspection as ProviderEnvelope<unknown>,
+    ];
+    if (
+      authorityEnvelopes.some(
+        (envelope) => !isOfficialLiveEnvelope(envelope),
+      )
+    ) {
+      throw new Error(
+        "Recorded Live capture rejected non-authoritative provider evidence",
+      );
+    }
+    if (
+      published.data.number !== pullRequest.number ||
+      published.data.headSha.toLowerCase() !== pullRequest.headSha.toLowerCase() ||
+      inspection.data.pullNumber !== pullRequest.number ||
+      inspection.data.observedPrHeadSha.toLowerCase() !==
+        pullRequest.headSha.toLowerCase() ||
+      inspection.data.status !== "passed" ||
+      !inspection.data.passed
+    ) {
+      throw new Error(
+        "Recorded Live capture rejected stale GitHub or CodeRabbit evidence",
+      );
+    }
+
+    const snapshot = this.snapshot(record);
+    const unique = <T>(values: readonly T[]): T[] => [...new Set(values)];
+    const fireworksRequestIds = snapshot.candidates.map(
+      (candidate) => candidate.generation.requestId,
+    );
+    const daytonaAttempts = session.sandboxAttemptHistory;
+    if (
+      daytonaAttempts.length === 0 ||
+      daytonaAttempts.some(
+        (attempt) =>
+          attempt.reservationStatus !== "reserved" ||
+          attempt.duplicateSandbox ||
+          attempt.duplicateRun ||
+          !(
+            attempt.disposition === "completed" ||
+            (attempt.disposition === "failed-destroyed" && attempt.retryable)
+          ),
+      )
+    ) {
+      throw new Error(
+        "Recorded Live capture requires every Daytona attempt to be unique and destroyed",
+      );
+    }
+    const daytonaRunIds = daytonaAttempts.map((attempt) => attempt.runId);
+    const daytonaSandboxIds = daytonaAttempts.map(
+      (attempt) => attempt.sandboxId,
+    );
+    const codeRabbitIds = [...reviewReceipt.evidenceIds];
+    const fireworksCapturedAt =
+      [...record.generationByCandidate.values()]
+        .map((generation) => liveCapturedAt(generation.evidence))
+        .sort()[0] ?? session.createdAt;
+    const daytonaCapturedAt =
+      [...record.daytonaByCandidate.values()]
+        .map((daytona) => liveCapturedAt(daytona))
+        .sort()[0] ?? session.createdAt;
+    const braintrustCapturedAt = liveCapturedAt(record.braintrust.dataset);
+    const githubCapturedAt = liveCapturedAt(published);
+    const codeRabbitCapturedAt = liveCapturedAt(inspection);
+    const fireworksDurationMs = Math.max(
+      0,
+      ...snapshot.candidates.map((candidate) => candidate.generation.latencyMs),
+    );
+    const daytonaDurationMs = Math.max(
+      0,
+      ...snapshot.candidates.map((candidate) =>
+        candidate.validation.commands.reduce(
+          (total, command) => total + command.durationMs,
+          0,
+        ),
+      ),
+    );
+    const progress = this.getProgress(sessionId);
+    const capturedAtMs = Math.min(
+      Date.parse(session.createdAt),
+      ...progress.map((event) => Date.parse(event.at)),
+      ...[
+        fireworksCapturedAt,
+        daytonaCapturedAt,
+        braintrustCapturedAt,
+        githubCapturedAt,
+        codeRabbitCapturedAt,
+      ].map(Date.parse),
+    );
+    const completedAtMs = Math.max(
+      Date.parse(session.updatedAt),
+      ...progress.map((event) => Date.parse(event.at)),
+      Date.parse(fireworksCapturedAt) + fireworksDurationMs,
+      Date.parse(daytonaCapturedAt) + daytonaDurationMs,
+      Date.parse(braintrustCapturedAt),
+      Date.parse(githubCapturedAt),
+      Date.parse(codeRabbitCapturedAt),
+    );
+    if (
+      !Number.isFinite(capturedAtMs) ||
+      !Number.isFinite(completedAtMs) ||
+      completedAtMs < capturedAtMs
+    ) {
+      throw new Error("Recorded Live capture received invalid provider timing");
+    }
+    const capturedAt = new Date(capturedAtMs).toISOString();
+    const completedAt = new Date(completedAtMs).toISOString();
+    const providerCapture = (
+      provider: RecordedLiveCaptureInput["providers"][number]["provider"],
+      requestIds: readonly string[],
+      resources: RecordedLiveCaptureInput["providers"][number]["resources"],
+      providerCapturedAt: string,
+      durationMs: number,
+      cleanup?: RecordedLiveCaptureInput["providers"][number]["cleanup"],
+    ): RecordedLiveCaptureInput["providers"][number] => ({
+      provider,
+      provenance: { mode: "live", kind: "live", verified: true },
+      requestIds: unique(requestIds),
+      resources,
+      capturedAt: providerCapturedAt,
+      durationMs,
+      ...(cleanup === undefined ? {} : { cleanup }),
+    });
+    const traceResources = unique([
+      record.braintrust.trace.data.traceId,
+      ...record.stageTraces.map((trace) => trace.data.traceId),
+    ]).map((traceId) => {
+      const trace =
+        record.braintrust.trace.data.traceId === traceId
+          ? record.braintrust.trace.data
+          : record.stageTraces.find(
+              (candidate) => candidate.data.traceId === traceId,
+            )!.data;
+      return {
+        kind: "trace" as const,
+        id: traceId,
+        url: trace.traceUrl,
+      };
+    });
+    const providers: RecordedLiveCaptureInput["providers"] = [
+      providerCapture(
+        "fireworks",
+        fireworksRequestIds,
+        fireworksRequestIds.map((requestId) => ({
+          kind: "response",
+          id: requestId,
+        })),
+        fireworksCapturedAt,
+        fireworksDurationMs,
+      ),
+      providerCapture(
+        "daytona",
+        [],
+        [
+          ...daytonaSandboxIds.map((sandboxId) => ({
+            kind: "sandbox" as const,
+            id: sandboxId,
+          })),
+          ...daytonaRunIds.map((runId) => ({
+            kind: "run" as const,
+            id: runId,
+          })),
+        ],
+        daytonaCapturedAt,
+        daytonaDurationMs,
+        {
+          status: "deleted",
+          resourceIds: [...daytonaSandboxIds],
+          completedAt,
+        },
+      ),
+      providerCapture(
+        "braintrust",
+        [],
+        [
+          {
+            kind: "dataset",
+            id: record.braintrust.dataset.data.datasetId,
+            url: record.braintrust.dataset.data.datasetUrl,
+          },
+          {
+            kind: "experiment",
+            id: record.braintrust.experiment.data.experimentId,
+            url: record.braintrust.experiment.data.experimentUrl,
+          },
+          ...traceResources,
+          ...snapshot.candidates.map((candidate) => ({
+            kind: "eval-result" as const,
+            id: candidate.scoring.resultId,
+          })),
+        ],
+        braintrustCapturedAt,
+        0,
+      ),
+      providerCapture(
+        "github",
+        [],
+        [
+          {
+            kind: "repository",
+            id: `${this.dependencies.repository.owner}/${this.dependencies.repository.name}`,
+            url: session.repository.repoUrl,
+          },
+          {
+            kind: "pull-request",
+            id: String(pullRequest.number),
+            url: pullRequest.url,
+          },
+          { kind: "base-sha", id: pullRequest.baseSha },
+          { kind: "head-sha", id: pullRequest.headSha },
+        ],
+        githubCapturedAt,
+        0,
+      ),
+      providerCapture(
+        "coderabbit",
+        [],
+        [
+          {
+            kind: "pull-request",
+            id: String(pullRequest.number),
+            url: pullRequest.url,
+          },
+          { kind: "head-sha", id: pullRequest.headSha },
+          ...codeRabbitIds.map((id) => ({
+            kind: "review" as const,
+            id,
+            url: reviewReceipt.reviewUrl,
+          })),
+        ],
+        codeRabbitCapturedAt,
+        0,
+      ),
+    ];
+
+    const eventsSource =
+      progress.length > 0
+        ? progress
+        : [
+            {
+              sequence: 1,
+              at: session.updatedAt,
+              state: session.state,
+              stage: "ready-to-merge" as const,
+              message: "The complete Live run reached READY_TO_MERGE.",
+              sessionId,
+            },
+          ];
+    let priorOffset = 0;
+    const events = eventsSource.map((event, index) => {
+      const rawOffset = Math.max(0, Date.parse(event.at) - capturedAtMs);
+      const offsetMs = Math.max(priorOffset, rawOffset);
+      priorOffset = offsetMs;
+      const nextAt = eventsSource[index + 1]?.at;
+      const durationMs =
+        nextAt === undefined
+          ? Math.max(0, completedAtMs - capturedAtMs - offsetMs)
+          : Math.max(0, Date.parse(nextAt) - capturedAtMs - offsetMs);
+      return {
+        sequence: index + 1,
+        offsetMs,
+        durationMs,
+        state: event.state,
+        title: event.stage.replaceAll("-", " ").toUpperCase(),
+        summary: event.message,
+        provider: "safeflash-orchestrator" as const,
+        resourceRefs: [],
+      };
+    });
+    const artifactInput: RecordedLiveCaptureInput = {
+      runId: `recorded-${sessionId}`,
+      capturedAt,
+      completedAt,
+      session: {
+        id: session.sessionId,
+        mode: "live",
+        state: "READY_TO_MERGE",
+        scenarioId: snapshot.candidates.some(
+          (candidate) =>
+            !candidate.scoring.eligible &&
+            candidate.scoring.weightedScore >
+              snapshot.candidates.find(
+                (item) =>
+                  item.candidate.candidateId ===
+                  session.selectedCandidateId,
+              )!.scoring.weightedScore,
+        )
+          ? "unsafe-high-score"
+          : "happy-path",
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+        repository: {
+          repoUrl: session.repository.repoUrl,
+          baseCommitSha: session.repository.commitSha,
+          headCommitSha: pullRequest.headSha,
+        },
+        incident: {
+          title: this.registry.incident.title,
+          summary: this.registry.incident.summary,
+          severity: "critical",
+          temperatureC: this.registry.incident.temperatureC,
+          sensorFault: this.registry.incident.sensorFault,
+          chargingEnabled: this.registry.incident.chargingEnabled,
+          evidence: [...this.registry.incident.evidence],
+        },
+        policy: {
+          name: "SafeFlash P0 Battery Controller Safety Policy",
+          version: session.policyVersion,
+          invariants: this.registry.policy.invariants.map(
+            (description, index) => ({
+              id: `p0-invariant-${index + 1}`,
+              description,
+              hardGate: true,
+            }),
+          ),
+        },
+        candidates: snapshot.candidates.map((candidate, index) => {
+          const buildCommand = candidate.validation.commands.find((command) =>
+            /build/iu.test(command.id),
+          );
+          return {
+            id: candidate.candidate.candidateId,
+            label: `Candidate ${String.fromCharCode(
+              "A".charCodeAt(0) + index,
+            )}`,
+            strategy: candidate.candidate.strategy,
+            hypothesis: candidate.candidate.hypothesis,
+            validationRound: candidate.scoring.validationRound,
+            selected:
+              candidate.candidate.candidateId === session.selectedCandidateId,
+            eliminatedReason: candidate.scoring.eligible
+              ? undefined
+              : candidate.scoring.hardGateFailures.join("; ") ||
+                "A non-compensable hard gate failed.",
+            generation: {
+              model: candidate.generation.model,
+              profile: candidate.evaluationProfile,
+              patchDigest: candidate.validation.patchDigest,
+            },
+            sandbox: {
+              id: candidate.validation.sandboxId,
+              status: candidate.validation.passed ? "passed" : "failed",
+              isolated: true,
+            },
+            build: {
+              status:
+                candidate.validation.build.exitCode === null
+                  ? "not-run"
+                  : candidate.validation.build.exitCode === 0
+                    ? "passed"
+                    : "failed",
+              summary: `Build exit code ${candidate.validation.build.exitCode ?? "not run"}.`,
+              exitCode: candidate.validation.build.exitCode,
+              artifactHash:
+                buildCommand?.artifactHash !== null &&
+                buildCommand?.artifactHash !== undefined &&
+                /^[0-9a-f]{64}$/u.test(buildCommand.artifactHash)
+                  ? buildCommand.artifactHash
+                  : undefined,
+            },
+            tests: {
+              status:
+                candidate.validation.unitTests.total === 0
+                  ? "not-run"
+                  : candidate.validation.unitTests.passed ===
+                      candidate.validation.unitTests.total &&
+                    candidate.validation.regressionTests.passed ===
+                      candidate.validation.regressionTests.total
+                    ? "passed"
+                    : "failed",
+              summary: `${candidate.validation.unitTests.passed}/${candidate.validation.unitTests.total} unit and ${candidate.validation.regressionTests.passed}/${candidate.validation.regressionTests.total} regression tests passed.`,
+              passed:
+                candidate.validation.unitTests.passed +
+                candidate.validation.regressionTests.passed,
+              total:
+                candidate.validation.unitTests.total +
+                candidate.validation.regressionTests.total,
+            },
+            safetyGate: {
+              status: candidate.scoring.eligible ? "passed" : "failed",
+              summary: `${candidate.validation.safetyTests.passed}/${candidate.validation.safetyTests.total} trusted safety tests passed.`,
+              hardGatePassed: candidate.scoring.eligible,
+              failures: [...candidate.scoring.hardGateFailures],
+            },
+            score: {
+              weighted: candidate.scoring.weightedScore,
+              eligible: candidate.scoring.eligible,
+              resultId: candidate.scoring.resultId,
+              experimentId: candidate.scoring.experimentId,
+              traceId: record.braintrust.trace.data.traceId,
+            },
+          };
+        }),
+        selectedCandidateId: session.selectedCandidateId!,
+        currentPatchDigest: session.currentPatchDigest!,
+        currentEvidenceDigest: session.currentEvidenceDigest!,
+        approval: {
+          decision: "approved",
+          evidenceDigest: approval.evidenceDigest,
+          bindingDigest: approval.bindingDigest,
+        },
+        pullRequest: {
+          number: pullRequest.number,
+          url: pullRequest.url,
+          status: "open",
+        },
+        review: {
+          round: Math.max(1, session.validationRound),
+          status: "passed",
+          headSha: reviewReceipt.headSha,
+        },
+      },
+      providers,
+      events,
+    };
+    return createRecordedLiveArtifact(artifactInput, signingKey);
+  }
+
+  /**
+   * Revalidates a previously ready claim with read-only GitHub/CodeRabbit
+   * evidence. A moved/closed PR, changed base/head, or new blocking review
+   * invalidates the old approval and review receipt instead of leaving a
+   * cached READY_TO_MERGE view behind.
+   */
+  async refreshReadyToMerge(
+    sessionIdValue: string,
+  ): Promise<LiveWorkflowSnapshot> {
+    const sessionId = safeSessionId(sessionIdValue);
+    return this.runExclusive(sessionId, async () => {
+      const record = this.records.get(sessionId);
+      if (record === undefined) throw new Error("Unknown live workflow session");
+      if (
+        record.session.state !== "READY_TO_MERGE" ||
+        record.session.pullRequest === undefined ||
+        record.session.reviewReceipt === undefined
+      ) {
+        throw new Error("Live workflow has no ready claim to refresh");
+      }
+      if (this.dependencies.coderabbit.inspectReview === undefined) {
+        throw new ProviderResponseError(
+          "coderabbit",
+          "Read-only READY freshness verification is unavailable",
+          false,
+        );
+      }
+
+      const pullRequest = record.session.pullRequest;
+      const inspection = await this.dependencies.coderabbit.inspectReview({
+        sessionId,
+        pullNumber: pullRequest.number,
+        headSha: pullRequest.headSha,
+        expectedBaseRef: pullRequest.baseBranch,
+        expectedBaseSha: pullRequest.baseSha,
+      });
+      record.lastInspection = inspection;
+
+      if (
+        inspection.data.status !== "passed" ||
+        !inspection.data.passed ||
+        inspection.data.timedOut ||
+        inspection.data.requiresFullRevalidation
+      ) {
+        const at = this.now().toISOString();
+        const reason =
+          `READY evidence invalidated by read-only remote freshness check: ${inspection.data.reason}`;
+        const approval =
+          record.session.approval === undefined
+            ? undefined
+            : {
+                ...record.session.approval,
+                invalidatedAt: at,
+                invalidationReason: reason,
+              };
+        record.session = transitionValidationSession(record.session, {
+          type: "FAIL",
+          at,
+          reason,
+          recoverable: false,
+          retryAction: "start-new-live-validation",
+        });
+        record.session = {
+          ...record.session,
+          approval,
+          reviewReceipt: undefined,
+          reviewFindings: [],
+        };
+        this.emitProgress({
+          sessionId,
+          state: record.session.state,
+          stage: "readiness-invalidated",
+          provider: "coderabbit",
+          candidateId: record.selectedCandidate.candidateId,
+          evidenceId: inspection.data.observedPrHeadSha,
+          message:
+            "The remote PR/review no longer matches the approved evidence; READY was revoked.",
+        });
+        return this.snapshot(record);
+      }
+
+      const refreshedReceipt = createLiveIndependentReviewReceipt(inspection, {
+        owner: this.dependencies.repository.owner,
+        repository: this.dependencies.repository.name,
+      });
+      record.session = {
+        ...record.session,
+        reviewReceipt: refreshedReceipt,
+        reviewFindings: inspection.data.findings.map(
+          (finding) => finding.finding,
+        ),
+        updatedAt: refreshedReceipt.capturedAt,
+      };
+      this.emitProgress({
+        sessionId,
+        state: record.session.state,
+        stage: "readiness-refreshed",
+        provider: "coderabbit",
+        candidateId: record.selectedCandidate.candidateId,
+        evidenceId: refreshedReceipt.evidenceIds.join(","),
+        message:
+          "Read-only freshness verification confirmed the exact open PR head and CodeRabbit pass.",
+      });
+      return this.snapshot(record);
+    });
   }
 
   async repairBlockedReview(sessionIdValue: string): Promise<LiveWorkflowSnapshot> {
@@ -2021,7 +2708,7 @@ export class LiveSafetyWorkflow {
           output: {
             reason: "unchanged-patch",
             patchDigest: repairedPatchDigest,
-            requestId: repairedEnvelope.data.requestId ?? null,
+            requestId: repairedEnvelope.data.requestId,
             model: repairedEnvelope.data.model,
             latencyMs: repairedEnvelope.data.latencyMs,
             totalTokens: repairedEnvelope.data.totalTokens ?? null,
@@ -2056,7 +2743,7 @@ export class LiveSafetyWorkflow {
         output: {
           candidateId: repairedCandidate.candidateId,
           patchDigest: repairedPatchDigest,
-          requestId: repairedEnvelope.data.requestId ?? null,
+          requestId: repairedEnvelope.data.requestId,
           model: repairedEnvelope.data.model,
           latencyMs: repairedEnvelope.data.latencyMs,
           totalTokens: repairedEnvelope.data.totalTokens ?? null,
@@ -2069,7 +2756,7 @@ export class LiveSafetyWorkflow {
         stage: "repair-candidate-generated",
         provider: "fireworks",
         candidateId: repairedCandidate.candidateId,
-        evidenceId: repairedPatchDigest,
+        evidenceId: repairedEnvelope.data.requestId,
         message: "Fireworks generated a changed repair for the exact review findings.",
       });
     }
@@ -2107,6 +2794,16 @@ export class LiveSafetyWorkflow {
             throw new Error(
               "Every Daytona response must reserve a globally unique sandbox ID and run ID",
             );
+          }
+          if (
+            ["cleanup-failed", "failed-retained"].includes(
+              error.attempt.disposition,
+            )
+          ) {
+            throw new DaytonaAttemptError({
+              attempt: { ...error.attempt },
+              retryable: false,
+            });
           }
         }
         throw error;
@@ -2311,9 +3008,11 @@ export class LiveSafetyWorkflow {
     record.evaluationProvenanceByCandidate.set(
       repairedCandidate.candidateId,
       {
+        resultId: repairedEvaluation.resultId,
         experimentId: braintrust.experiment.data.experimentId,
         experimentName: braintrust.experiment.data.experimentName,
         experimentUrl: braintrust.experiment.data.experimentUrl,
+        traceId: braintrust.trace.data.traceId,
         traceUrl: braintrust.trace.data.traceUrl,
         validationRound: record.session.validationRound,
         capturedAt: liveCapturedAt(braintrust.experiment),

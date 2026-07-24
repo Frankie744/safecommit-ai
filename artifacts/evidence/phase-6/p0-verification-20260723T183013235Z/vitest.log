@@ -1,0 +1,52 @@
+COMMAND: npm run test
+EXIT_CODE: 0
+DURATION_MS: 33153.384
+
+
+> safeflash@0.1.0 test
+> vitest run
+
+
+ RUN  v4.1.10 F:/desktop/hackthon
+
+ ✓ tests/adversarial/no-auto-merge.test.ts (1 test) 157ms
+ ✓ tests/integration/phase7-readiness.test.ts (7 tests) 35ms
+ ✓ tests/adversarial/patch-integrity.test.ts (6 tests) 35ms
+ ✓ tests/unit/device-telemetry.test.ts (4 tests) 22ms
+ ✓ tests/unit/safety-policy-composer-reservation.test.ts (4 tests) 16ms
+ ✓ tests/unit/workflow.test.ts (8 tests) 35ms
+ ✓ tests/unit/selector.test.ts (3 tests) 9ms
+ ✓ tests/unit/candidate-patch-schema.test.ts (1 test) 20ms
+ ✓ tests/unit/evidence-approval.test.ts (2 tests) 17ms
+ ✓ tests/unit/recorded-live.test.ts (7 tests) 154ms
+ ✓ tests/unit/event-store.test.ts (3 tests) 140ms
+ ✓ tests/integration/live-orchestrator.test.ts (14 tests) 410ms
+ ✓ tests/integration/recorded-live-session-service.test.ts (4 tests) 173ms
+ ✓ tests/integration/provider-revalidation.test.ts (8 tests) 164ms
+ ✓ tests/unit/publish-authorization.test.ts (5 tests) 76ms
+ ✓ tests/integration/provider-provenance.test.ts (4 tests) 25ms
+ ✓ tests/integration/provider-braintrust-evals.test.ts (12 tests) 76ms
+ ✓ tests/integration/provider-fireworks.test.ts (14 tests) 140ms
+ ✓ tests/integration/provider-daytona.test.ts (13 tests) 90ms
+ ✓ tests/integration/device-telemetry-route.test.ts (2 tests) 47ms
+ ✓ tests/integration/external-smoke-preflight.test.ts (4 tests) 28ms
+ ✓ tests/integration/provider-github-coderabbit.test.ts (36 tests) 471ms
+ ✓ tests/integration/live-session-service.test.ts (8 tests) 643ms
+ ✓ tests/adversarial/secrets.test.ts (2 tests) 2260ms
+     ✓ secrets_are_not_exposed_to_frontend_or_git  2243ms
+ ✓ tests/integration/session-api-service.test.ts (6 tests) 21001ms
+ ✓ tests/integration/competition-scenarios.test.ts (4 tests) 21379ms
+     ✓ runs a distinct happy path whose real safe candidates are ranked normally  21117ms
+ ✓ tests/integration/cross-device-profiles.test.ts (2 tests) 20250ms
+     ✓ runs the motor profile through the same hard-gate selector and rejects the higher unsafe score  20232ms
+ ✓ tests/integration/baseline-firmware.test.ts (1 test) 18282ms
+   ✓ baseline_builds_but_fails_sensor_disconnect_safety_test  18278ms
+ ✓ tests/integration/tournament.local.test.ts (5 tests) 18722ms
+
+ Test Files  29 passed (29)
+      Tests  190 passed (190)
+   Start at  11:30:44
+   Duration  32.10s (transform 15.33s, setup 0ms, import 179.79s, tests 104.88s, environment 13ms)
+
+JSON report written to F:/desktop/hackthon/artifacts/evidence/latest-vitest.json
+

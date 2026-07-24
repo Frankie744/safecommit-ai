@@ -29,7 +29,6 @@ import {
   type PatchIntegrityResult,
 } from "../../../packages/safety-policy/src/index";
 
-import { LOCAL_TOURNAMENT_CANDIDATES } from "../../../demo/candidate-patches/index";
 import {
   EMPTY_TOURNAMENT_REPLAY,
   JsonlEventStore,
@@ -39,9 +38,16 @@ import {
   type LocalTestProvenance,
   type TournamentReplayState,
 } from "./event-store";
+import {
+  DEFAULT_DEMO_SCENARIO_ID,
+  type DemoScenarioId,
+} from "./demo-scenarios";
+import {
+  executableProfile,
+  type ExecutableIncidentProfile,
+  type ExecutableProfileId,
+} from "./executable-profiles";
 
-const SOURCE_FILE = "fixtures/battery-controller/src/battery_controller.c";
-const FIXTURE_DIRECTORY = "fixtures/battery-controller";
 const LOCAL_SOURCE_VERSION = "local-tournament-v1";
 const DEFAULT_COMMAND_TIMEOUT_MS = 60_000;
 
@@ -94,6 +100,7 @@ export interface LocalCandidateResult {
 
 export interface LocalTournamentResult {
   sessionId: string;
+  profile: ExecutableIncidentProfile;
   provenance: LocalTestProvenance;
   eventLogPath: string;
   toolchain: Toolchain;
@@ -104,9 +111,11 @@ export interface LocalTournamentResult {
 
 export interface LocalTournamentOptions {
   sessionId: string;
+  profileId?: ExecutableProfileId;
   workspaceRoot?: string;
   commandTimeoutMs?: number;
   now?: () => Date;
+  scenarioId?: DemoScenarioId;
 }
 
 export interface LiveTournamentProvider {
@@ -334,6 +343,7 @@ async function determineGitRevision(workspaceRoot: string): Promise<string> {
       "--untracked-files=all",
       "--",
       "fixtures/battery-controller",
+      "fixtures/motor-controller",
       "demo/candidate-patches",
       "apps/orchestrator",
       "packages/domain",
@@ -524,9 +534,13 @@ function ctestArguments(toolchain: Toolchain, build: string, label: string): str
   return args;
 }
 
-async function copyFixture(workspaceRoot: string, repositoryRoot: string): Promise<void> {
-  const source = join(workspaceRoot, FIXTURE_DIRECTORY);
-  const destination = join(repositoryRoot, FIXTURE_DIRECTORY);
+async function copyFixture(
+  workspaceRoot: string,
+  repositoryRoot: string,
+  profile: ExecutableIncidentProfile,
+): Promise<void> {
+  const source = join(workspaceRoot, profile.fixtureDirectory);
+  const destination = join(repositoryRoot, profile.fixtureDirectory);
   if (!(await fileExists(source))) throw new Error(`Fixture does not exist: ${source}`);
   await mkdir(dirname(destination), { recursive: true });
   await cp(source, destination, { recursive: true, errorOnExist: true });
@@ -542,14 +556,19 @@ async function validateOneCandidate(input: {
   commitSha: string;
   eventStore: JsonlEventStore;
   now: () => Date;
+  profile: ExecutableIncidentProfile;
 }): Promise<LocalCandidateResult> {
   const candidate = CandidatePatchSchema.parse(input.candidate);
   const integrity = validatePatchIntegrity(candidate.unifiedDiff, {
-    allowedPathPrefixes: [`${FIXTURE_DIRECTORY}/src/`],
+    allowedPathPrefixes: [`${input.profile.fixtureDirectory}/src/`],
     maxChangedFiles: 1,
     maxChangedLines: 120,
   });
-  if (!integrity.valid || integrity.changedFiles.length !== 1 || integrity.changedFiles[0] !== SOURCE_FILE) {
+  if (
+    !integrity.valid ||
+    integrity.changedFiles.length !== 1 ||
+    integrity.changedFiles[0] !== input.profile.sourceFile
+  ) {
     throw new Error(
       `${candidate.candidateId} failed local patch integrity: ${integrity.violations.map((item) => item.code).join(", ")}`,
     );
@@ -561,10 +580,10 @@ async function validateOneCandidate(input: {
   const buildDirectory = join(sandboxDirectory, "build");
   const patchPath = join(sandboxDirectory, "candidate.patch");
   await mkdir(sandboxDirectory, { recursive: false });
-  await copyFixture(input.workspaceRoot, repositoryRoot);
+  await copyFixture(input.workspaceRoot, repositoryRoot, input.profile);
   await writeFile(patchPath, candidate.unifiedDiff, "utf8");
 
-  const sourcePath = join(repositoryRoot, SOURCE_FILE);
+  const sourcePath = join(repositoryRoot, input.profile.sourceFile);
   const fixtureHashBeforePatch = await hashFile(sourcePath);
   const commands: LocalCommandResult[] = [];
   const runCommand = async (
@@ -619,6 +638,9 @@ async function validateOneCandidate(input: {
       sandboxId,
       strategy: candidate.strategy,
       provenanceKind: LOCAL_TEST_PROVENANCE.kind,
+      profileId: input.profile.id,
+      profileVersion: input.profile.profileVersion,
+      commandPolicyId: input.profile.commandPolicyId,
     },
   });
 
@@ -651,7 +673,7 @@ async function validateOneCandidate(input: {
     input.toolchain.cmakePath,
     configureArguments(
       input.toolchain,
-      join(repositoryRoot, FIXTURE_DIRECTORY),
+      join(repositoryRoot, input.profile.fixtureDirectory),
       buildDirectory,
     ),
   );
@@ -689,17 +711,27 @@ async function validateOneCandidate(input: {
     unit !== undefined,
     unit?.exitCode ?? null,
     unit?.timedOut ?? false,
-    5,
+    input.profile.expectedUnitTests,
   );
   const safetyTests = deterministicSuiteEvidence(
     safety !== undefined,
     safety?.exitCode ?? null,
     safety?.timedOut ?? false,
-    6,
+    input.profile.expectedSafetyTests,
   );
   const scores = scoreValues(buildPassed, unitTests, safetyTests, integrity);
   const evidenceDigest = computeEvidenceDigest({
     provenance: LOCAL_TEST_PROVENANCE,
+    profile: {
+      id: input.profile.id,
+      profileVersion: input.profile.profileVersion,
+      commandPolicyId: input.profile.commandPolicyId,
+      hardwareClass: input.profile.hardwareClass,
+      fixtureDirectory: input.profile.fixtureDirectory,
+      sourceFile: input.profile.sourceFile,
+      expectedUnitTests: input.profile.expectedUnitTests,
+      expectedSafetyTests: input.profile.expectedSafetyTests,
+    },
     candidate,
     sandboxId,
     fixtureHashBeforePatch,
@@ -735,9 +767,19 @@ export async function runLocalTournament(
   const now = options.now ?? (() => new Date());
   const workspaceRoot = resolve(options.workspaceRoot ?? process.cwd());
   const sessionId = safeSegment(options.sessionId);
+  const profile = executableProfile(
+    options.profileId ?? "battery-sensor-disconnect",
+  );
+  const scenarioId = options.scenarioId ?? DEFAULT_DEMO_SCENARIO_ID;
+  if (scenarioId === "provider-failure") {
+    throw new Error(
+      "The provider-failure scenario is a fail-closed API fixture and cannot execute a local tournament.",
+    );
+  }
   // This host runner deliberately accepts only repository-owned fixtures.
   // Fireworks/model-authored candidates must use Daytona live execution.
-  const candidates = LOCAL_TOURNAMENT_CANDIDATES.map((candidate) =>
+  const scenarioCandidates = profile.candidatesForScenario(scenarioId);
+  const candidates = scenarioCandidates.map((candidate) =>
     CandidatePatchSchema.parse(candidate),
   );
   if (
@@ -766,6 +808,13 @@ export async function runLocalTournament(
       provider: "local-process",
       mode: "mock",
       warning: LOCAL_TEST_PROVENANCE.notice,
+      scenarioId,
+      profileId: profile.id,
+      profileVersion: profile.profileVersion,
+      commandPolicyId: profile.commandPolicyId,
+      hardwareClass: profile.hardwareClass,
+      fixtureDirectory: profile.fixtureDirectory,
+      sourceFile: profile.sourceFile,
       sourceCommitSha: commitSha,
       toolchain: {
         cmakePath: toolchain.cmakePath,
@@ -788,6 +837,7 @@ export async function runLocalTournament(
           commitSha,
           eventStore,
           now,
+          profile,
         }),
       ),
     );
@@ -868,6 +918,7 @@ export async function runLocalTournament(
     );
     return {
       sessionId,
+      profile,
       provenance: LOCAL_TEST_PROVENANCE,
       eventLogPath,
       toolchain,

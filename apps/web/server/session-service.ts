@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { promisify } from "node:util";
 
 import {
   computeEvidenceDigest,
@@ -14,8 +16,12 @@ import {
   type WorkflowEvent,
 } from "@safeflash/domain";
 import {
+  DEFAULT_DEMO_SCENARIO_ID,
+  DEMO_SCENARIO_IDS,
   JsonlEventStore,
+  demoScenario,
   runLocalTournament,
+  type DemoScenarioId,
   type LocalCandidateResult,
   type LocalTournamentOptions,
   type LocalTournamentResult,
@@ -27,6 +33,7 @@ import type {
   CandidateEvidenceView,
   CandidateView,
   EvidenceProvenance,
+  ProviderEvidenceView,
   SessionView,
   TimelineEventView,
 } from "../lib/session-types";
@@ -36,6 +43,7 @@ const STORE_VERSION = 2 as const;
 const LEGACY_STORE_VERSION = 1 as const;
 const POLICY_VERSION = "battery-safety-v1";
 const SOURCE_VERSION = "web-session-service-v1";
+const execFileAsync = promisify(execFile);
 
 const LOCAL_PROVENANCE: EvidenceProvenance = Object.freeze({
   kind: "local-test",
@@ -43,10 +51,34 @@ const LOCAL_PROVENANCE: EvidenceProvenance = Object.freeze({
   verified: false,
 });
 
+function localExternalProviderStatus(
+  failedProvider?: "fireworks",
+): readonly ProviderEvidenceView[] {
+  return ["fireworks", "daytona", "braintrust", "github", "coderabbit"].map(
+    (provider) => ({
+      provider,
+      operation:
+        provider === failedProvider
+          ? "injected provider-failure fixture"
+          : "external provider not invoked in mock mode",
+      status: provider === failedProvider ? "failed" : "not-run",
+      resourceIds: [],
+      urls: [],
+      provenance: {
+        kind: "mock",
+        provider:
+          provider === failedProvider ? "injected-fixture" : provider,
+        verified: false,
+      },
+    }),
+  );
+}
+
 export const CreateSessionRequestSchema = z
   .object({
     incidentKind: z.literal("battery-sensor-disconnect"),
     runKind: z.literal("tournament"),
+    scenarioId: z.enum(DEMO_SCENARIO_IDS).default(DEFAULT_DEMO_SCENARIO_ID),
   })
   .strict();
 
@@ -115,6 +147,22 @@ function assertSafeSessionId(sessionId: string): string {
 
 function asIso(now: () => Date): string {
   return now().toISOString();
+}
+
+async function currentWorkspaceHead(workspaceRoot: string): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], {
+      cwd: workspaceRoot,
+      encoding: "utf8",
+      timeout: 10_000,
+      windowsHide: true,
+    });
+    const head = stdout.trim().toLowerCase();
+    if (/^[0-9a-f]{40}$/u.test(head)) return head;
+  } catch {
+    // The provider-failure fixture still fails closed when Git metadata is unavailable.
+  }
+  return "0".repeat(40);
 }
 
 function applyEvents(
@@ -387,6 +435,40 @@ export class SessionService {
 
     const events = await new JsonlEventStore(eventLogPath).readAll();
     const completed = events.at(-1);
+    if (record.view.scenario?.id === "provider-failure") {
+      const started = events[0];
+      if (
+        events.length !== 2 ||
+        started?.eventType !== "TOURNAMENT_STARTED" ||
+        started.payload.scenarioId !== "provider-failure" ||
+        started.payload.mode !== "mock" ||
+        completed?.eventType !== "TOURNAMENT_FAILED" ||
+        record.session.state !== "FAILED" ||
+        record.view.state !== "FAILED" ||
+        record.session.mode !== "mock" ||
+        record.view.mode !== "mock" ||
+        record.view.candidates.length !== 0 ||
+        record.session.selectedCandidateId !== undefined ||
+        record.view.selectedCandidateId !== undefined ||
+        record.view.currentEvidenceDigest !== undefined ||
+        record.view.approval !== undefined ||
+        record.view.pullRequest !== undefined ||
+        record.view.review !== undefined ||
+        record.view.failure === undefined ||
+        record.view.failure.recoverable ||
+        record.view.events.length !== events.length ||
+        events.some(
+          (event, index) => record.view.events[index]?.id !== event.eventHash,
+        )
+      ) {
+        throw new SessionServiceError(
+          500,
+          "CORRUPT_SESSION",
+          "Stored provider-failure fixture no longer matches its fail-closed evidence.",
+        );
+      }
+      return;
+    }
     const winnerCandidateId = completed?.payload.winnerCandidateId;
     const winnerCompletion = events.find(
       (event) =>
@@ -504,12 +586,16 @@ export class SessionService {
     }
     const sessionId = `web-${randomUUID()}`;
     return this.withSessionLock(sessionId, async () => {
+      if (request.data.scenarioId === "provider-failure") {
+        return this.createProviderFailureFixture(sessionId);
+      }
       let tournament: LocalTournamentResult;
       try {
         tournament = await this.tournamentRunner({
           sessionId,
           workspaceRoot: this.workspaceRoot,
           commandTimeoutMs: 90_000,
+          scenarioId: request.data.scenarioId,
         });
       } catch {
         throw new SessionServiceError(
@@ -597,6 +683,7 @@ export class SessionService {
         id: sessionId,
         mode: "mock",
         state: domainSession.state,
+        scenario: { ...demoScenario(request.data.scenarioId) },
         createdAt,
         updatedAt: domainSession.updatedAt,
         repository: { repoUrl: "local-workspace", commitSha },
@@ -644,6 +731,18 @@ export class SessionService {
         selectedCandidateId: winnerId,
         currentPatchDigest: patchDigest,
         currentEvidenceDigest: winner.evidenceDigest,
+        providerEvidence: localExternalProviderStatus(),
+        cleanup: {
+          status: "not-run",
+          sandboxIds: [],
+          summary:
+            "Daytona was not invoked. Local test sandboxes are not represented as Daytona resources.",
+          provenance: {
+            kind: "mock",
+            provider: "local-process",
+            verified: false,
+          },
+        },
         events: storedEvents.map(timelineEvent),
       };
       const record: PersistedSession = {
@@ -656,6 +755,146 @@ export class SessionService {
       await this.persist(record);
       return view;
     });
+  }
+
+  private async createProviderFailureFixture(
+    sessionId: string,
+  ): Promise<SessionView> {
+    const scenarioId: DemoScenarioId = "provider-failure";
+    const scenario = demoScenario(scenarioId);
+    const createdAt = asIso(this.now);
+    const commitSha = await currentWorkspaceHead(this.workspaceRoot);
+    let domainSession = createValidationSession({
+      id: sessionId,
+      incidentId: "battery-sensor-disconnect",
+      policyId: "battery-controller-safety-policy",
+      policyVersion: POLICY_VERSION,
+      repository: { repoUrl: "local-workspace", commitSha },
+      mode: "mock",
+      runKind: "tournament",
+      sourceVersion: `${SOURCE_VERSION}:provider-failure-fixture`,
+      at: createdAt,
+    });
+    const failedAt = asIso(this.now);
+    const failureReason =
+      "Injected Fireworks HTTP 429 fixture produced no CandidatePatch evidence; selection, approval, and publication remain blocked.";
+    domainSession = transitionValidationSession(domainSession, {
+      type: "FAIL",
+      at: failedAt,
+      reason: failureReason,
+      recoverable: false,
+    });
+
+    const sandboxRoot = join(
+      this.workspaceRoot,
+      ".safeflash",
+      "local-sandboxes",
+    );
+    await mkdir(sandboxRoot, { recursive: true });
+    const eventLogPath = join(
+      sandboxRoot,
+      `localtest-${sessionId}.events.jsonl`,
+    );
+    const eventStore = new JsonlEventStore(eventLogPath);
+    await eventStore.append({
+      sessionId,
+      eventType: "TOURNAMENT_STARTED",
+      occurredAt: createdAt,
+      payload: {
+        candidateCount: 3,
+        generatedCandidateCount: 0,
+        mode: "mock",
+        provider: "injected-fixture",
+        scenarioId,
+        sourceCommitSha: commitSha,
+        warning:
+          "MOCK fault injection. No external provider request was sent and no live success is claimed.",
+      },
+    });
+    await eventStore.append({
+      sessionId,
+      eventType: "TOURNAMENT_FAILED",
+      occurredAt: failedAt,
+      payload: {
+        reason: failureReason,
+        injectedStatus: 429,
+        providerCalled: false,
+      },
+    });
+    const storedEvents = await eventStore.readAll();
+    const view: SessionView = {
+      id: sessionId,
+      mode: "mock",
+      state: "FAILED",
+      scenario: { ...scenario },
+      createdAt,
+      updatedAt: failedAt,
+      repository: { repoUrl: "local-workspace", commitSha },
+      currentCommitSha: commitSha,
+      incident: {
+        title: "Battery temperature sensor disconnected while charging",
+        summary:
+          "The provider-failure fixture checks that unavailable candidate evidence cannot cross the safety gate.",
+        severity: "critical",
+        temperatureC: 0,
+        sensorFault: true,
+        chargingEnabled: true,
+        evidence: [
+          "provider_fault=injected_http_429",
+          "provider_called=false",
+          "candidate_count=0",
+          "publication=blocked",
+        ],
+        provenance: {
+          kind: "mock",
+          provider: "injected-fixture",
+          verified: false,
+        },
+      },
+      policy: {
+        name: "Battery Controller Fail-Closed Safety Policy",
+        version: POLICY_VERSION,
+        invariants: [
+          {
+            id: "missing-provider-evidence-fails-closed",
+            description:
+              "Missing or malformed provider evidence cannot produce an eligible candidate.",
+            hardGate: true,
+          },
+        ],
+        provenance: {
+          kind: "mock",
+          provider: "injected-fixture",
+          verified: false,
+        },
+      },
+      candidates: [],
+      providerEvidence: localExternalProviderStatus("fireworks"),
+      cleanup: {
+        status: "not-run",
+        sandboxIds: [],
+        summary:
+          "No Daytona sandbox was created because the injected Fireworks fault failed before validation.",
+        provenance: {
+          kind: "mock",
+          provider: "injected-fixture",
+          verified: false,
+        },
+      },
+      failure: {
+        reason: failureReason,
+        recoverable: false,
+      },
+      events: storedEvents.map(timelineEvent),
+    };
+    await this.persist({
+      storeVersion: STORE_VERSION,
+      session: domainSession,
+      view,
+      tournamentEventLogPath: eventLogPath,
+      persistedAt: failedAt,
+    });
+    return view;
   }
 
   async get(sessionId: string): Promise<SessionView> {

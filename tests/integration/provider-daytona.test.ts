@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { CandidatePatch } from "@safeflash/domain";
 import {
   DEFAULT_DAYTONA_COMMAND_POLICY,
+  DAYTONA_DELETE_MAX_ATTEMPTS,
   DaytonaAdapter,
   DaytonaAttemptError,
   ProviderResponseError,
@@ -56,6 +57,8 @@ class FakeDaytona implements DaytonaClientPort {
   failCommand?: string;
   failClone = false;
   failDelete = false;
+  createError?: unknown;
+  deleteFailuresRemaining = 0;
   wrongCommit = false;
   smokeMode = false;
 
@@ -105,11 +108,16 @@ class FakeDaytona implements DaytonaClientPort {
   async create(params: unknown): Promise<DaytonaSandboxPort> {
     this.events.push("create");
     this.createParams.push(params);
+    if (this.createError !== undefined) throw this.createError;
     return this.sandbox;
   }
 
   async delete(): Promise<void> {
     this.events.push("delete");
+    if (this.deleteFailuresRemaining > 0) {
+      this.deleteFailuresRemaining -= 1;
+      throw new Error("secret transient cleanup transport detail");
+    }
     if (this.failDelete) throw new Error("secret cleanup transport detail");
   }
 }
@@ -143,6 +151,27 @@ describe("Daytona isolation contract", () => {
         apiUrl: "https://credential-collector.example/api",
       }),
     ).toThrow(ProviderResponseError);
+    expect(() =>
+      readDaytonaConfig({
+        SAFEFLASH_ALLOW_LIVE: "true",
+        DAYTONA_API_KEY: "configured-for-contract-test",
+        SAFEFLASH_RETAIN_SANDBOXES: "true",
+      }),
+    ).toThrow(/requires every Daytona sandbox to be deleted/u);
+    expect(
+      readDaytonaConfig({
+        SAFEFLASH_ALLOW_LIVE: "true",
+        DAYTONA_API_KEY: "configured-for-contract-test",
+        SAFEFLASH_RETAIN_SANDBOXES: "false",
+      }).retainSandboxes,
+    ).toBe(false);
+    expect(
+      () =>
+        new DaytonaAdapter(
+          { ...CONFIG, retainSandboxes: true },
+          new FakeDaytona(),
+        ),
+    ).toThrow(/cannot retain Daytona sandboxes/u);
   });
 
   it("clones an exact commit, blocks network, runs only trusted commands, and destroys", async () => {
@@ -180,6 +209,7 @@ describe("Daytona isolation contract", () => {
     ]);
     expect(fake.createParams[0]).toMatchObject({
       public: false,
+      ephemeral: true,
       domainAllowList: "github.com,*.githubusercontent.com",
     });
     expect(fake.events.indexOf("clone")).toBeLessThan(
@@ -291,6 +321,30 @@ describe("Daytona isolation contract", () => {
     expect(fake.commands).toHaveLength(6);
   });
 
+  it("retries sandbox deletion within a fixed bound before returning evidence", async () => {
+    const fake = new FakeDaytona();
+    fake.deleteFailuresRemaining = DAYTONA_DELETE_MAX_ATTEMPTS - 1;
+    const result = await new DaytonaAdapter(CONFIG, fake).validateCandidate({
+      runId: "run-daytona-cleanup-retry",
+      sessionId: "session-daytona",
+      candidate: CANDIDATE,
+      repository: {
+        repoUrl: "https://github.com/example/safeflash.git",
+        commitSha: COMMIT,
+      },
+      policy: POLICY,
+    });
+
+    expect(result.data).toMatchObject({
+      retained: false,
+      destroyed: true,
+      passed: true,
+    });
+    expect(fake.events.filter((event) => event === "delete")).toHaveLength(
+      DAYTONA_DELETE_MAX_ATTEMPTS,
+    );
+  });
+
   it("returns sanitized structured attempt evidence after post-create and cleanup failures", async () => {
     const failedClone = new FakeDaytona();
     failedClone.failClone = true;
@@ -338,7 +392,7 @@ describe("Daytona isolation contract", () => {
       }),
     ).rejects.toMatchObject({
       name: "DaytonaAttemptError",
-      retryable: true,
+      retryable: false,
       attempt: {
         sandboxId: "sandbox-contract-id",
         runId: "run-cleanup-failure",
@@ -346,6 +400,9 @@ describe("Daytona isolation contract", () => {
         disposition: "cleanup-failed",
       },
     });
+    expect(failedCleanup.events.filter((event) => event === "delete")).toHaveLength(
+      DAYTONA_DELETE_MAX_ATTEMPTS,
+    );
 
     const nonRetryable = new FakeDaytona();
     nonRetryable.wrongCommit = true;
@@ -385,6 +442,62 @@ describe("Daytona isolation contract", () => {
     expect(fake.events).toEqual([]);
   });
 
+  it("classifies injected 401, 403, and 422 create failures as nonretryable", async () => {
+    for (const status of [401, 403, 422]) {
+      const fake = new FakeDaytona();
+      fake.createError = {
+        status,
+        response: { data: `secret-daytona-body-${status}` },
+      };
+      const promise = new DaytonaAdapter(CONFIG, fake).validateCandidate({
+        runId: `run-daytona-${status}`,
+        sessionId: "session-daytona",
+        candidate: CANDIDATE,
+        repository: {
+          repoUrl: "https://github.com/example/safeflash.git",
+          commitSha: COMMIT,
+        },
+        policy: POLICY,
+      });
+      await expect(promise).rejects.toMatchObject({
+        name: "ProviderResponseError",
+        provider: "daytona",
+        retryable: false,
+        message: "Daytona sandbox validation failed",
+      });
+      await expect(promise).rejects.not.toThrow(/secret-daytona-body/u);
+    }
+  });
+
+  it("classifies injected 429 and timeout create failures as retryable", async () => {
+    for (const error of [
+      { statusCode: 429, response: { data: "secret-rate-limit-body" } },
+      Object.assign(new Error("Daytona request timed out secret-timeout-body"), {
+        code: "ETIMEDOUT",
+      }),
+    ]) {
+      const fake = new FakeDaytona();
+      fake.createError = error;
+      const promise = new DaytonaAdapter(CONFIG, fake).validateCandidate({
+        runId: "run-daytona-retryable",
+        sessionId: "session-daytona",
+        candidate: CANDIDATE,
+        repository: {
+          repoUrl: "https://github.com/example/safeflash.git",
+          commitSha: COMMIT,
+        },
+        policy: POLICY,
+      });
+      await expect(promise).rejects.toMatchObject({
+        name: "ProviderResponseError",
+        provider: "daytona",
+        retryable: true,
+        message: "Daytona sandbox validation failed",
+      });
+      await expect(promise).rejects.not.toThrow(/secret-(?:rate|timeout)/u);
+    }
+  });
+
   it("rejects protected-path and threshold patches before creating a sandbox", async () => {
     const unsafeCandidates: CandidatePatch[] = [
       {
@@ -420,6 +533,7 @@ describe("Daytona isolation contract", () => {
   it("runs a network-blocked disposable smoke and verifies exact output", async () => {
     const fake = new FakeDaytona();
     fake.smokeMode = true;
+    fake.deleteFailuresRemaining = DAYTONA_DELETE_MAX_ATTEMPTS - 1;
     const result = await new DaytonaAdapter(CONFIG, fake).smoke();
     expect(result.data).toMatchObject({
       output: "SAFEFLASH_DAYTONA_SMOKE",
@@ -430,6 +544,24 @@ describe("Daytona isolation contract", () => {
       ephemeral: true,
       networkBlockAll: true,
     });
-    expect(fake.events.at(-1)).toBe("delete");
+    expect(fake.events.filter((event) => event === "delete")).toHaveLength(
+      DAYTONA_DELETE_MAX_ATTEMPTS,
+    );
+  });
+
+  it("fails the smoke after bounded cleanup retries are exhausted", async () => {
+    const fake = new FakeDaytona();
+    fake.smokeMode = true;
+    fake.failDelete = true;
+
+    await expect(new DaytonaAdapter(CONFIG, fake).smoke()).rejects.toMatchObject({
+      name: "ProviderResponseError",
+      provider: "daytona",
+      retryable: false,
+      message: "Daytona smoke sandbox cleanup failed after bounded retries",
+    });
+    expect(fake.events.filter((event) => event === "delete")).toHaveLength(
+      DAYTONA_DELETE_MAX_ATTEMPTS,
+    );
   });
 });

@@ -338,6 +338,7 @@ function braintrustEvidence(
     candidateResults: [
       {
         candidateId: candidate.candidateId,
+        resultId: "eval-result-review-revalidation-2",
         evidenceDigest,
         evaluationEvidence,
         scores,
@@ -529,6 +530,7 @@ function initialInputs(selectedIndex = 0) {
     const scores = evaluateDeterministicScorers(evaluationEvidence).scores;
     return {
       candidateId: item.candidateId,
+      resultId: `eval-result-initial-${index + 1}`,
       evidenceDigest: computeLiveCandidateEvidenceDigest({
         policyVersion: policy.policyVersion,
         daytona: daytonas[index]!.data,
@@ -691,20 +693,15 @@ describe("live review revalidation receipt", () => {
     expect(changedReceipt.attestationDigest).not.toBe(baseline.attestationDigest);
   });
 
-  it("accepts exactly one configured Daytona cleanup terminal state", () => {
-    const retained = inputs();
-    retained.daytona = officialEnvelope("daytona", {
-      ...retained.daytona.data,
-      retained: true,
-      destroyed: false,
-    });
-    retained.braintrust = braintrustEvidence(retained.daytona.data);
-    expect(createLiveFullRevalidationReceipt(retained).sandboxId).toBe(
-      retained.daytona.data.sandboxId,
+  it("requires destroyed Daytona evidence and rejects retained or ambiguous states", () => {
+    const destroyed = inputs();
+    expect(createLiveFullRevalidationReceipt(destroyed).sandboxId).toBe(
+      destroyed.daytona.data.sandboxId,
     );
 
     for (const disposition of [
       { retained: false, destroyed: false },
+      { retained: true, destroyed: false },
       { retained: true, destroyed: true },
     ] as const) {
       const invalid = inputs();

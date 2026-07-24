@@ -2,6 +2,58 @@
 
 This log records decisions that affect safety, evidence, or hackathon scope.
 
+## D-009 - Preserve SafeFlash and pivot the competition product
+
+- Date: 2026-07-24
+- Status: accepted
+- Decision: preserve commit
+  `afe304b8562d0e9b84c881c4aab8b005637e5138` with tag
+  `pre-safecommit-pivot-20260724` and branch
+  `archive/safeflash-firmware-20260724`; build SafeCommit on
+  `hackathon/safecommit-logistics`.
+- Reason: the new database product must not erase or rewrite the verified
+  firmware safety history.
+
+## D-010 - Use an OpenBoxes-derived fixture, not a full deployment
+
+- Date: 2026-07-24
+- Status: accepted
+- Decision: pin MySQL 8.0.36 and OpenBoxes source revision
+  `99fb3e61d2ba220dc1d83847e4852e2846ee17f0`, while implementing only the
+  logistics relationships required by the competition task.
+- Reason: this provides an executable, relationally meaningful fixture without
+  falsely claiming a complete official OpenBoxes deployment.
+
+## D-011 - Database safety is eligibility before quality
+
+- Date: 2026-07-24
+- Status: accepted
+- Decision: thirteen deterministic gates run before weighted ranking. Failed
+  candidates remain visible but are ineligible. Human approval cannot override
+  a hard gate.
+- Reason: execution success or a high average score cannot compensate for
+  wrong-warehouse changes, tenant leakage, lost inventory, altered protected
+  orders, non-idempotency, or failed rollback.
+
+## D-012 - Keep local and sponsor evidence separate
+
+- Date: 2026-07-24
+- Status: accepted
+- Decision: local MySQL evidence is `LOCAL_TEST`. Fireworks, Daytona, and
+  Braintrust remain `BLOCKED` until the current run returns verifiable remote
+  provider IDs and URLs. No silent fallback is allowed.
+- Reason: provider-shaped local fixtures are not sponsor execution evidence.
+
+## D-013 - PPTX generation follows the installed skill boundary
+
+- Date: 2026-07-24
+- Status: blocked
+- Decision: deliver the verified ten-page PDF and speaker notes, but do not
+  generate a PPTX with an unapproved legacy library while the required
+  `@oai/artifact-tool` host package is missing.
+- Reason: an explicit artifact-tool requirement is stronger than merely
+  producing a file with a `.pptx` extension.
+
 ## D-001 — Honest empty-workspace baseline
 
 - Date: 2026-07-22

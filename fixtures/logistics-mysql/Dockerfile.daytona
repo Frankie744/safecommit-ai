@@ -1,0 +1,27 @@
+FROM node:22.18.0-bookworm-slim AS safecommit_dependencies
+
+WORKDIR /workspace
+
+COPY docker-or-snapshot/package.json /workspace/package.json
+COPY docker-or-snapshot/package-lock.json /workspace/package-lock.json
+
+RUN npm ci --omit=optional --no-audit --no-fund
+
+FROM mysql:8.0.36
+
+RUN microdnf install -y git iptables \
+  && microdnf clean all
+
+COPY --from=safecommit_dependencies /usr/local/bin/node /usr/local/bin/node
+COPY --from=safecommit_dependencies /workspace/node_modules /workspace/node_modules
+COPY schema/001_schema.sql /docker-entrypoint-initdb.d/001_schema.sql
+COPY seed/002_seed.sql /docker-entrypoint-initdb.d/002_seed.sql
+
+ENV MYSQL_DATABASE=safecommit
+
+WORKDIR /workspace
+
+HEALTHCHECK --interval=2s --timeout=2s --start-period=15s --retries=30 \
+  CMD MYSQL_PWD="$MYSQL_PASSWORD" mysqladmin ping --protocol=tcp --host=127.0.0.1 --user="$MYSQL_USER" --silent
+
+CMD ["mysqld", "--bind-address=127.0.0.1", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci", "--default-authentication-plugin=mysql_native_password", "--transaction-isolation=READ-COMMITTED"]

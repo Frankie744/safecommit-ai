@@ -1,18 +1,45 @@
-# Hackathon build ledger
+# SafeCommit build ledger
 
-- Branch: `hackathon/safety-tournament`
-- Baseline: `pre-hackathon-baseline`
-- Build owner: SafeFlash team, with Codex implementation assistance
+- Competition branch: `hackathon/safecommit-logistics`
+- Original SafeFlash tag: `pre-safecommit-pivot-20260724`
+- Original SafeFlash archive branch: `archive/safeflash-firmware-20260724`
+- Pivot source commit: `afe304b8562d0e9b84c881c4aab8b005637e5138`
 
-| Phase | New capability | Verification status | Evidence |
+This ledger separates implemented local capability from external live
+certification.
+
+| Phase | Capability | Status | Evidence |
 |---|---|---|---|
-| 0 | Workspace/Git audit, decision log, environment contract | verified locally | `artifacts/evidence/phase-0/` |
-| 1 | Battery Sentinel compiled fixture and deterministic safety tests | verified locally | `artifacts/evidence/phase-1/20260723T004428654Z/summary.json` |
-| 2 | Domain state machine, integrity gates, scoring and approval digest | verified locally | `artifacts/evidence/phase-2/verification.json` |
-| 3 | Three-candidate isolated safety tournament | verified locally after security re-audit | `artifacts/evidence/phase-3/phase3-evidence-20260722T220559152Z/summary.json` |
-| 4 | CopilotKit console, persisted session, and evidence-bound human approval gate | verified locally in production + Playwright | `artifacts/evidence/phase-4/phase4-evidence-20260722T223143361Z/verification.json` |
-| 5 | GitHub PR and CodeRabbit review/revalidation gate | composed and contract-tested locally; external live run blocked | `artifacts/evidence/phase-5/phase5-preflight-20260723T010926245Z/` |
-| 6 | Replay, E2E, runbooks and submission material | verified locally from clean commit `4457ea208f3c45e5eb5886ab251bd0def56c6e3c` | `artifacts/evidence/phase-6/p0-verification-20260723T020443493Z/summary.json` |
-| 7A | Public GitHub repository and read-only launch readiness | `CREDENTIAL_READY`; repository/SHA/dry-run verified, external live smoke still blocked | `artifacts/evidence/phase-7/phase7a-readiness-20260723T043444961Z/summary.json` |
+| 0 | Git preservation, protocol capture, branch isolation | PASS | tag, archive branch, staged commits |
+| 1 | IntentContract, CandidateChangePlan, DatabaseEvidence, approval binding | PASS | domain unit tests |
+| 2 | OpenBoxes-derived MySQL 8.0.36 fixture | PASS | fixture source, notice, baseline manifest |
+| 3 | SQL AST policy, 13 hard gates, row delta, idempotency, rollback | PASS | local MySQL evidence |
+| 4 | Fireworks/Daytona/Braintrust database adapters | CONTRACT PASS; LIVE BLOCKED | provider contract tests; no remote IDs |
+| 5 | SafeCommit Web console and CopilotKit HITL | LOCAL PASS | production build and four Playwright flows |
+| 6 | Twelve-case logistics evaluation contract | LOCAL CONTRACT PASS; REMOTE BLOCKED | dataset tests; no Braintrust Experiment |
+| 7 | GitHub/CodeRabbit current refactor review | PENDING | branch not yet pushed/reviewed |
+| 8 | Public deployment | BLOCKED | no authorized Daytona App deployment |
+| 9 | PDF, scripts, runbook, Q&A | PDF PASS; PPTX BLOCKED | artifact path and render QA |
 
-Rows are promoted to `verified` only after the named evidence is captured.
+## Current clean database proof
+
+- Run: `safecommit-mysql-20260724T071144887Z`
+- Source commit:
+  `d133eca039797015feef2ee10aa9d33c840a2b93`
+- MySQL: `8.0.36`
+- Worktree at capture: clean
+- Three candidates: executed
+- Winner: `candidate-c-safe`
+- Highest score: `candidate-b-shipped-order` at `0.991667`, ineligible
+- Winner score: `0.962500`
+- Winner affected rows: `2`
+- Winner hard gates: `13/13`
+- Winner rollback digest equals before digest
+
+```text
+SAFECOMMIT_DATABASE_LOCAL=PASS
+FIREWORKS_LIVE=BLOCKED
+DAYTONA_LIVE=BLOCKED
+BRAINTRUST_LIVE=BLOCKED
+LIVE_CERTIFIED=NO
+```

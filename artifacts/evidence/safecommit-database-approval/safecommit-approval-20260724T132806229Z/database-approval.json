@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-24T13:28:06.229Z",
+  "provenance": "human-approval",
+  "status": "SAFE_TO_COMMIT",
+  "liveCertified": true,
+  "sourceEvidence": {
+    "liveRunId": "safecommit-live-20260724T131315333Z",
+    "artifactSha256": "d03a535f86ee81b134426f41b5305c5b0bb7841c25f0b53c3a08dbed22e7b0c8",
+    "sourceCommitSha": "41111b299b3af10bcaf59664dd793c1a844d6fab",
+    "sessionId": "safecommit-live-86c0b01a-25ef-4688-b774-b4cea2f3cf3c",
+    "providerEvidenceStatus": "AWAITING_HUMAN_APPROVAL"
+  },
+  "authorization": {
+    "source": "active-user-request",
+    "statementDigest": "f0da1c4cc903201b9ca06ec0505352cf3383dd957f240e932b29b37930dfb14f"
+  },
+  "approval": {
+    "approvalId": "database-approval-4f6941d0-38a3-4f8d-8804-8b67832b5eb8",
+    "decision": "approved",
+    "binding": {
+      "candidateId": "candidate-c-safe",
+      "planDigest": "03dba1f19b68398f069f4e1bd04588c06a71a34e00479f519e6b196f1f0bfa34",
+      "intentContractDigest": "805f63132a2c135b0db4c48d265e77a2a9a61ab48cc101ebee84e4b9241ea601",
+      "evidenceDigest": "d626fb98ea0d1ef22d9f3d034461e757fd772ac56209f3cbd36476bf11e0fef6",
+      "snapshotDigest": "7a061b129b0a65e1a6f189dbc7ff653fc3762a282fd8530f344892120cc28781",
+      "schemaFingerprint": "0244ac9370e8e29113633557f9c6260b0a020c99db4c364016378eb2b69e8d59",
+      "policyVersion": "safecommit-logistics-v1",
+      "sourceCommitSha": "41111b299b3af10bcaf59664dd793c1a844d6fab",
+      "approverId": "workspace-owner",
+      "timestamp": "2026-07-24T13:28:06.229Z"
+    },
+    "bindingDigest": "1d2c8e6678cc622131bfc0314ec4ac642c59b66a96e28f4082d7ae2aad88073d"
+  },
+  "guardrails": {
+    "productionCommitExecuted": false,
+    "pullRequestMerged": false,
+    "publicMutationControls": false
+  },
+  "claim": "The unique eligible plan is evidence-bound and SAFE_TO_COMMIT. No production database write or pull-request merge was executed."
+}

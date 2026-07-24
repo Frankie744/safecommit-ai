@@ -1,0 +1,12 @@
+{
+    "capturedAt":  "2026-07-24T06:06:52.1834592Z",
+    "visualStudioRoot":  "D:\\visual_studio",
+    "cmakePath":  "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe",
+    "cmakeVersion":  "cmake version 4.1.1-msvc1",
+    "ctestPath":  "D:\\visual_studio\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\ctest.exe",
+    "compilerPath":  "D:\\visual_studio\\VC\\Tools\\MSVC\\14.50.35717\\bin\\Hostx64\\x64\\cl.exe",
+    "compilerFileVersion":  "19.50.35720.0",
+    "msbuildPath":  "D:\\visual_studio\\MSBuild\\Current\\Bin\\MSBuild.exe",
+    "generator":  "Visual Studio 18 2026",
+    "architecture":  "x64"
+}

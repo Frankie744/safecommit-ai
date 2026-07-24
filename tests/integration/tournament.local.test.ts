@@ -94,6 +94,10 @@ describe("Phase 3 local safety tournament", () => {
       unitTests: { executed: true, exitCode: 0, passed: 5, total: 5 },
       safetyTests: { executed: true, exitCode: 0, passed: 6, total: 6 },
     });
+    expect(candidateA!.weightedScore).toBeGreaterThan(
+      candidateC!.weightedScore,
+    );
+    expect(candidateA!.eligible).toBe(false);
     expect(tournament.decision.winnerCandidateId).toBe(candidateC?.candidate.candidateId);
     expect(tournament.decision.rankings.filter((ranking) => ranking.eligible)).toHaveLength(
       1,

@@ -1,53 +1,154 @@
-# SafeFlash
+# SafeCommit
 
-**The safety gate for AI-generated firmware.**
+> The commit gate for AI database agents.
 
-SafeFlash generates multiple firmware repair candidates, executes each inside
-an isolated environment, evaluates non-negotiable physical-safety invariants,
-and requires evidence-bound human approval before it can create a pull request.
-An independent CodeRabbit review can send the selected patch through the full
-validation pipeline again. SafeFlash never merges a PR.
+SafeCommit turns a natural-language database request into an explicit intent
+contract, compares multiple candidate change plans in isolated database
+snapshots, rejects any plan that violates a deterministic business invariant,
+and binds human approval to the exact plan and evidence.
 
-## Verification status
+The competition profile is deliberately narrow: one logistics workflow against
+an **OpenBoxes-derived executable MySQL 8 fixture**. It is not a full OpenBoxes
+deployment. OpenBoxes uses MySQL as its primary database; this fixture pins the
+upstream source revision and preserves only the tables required for the demo.
 
-The project started from an empty-workspace baseline on 2026-07-22. Local and
-external capabilities are reported separately. A local contract test is never
-presented as Daytona, Braintrust, Fireworks, GitHub, or CodeRabbit evidence.
+## The magic moment
 
-Current authoritative status is maintained in `HACKATHON_BUILD.md` and
-`artifacts/evidence/`.
+The current clean local run executes three plans against the same verified
+database baseline:
 
-## Development prerequisites
+| Candidate | Quality score | Result | Why |
+|---|---:|---|---|
+| A — aggressive cleanup | 0.975000 | Rejected | Crosses warehouse and tenant boundaries |
+| B — rewrite shipped order | **0.991667** | Rejected | Changes protected order history |
+| C — relationship preserving | 0.962500 | Eligible winner | All hard gates pass |
+
+The highest-scoring plan cannot win when it is unsafe.
+
+Evidence:
+[`artifacts/evidence/safecommit-database-local`](artifacts/evidence/safecommit-database-local).
+It is labelled `LOCAL_TEST`; no Fireworks, Daytona, or Braintrust call is
+implied.
+
+## Run locally
+
+Prerequisites:
 
 - Node.js 22+
 - npm 10+
-- Visual Studio C++ build tools with CMake (for the firmware fixture)
+- MySQL 8.0.36 for executable database evidence
 
-Copy `.env.example` to `.env.local` only when configuring credentials. Never
-commit `.env.local`.
+Install and run the read-only console:
 
 ```powershell
 npm ci
-npm run dev
+$env:SAFECOMMIT_OPERATOR_TOKEN="<random server-only value>"
+npm run dev:competition
 ```
 
-Run `npm run verify` while developing. After all intended changes are committed
-and `git status --short` is empty, `npm run verify:p0` captures typecheck,
-production build, Vitest, Chrome Playwright, a final bundle/staging secret scan,
-and the exact 14-test P0 matrix in a hash-manifested Phase 6 evidence package.
-This is a local-test claim only.
+Open `http://127.0.0.1:3018`. Browsing existing evidence is public/read-only;
+creating a session, approving, rejecting, or revalidating requires the
+server-only operator token and same-origin request checks.
 
-Project handoff:
+Run the complete local validation:
+
+```powershell
+npm run typecheck
+npm test
+npm run build
+npm run test:e2e
+```
+
+Run real local MySQL tournament evidence:
+
+```powershell
+$env:SAFECOMMIT_MYSQL_URL="mysql://<fixture-user>:<fixture-password>@127.0.0.1:<port>/safecommit"
+npm run demo:database-local
+```
+
+The local runner accepts loopback MySQL only, verifies the fixture baseline,
+executes each plan in a transaction, captures row-level before/after evidence,
+runs every hard gate, verifies idempotency, executes rollback, and proves the
+rollback digest equals the initial digest.
+
+## Hard gates
+
+Safety is eligibility, not a weighted score:
+
+- SQL plan integrity and bounded mutation scope
+- warehouse scope and tenant isolation
+- inventory conservation and no negative inventory
+- allocation bounds
+- lot and serial preservation
+- referential integrity
+- protected order states
+- contract blast radius
+- idempotency
+- verified rollback
+
+Any failed hard gate makes a candidate ineligible. A human cannot override a
+failed gate.
+
+## Sponsor-native live architecture
+
+```mermaid
+flowchart LR
+  I[Intent Contract] --> F[Fireworks<br/>3 structured plans]
+  F --> D1[Daytona snapshot A]
+  F --> D2[Daytona snapshot B]
+  F --> D3[Daytona snapshot C]
+  D1 --> B[Braintrust<br/>Dataset / Trace / Experiment]
+  D2 --> B
+  D3 --> B
+  B --> G{Deterministic hard gates}
+  G -->|fail| R[Ineligible]
+  G -->|pass| H[CopilotKit HITL]
+  H --> C[SAFE_TO_COMMIT]
+  C -. optional .-> P[GitHub PR + CodeRabbit exact-head review]
+```
+
+Current authority labels:
+
+```text
+SAFECOMMIT_DATABASE_LOCAL=PASS
+FIREWORKS_LIVE=BLOCKED
+DAYTONA_LIVE=BLOCKED
+BRAINTRUST_LIVE=BLOCKED
+LIVE_CERTIFIED=NO
+```
+
+Live mode never silently falls back to local or mock evidence. Provider
+credentials are server-only and must never use `NEXT_PUBLIC_`. The older
+SafeFlash firmware provider chain remains in the repository as a regression
+profile and is preserved on the `archive/safeflash-firmware-20260724` branch.
+
+## Source and evidence boundaries
+
+- Fixture source:
+  [`fixtures/logistics-mysql`](fixtures/logistics-mysql)
+- Intent and plan contracts:
+  [`packages/domain/src`](packages/domain/src)
+- SQL and business gates:
+  [`packages/safety-policy/src`](packages/safety-policy/src)
+- MySQL execution and tournament:
+  [`apps/orchestrator/src`](apps/orchestrator/src)
+- Evidence/approval console:
+  [`apps/web`](apps/web)
+- Twelve-case evaluation contract:
+  [`packages/evals/src/logistics-dataset.ts`](packages/evals/src/logistics-dataset.ts)
+
+OpenBoxes upstream:
+[openboxes/openboxes](https://github.com/openboxes/openboxes).
+The pinned source revision and license notice are recorded in
+[`fixtures/logistics-mysql/NOTICE.md`](fixtures/logistics-mysql/NOTICE.md).
+
+## Judge and operator handoff
 
 - [Architecture](docs/architecture.md)
-- [Setup, verification, and external smoke runbook](docs/runbook.md)
-- [P0 and judging map](docs/judging-map.md)
-- [Three-minute demo runbook](DEMO_RUNBOOK.md)
-- [Devpost draft](DEVPOST.md)
-- [Repository-scoped CodeRabbit installation](docs/coderabbit-installation.md)
+- [Demo runbook](docs/demo-runbook.md)
+- [Judge Q&A](docs/judge-questions.md)
+- [Three-minute and 60-second scripts](docs/three-minute-pitch.md)
+- [Known limitations](docs/competition-readiness-audit.md)
+- [Environment template](.env.example)
 
-The public source repository is now
-[`Frankie744/safeflash-ai`](https://github.com/Frankie744/safeflash-ai).
-The live Fireworks, Daytona, Braintrust, GitHub PR, and CodeRabbit path still
-requires authorized provider credentials and CodeRabbit App installation.
-Missing provider access fails closed and is never relabelled as live success.
+SafeCommit never writes production data and never auto-merges a pull request.

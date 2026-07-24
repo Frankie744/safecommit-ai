@@ -265,7 +265,7 @@ For SafeFlash, keep the public-target values exact:
 
 ```text
 GITHUB_OWNER=Frankie744
-GITHUB_REPO=safeflash-ai
+GITHUB_REPO=safecommit-ai
 GITHUB_BASE_BRANCH=main
 GITHUB_EXPECT_PUBLIC=true
 ```

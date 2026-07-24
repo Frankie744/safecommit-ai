@@ -164,7 +164,7 @@ review gate capable of challenging the agent's selected patch.
 
 **Current proof boundary:** GitHub/CodeRabbit behavior is contract-tested and
 the public source repository is available at
-`https://github.com/Frankie744/safeflash-ai`. No demo PR or live CodeRabbit
+`https://github.com/Frankie744/safecommit-ai`. No demo PR or live CodeRabbit
 review is claimed because a server-side GitHub token and the repository-scoped
 App installation are not configured.
 
@@ -261,16 +261,17 @@ the successful diff.
 
 ## Hackathon-day new work
 
-The workspace began with only the supplied specification. The unchanged
-baseline is commit `29378c54ec2d349ac5494bf454f967579876413c`, tagged
-`pre-hackathon-baseline`; implementation is on
-`hackathon/safety-tournament`.
+The pre-event core already contains **Cross-Device Assurance Profiles**:
+executable simulated Battery and Motor controllers share the same server-owned
+command policy, deterministic hard gates, evidence binding, and no-auto-merge
+boundary. This must not be claimed as competition-day work.
 
-The core new feature is the **Parallel Safety Tournament**: multiple firmware
-repair candidates execute separately, deterministic physical-safety gates
-eliminate unsafe candidates, and all failures remain visible in the evidence
-console. [`HACKATHON_BUILD.md`](HACKATHON_BUILD.md) maps each phase to its
-verification package.
+The reserved post-start feature is **Judge Challenge Mode**: a judge chooses
+one of those two physical faults and receives a sanitized, provenance-labelled
+receipt showing why a higher-scoring unsafe patch lost. It is intentionally
+not implemented before the official window. API-key entry is launch setup, not
+the new feature. See
+[`docs/hacksprint-new-feature-plan.md`](docs/hacksprint-new-feature-plan.md).
 
 ## Built with
 
@@ -350,7 +351,7 @@ blindly trust it.”
 ## Submission fields still blocked
 
 - Public GitHub repository URL:
-  **https://github.com/Frankie744/safeflash-ai**
+  **https://github.com/Frankie744/safecommit-ai**
 - Live Fireworks request/model evidence: **requires API key and model choice**
 - Live Daytona sandbox evidence: **requires API key/account**
 - Live Braintrust Dataset/Trace/Experiment links: **requires API key/account**

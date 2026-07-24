@@ -38,6 +38,12 @@ export default defineConfig({
     timeout: 180_000,
     stdout: "pipe",
     stderr: "pipe",
+    env: {
+      ...process.env,
+      SAFECOMMIT_OPERATOR_TOKEN: "safecommit-e2e-operator-token-123456",
+      SAFECOMMIT_SOURCE_COMMIT_SHA:
+        "0000000000000000000000000000000000000000",
+    },
   },
   projects: [
     {

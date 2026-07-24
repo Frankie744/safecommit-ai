@@ -1,0 +1,16 @@
+{
+  "taskId": "merge-duplicate-sku-la",
+  "naturalLanguageRequest": "Merge the duplicate SKU in the Los Angeles warehouse and release inventory allocated to cancelled orders, without affecting other warehouses, shipped orders, lots, serial numbers, or expiration dates.",
+  "allowedWarehouses": [
+    "warehouse-la"
+  ],
+  "allowedTenants": [
+    "tenant-demo"
+  ],
+  "protectedOrderStates": [
+    "SHIPPED",
+    "DELIVERED"
+  ],
+  "maxAffectedRows": 24,
+  "requiredMagicMoment": "A syntactically valid, high-scoring cross-warehouse plan must be ineligible when WarehouseScope or InventoryConservation fails."
+}

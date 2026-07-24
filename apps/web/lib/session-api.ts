@@ -9,6 +9,8 @@ import type {
   SessionMode,
   SessionView,
   TimelineEventView,
+  DemoScenarioId,
+  ProviderEvidenceView,
 } from "./session-types";
 
 type UnknownRecord = Record<string, unknown>;
@@ -62,6 +64,11 @@ const evidenceStatuses = [
   "pending",
   "not-run",
 ] as const;
+const demoScenarioIds = [
+  "happy-path",
+  "unsafe-high-score",
+  "provider-failure",
+] as const satisfies readonly DemoScenarioId[];
 
 function normalizeProvenance(
   value: unknown,
@@ -164,6 +171,7 @@ function normalizeCandidate(
         typeof score.eligible === "boolean" ? score.eligible : null,
       experimentId: asString(score.experimentId) || undefined,
       traceId: asString(score.traceId) || undefined,
+      resultId: asString(score.resultId) || undefined,
       provenance: normalizeProvenance(score.provenance, "braintrust"),
     },
     diff: asString(record.diff) || undefined,
@@ -228,6 +236,32 @@ function normalizeEvent(value: unknown, index: number): TimelineEventView {
   };
 }
 
+function normalizeProviderEvidence(
+  value: unknown,
+  index: number,
+): ProviderEvidenceView {
+  const record = asRecord(value);
+  const provider = asString(record.provider, `provider-${index + 1}`);
+  return {
+    provider,
+    operation: asString(record.operation, "operation not reported"),
+    status: oneOf(record.status, evidenceStatuses, "pending"),
+    requestId: asString(record.requestId) || undefined,
+    requestIds: asArray(record.requestIds)
+      .map((item) => asString(item))
+      .filter(Boolean),
+    resourceIds: asArray(record.resourceIds)
+      .map((item) => asString(item))
+      .filter(Boolean),
+    urls: asArray(record.urls)
+      .map((item) => asString(item))
+      .filter(Boolean),
+    capturedAt: asString(record.capturedAt) || undefined,
+    durationMs: asNumber(record.durationMs) ?? undefined,
+    provenance: normalizeProvenance(record.provenance, provider),
+  };
+}
+
 export function normalizeSession(payload: unknown): SessionView {
   const outer = asRecord(payload);
   const nested = asRecord(outer.session);
@@ -242,11 +276,29 @@ export function normalizeSession(payload: unknown): SessionView {
   const pullRequest = asRecord(source.pullRequest);
   const review = asRecord(source.review);
   const failure = asRecord(source.failure);
+  const scenario = asRecord(source.scenario);
+  const cleanup = asRecord(source.cleanup);
 
   return {
     id: asString(source.id, asString(source.sessionId, "unknown-session")),
     mode: oneOf<SessionMode>(source.mode, modes, "unknown"),
     state: asString(source.state, "IDLE"),
+    scenario:
+      Object.keys(scenario).length === 0
+        ? undefined
+        : {
+            id: oneOf(
+              scenario.id,
+              demoScenarioIds,
+              "unsafe-high-score",
+            ),
+            label: asString(scenario.label, "Demo scenario"),
+            summary: asString(
+              scenario.summary,
+              "Scenario details were not reported.",
+            ),
+            default: asBoolean(scenario.default, false),
+          },
     createdAt: asString(source.createdAt) || undefined,
     updatedAt: asString(source.updatedAt) || undefined,
     repository: {
@@ -342,6 +394,30 @@ export function normalizeSession(payload: unknown): SessionView {
             recoverable: Boolean(failure.recoverable),
             retryAction: asString(failure.retryAction) || undefined,
           },
+    providerEvidence: asArray(source.providerEvidence).map(
+      normalizeProviderEvidence,
+    ),
+    cleanup:
+      Object.keys(cleanup).length === 0
+        ? undefined
+        : {
+            status: oneOf(
+              cleanup.status,
+              ["deleted", "failed", "pending", "not-run"] as const,
+              "not-run",
+            ),
+            sandboxIds: asArray(cleanup.sandboxIds)
+              .map((item) => asString(item))
+              .filter(Boolean),
+            summary: asString(
+              cleanup.summary,
+              "Cleanup status was not reported.",
+            ),
+            provenance: normalizeProvenance(
+              cleanup.provenance,
+              "daytona",
+            ),
+          },
     events: asArray(eventsValue)
       .map(normalizeEvent)
       .sort((left, right) => left.sequence - right.sequence),
@@ -382,9 +458,20 @@ async function requestJson(
   return response.json() as Promise<unknown>;
 }
 
-export async function listSessions(): Promise<readonly SessionView[]> {
+export async function getSessionIndex(): Promise<{
+  mode: SessionMode;
+  sessions: readonly SessionView[];
+}> {
   const payload = await requestJson("/api/sessions");
-  return unwrapSessions(payload).map(normalizeSession);
+  const record = asRecord(payload);
+  return {
+    mode: oneOf(record.mode, modes, "unknown"),
+    sessions: unwrapSessions(payload).map(normalizeSession),
+  };
+}
+
+export async function listSessions(): Promise<readonly SessionView[]> {
+  return (await getSessionIndex()).sessions;
 }
 
 export async function getSession(sessionId: string): Promise<SessionView> {
@@ -394,12 +481,15 @@ export async function getSession(sessionId: string): Promise<SessionView> {
   return normalizeSession(payload);
 }
 
-export async function createSession(): Promise<SessionView> {
+export async function createSession(
+  scenarioId: DemoScenarioId = "unsafe-high-score",
+): Promise<SessionView> {
   const payload = await requestJson("/api/sessions", {
     method: "POST",
     body: JSON.stringify({
       incidentKind: "battery-sensor-disconnect",
       runKind: "tournament",
+      scenarioId,
     }),
   });
   return normalizeSession(payload);

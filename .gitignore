@@ -5,6 +5,7 @@ coverage/
 playwright-report/
 test-results/
 .safeflash/
+_site/
 
 # Secrets. Only the example file is committed.
 .env
@@ -15,6 +16,7 @@ test-results/
 artifacts/evidence/**/raw/
 artifacts/evidence/**/*.raw.*
 artifacts/evidence/latest-vitest.json
+artifacts/evidence/phase-8/
 
 # Native build outputs.
 fixtures/**/build/

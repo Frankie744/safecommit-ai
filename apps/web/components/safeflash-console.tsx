@@ -5,27 +5,195 @@ import {
   useAgentContext,
   useHumanInTheLoop,
 } from "@copilotkit/react-core/v2";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { z } from "zod";
 
 import {
   createSession,
+  getSessionIndex,
   getSession,
-  listSessions,
   retrySession,
   submitSessionDecision,
 } from "../lib/session-api";
+import { getDeviceTelemetry } from "../lib/device-api";
+import type { DeviceTelemetrySnapshot } from "../lib/device-types";
 import {
   TERMINAL_STATES,
   type CandidateEvidenceView,
   type CandidateView,
   type DecisionAction,
+  type DemoScenarioId,
   type EvidenceProvenance,
   type SessionMode,
   type SessionView,
 } from "../lib/session-types";
+import {
+  CompetitionStatusRail,
+  EvidenceDrawer,
+} from "./competition-panels";
 
 const POLL_INTERVAL_MS = 1_200;
+const DEVICE_POLL_INTERVAL_MS = 2_000;
+const DEMO_SCENARIOS: readonly {
+  id: DemoScenarioId;
+  label: string;
+  summary: string;
+}[] = [
+  {
+    id: "unsafe-high-score",
+    label: "Unsafe high score",
+    summary:
+      "Default: the top soft score loses because a hard safety invariant fails.",
+  },
+  {
+    id: "happy-path",
+    label: "Happy path",
+    summary:
+      "The eligible fail-closed repair reaches evidence-bound human approval.",
+  },
+  {
+    id: "provider-failure",
+    label: "Provider failure",
+    summary:
+      "A MOCK HTTP 429 fixture proves that missing provider evidence fails closed.",
+  },
+];
+
+const NARRATIVE_SECTIONS = [
+  { id: "incident", label: "Incident" },
+  { id: "agent", label: "Agent" },
+  { id: "candidates", label: "Candidates" },
+  { id: "twin", label: "Twin" },
+  { id: "review", label: "Review" },
+  { id: "decision", label: "Decision" },
+] as const;
+
+const CERTIFIED_REVIEW_BOUNDARY = {
+  pullRequestUrl: "https://github.com/Frankie744/safecommit-ai/pull/1",
+  certifiedMainSha: "6402e26db834069946aaab4391e8ef2dd224ad5e",
+  approvedRepairHead: "5b418b7eeac67e433609d0a0ca5ab6309bd4fe32",
+} as const;
+
+function conciseModeLabel(mode: SessionMode): string {
+  switch (mode) {
+    case "live":
+      return "LIVE PROVIDERS";
+    case "cached":
+      return "RECORDED LIVE";
+    case "mock":
+      return "MOCK PROVIDERS";
+    case "hybrid":
+      return "HYBRID SOURCES";
+    default:
+      return "PROVIDER MODE PENDING";
+  }
+}
+
+function NarrativeNavigation({ refreshKey }: { refreshKey: string }) {
+  const [activeSection, setActiveSection] = useState("incident");
+
+  useEffect(() => {
+    const sections = NARRATIVE_SECTIONS.map(({ id }) =>
+      document.getElementById(id),
+    ).filter((section): section is HTMLElement => section !== null);
+
+    const updateActiveSection = () => {
+      const nav = document.querySelector<HTMLElement>("[data-testid='section-nav']");
+      const marker = (nav?.getBoundingClientRect().bottom ?? 0) + 32;
+      let active = sections[0]?.id ?? "incident";
+
+      for (const section of sections) {
+        if (section.getBoundingClientRect().top <= marker) {
+          active = section.id;
+        }
+      }
+      setActiveSection(active);
+    };
+
+    const hashTarget =
+      window.location.hash.length > 1
+        ? document.getElementById(window.location.hash.slice(1))
+        : null;
+    if (hashTarget) {
+      window.requestAnimationFrame(() => {
+        hashTarget.scrollIntoView({ block: "start", behavior: "auto" });
+        updateActiveSection();
+      });
+    } else {
+      updateActiveSection();
+    }
+
+    window.addEventListener("scroll", updateActiveSection, { passive: true });
+    window.addEventListener("hashchange", updateActiveSection);
+    window.addEventListener("resize", updateActiveSection);
+    return () => {
+      window.removeEventListener("scroll", updateActiveSection);
+      window.removeEventListener("hashchange", updateActiveSection);
+      window.removeEventListener("resize", updateActiveSection);
+    };
+  }, [refreshKey]);
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    const links = Array.from(
+      event.currentTarget.querySelectorAll<HTMLAnchorElement>("a[href^='#']"),
+    );
+    const currentIndex = links.indexOf(
+      document.activeElement as HTMLAnchorElement,
+    );
+    if (currentIndex < 0) return;
+
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      nextIndex = (currentIndex + 1) % links.length;
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      nextIndex = (currentIndex - 1 + links.length) % links.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = links.length - 1;
+    }
+
+    if (nextIndex !== null) {
+      event.preventDefault();
+      links[nextIndex]?.focus();
+    }
+  };
+
+  return (
+    <nav
+      aria-label="Section navigation"
+      className="section-nav"
+      data-testid="section-nav"
+      onKeyDown={handleKeyDown}
+    >
+      <div className="section-nav__inner">
+        {NARRATIVE_SECTIONS.map(({ id, label }) => (
+          <a
+            aria-current={activeSection === id ? "location" : undefined}
+            data-testid={`nav-${id}`}
+            href={`#${id}`}
+            key={id}
+            onClick={() => setActiveSection(id)}
+          >
+            <span aria-hidden="true">
+              {String(
+                NARRATIVE_SECTIONS.findIndex((section) => section.id === id) + 1,
+              ).padStart(2, "0")}
+            </span>
+            {label}
+          </a>
+        ))}
+      </div>
+    </nav>
+  );
+}
 
 const approvalToolParameters = z.object({
   sessionId: z.string(),
@@ -61,21 +229,6 @@ function formatTime(value: string | undefined): string {
     minute: "2-digit",
     second: "2-digit",
   }).format(date);
-}
-
-function modeLabel(mode: SessionMode): string {
-  switch (mode) {
-    case "live":
-      return "LIVE API SESSION";
-    case "cached":
-      return "RECORDED REAL EVIDENCE • NOT LIVE";
-    case "mock":
-      return "MOCK • NOT PROVIDER-VERIFIED";
-    case "hybrid":
-      return "HYBRID • CHECK EACH SOURCE";
-    default:
-      return "UNVERIFIED SESSION MODE";
-  }
 }
 
 function provenanceLabel(provenance: EvidenceProvenance): string {
@@ -248,188 +401,231 @@ function CandidateCard({ candidate }: { candidate: CandidateView }) {
         </span>
       </header>
 
-      {candidate.hypothesis ? (
-        <p className="candidate-card__hypothesis">{candidate.hypothesis}</p>
-      ) : null}
-
-      {candidate.generation ? (
-        <div className="evidence-row" data-testid="candidate-generation">
-          <div className="evidence-row__line">
-            <span className="evidence-row__label">Fireworks generation</span>
-            <strong className="evidence-row__value">
-              {candidate.generation.model ??
-                candidate.generation.profile ??
-                "captured"}
-            </strong>
-          </div>
-          <ProvenanceBadge provenance={candidate.generation.provenance} />
-        </div>
-      ) : null}
-
-      <div className="candidate-card__evidence">
-        <div className="evidence-row">
-          <div className="evidence-row__line">
-            <span className="evidence-row__label">
-              <StatusPip status={candidate.sandbox.status} />
-              Sandbox
-            </span>
-            <strong className="evidence-row__value">
-              {candidate.sandbox.id
-                ? compactIdentifier(candidate.sandbox.id)
-                : candidate.sandbox.status}
-            </strong>
-          </div>
-          <ProvenanceBadge provenance={candidate.sandbox.provenance} />
-        </div>
-        <EvidenceRow
-          evidence={candidate.build}
-          label="Build"
-          status={candidate.build.status}
-          value={candidate.build.status.toUpperCase()}
-        />
-        <EvidenceRow
-          evidence={candidate.tests}
-          label="Tests"
-          status={candidate.tests.status}
-          value={candidate.tests.passed + "/" + candidate.tests.total}
-        />
-        <EvidenceRow
-          evidence={candidate.safetyGate}
-          label="Hard safety gate"
-          status={gate}
-          value={gate}
-        />
-      </div>
-
-      <div className="candidate-score">
+      <dl className="candidate-summary-grid">
         <div>
-          <span>
-            {hasVerifiedBraintrustScore
-              ? "Braintrust score"
-              : "Local evaluation score"}
-          </span>
-          <strong>{score === "—" ? score : score + "%"}</strong>
+          <dt>Score</dt>
+          <dd>{score === "—" ? score : score + "%"}</dd>
         </div>
-        <span
-          className={
-            "eligibility eligibility--" +
-            (candidate.score.eligible === null
-              ? "pending"
-              : candidate.score.eligible
-                ? "eligible"
-                : "ineligible")
-          }
-        >
-          {candidate.score.eligible === null
-            ? "EVALUATING"
-            : candidate.score.eligible
-              ? "ELIGIBLE"
-              : "NOT ELIGIBLE"}
-        </span>
-        <ProvenanceBadge provenance={candidate.score.provenance} />
-      </div>
+        <div>
+          <dt>Build</dt>
+          <dd data-status={candidate.build.status}>
+            {candidate.build.status.toUpperCase()}
+          </dd>
+        </div>
+        <div>
+          <dt>Safety gate</dt>
+          <dd data-status={gate}>{gate}</dd>
+        </div>
+        <div>
+          <dt>Decision</dt>
+          <dd>
+            {candidate.selected
+              ? "SELECTED"
+              : candidate.eliminatedReason
+                ? "REJECTED"
+                : "PENDING"}
+          </dd>
+        </div>
+      </dl>
 
-      {candidate.eliminatedReason ? (
-        <div className="rejection-evidence" data-testid="rejection-evidence">
-          <span>Rejected with evidence</span>
-          <strong>{candidate.eliminatedReason}</strong>
-          {candidate.safetyGate.failures.length > 0 ? (
-            <ul>
-              {candidate.safetyGate.failures.map((failure) => (
-                <li key={failure}>{failure}</li>
-              ))}
-            </ul>
+      <details className="candidate-details" data-testid="candidate-details">
+        <summary>Tests, diff &amp; provenance</summary>
+        <div className="candidate-details__body">
+          {candidate.hypothesis ? (
+            <p className="candidate-card__hypothesis">{candidate.hypothesis}</p>
+          ) : null}
+
+          {candidate.generation ? (
+            <div className="evidence-row" data-testid="candidate-generation">
+              <div className="evidence-row__line">
+                <span className="evidence-row__label">
+                  Fireworks generation
+                </span>
+                <strong className="evidence-row__value">
+                  {candidate.generation.model ??
+                    candidate.generation.profile ??
+                    "captured"}
+                </strong>
+              </div>
+              <ProvenanceBadge provenance={candidate.generation.provenance} />
+            </div>
+          ) : null}
+
+          <div className="candidate-card__evidence">
+            <div className="evidence-row">
+              <div className="evidence-row__line">
+                <span className="evidence-row__label">
+                  <StatusPip status={candidate.sandbox.status} />
+                  Sandbox
+                </span>
+                <strong className="evidence-row__value">
+                  {candidate.sandbox.id
+                    ? compactIdentifier(candidate.sandbox.id)
+                    : candidate.sandbox.status}
+                </strong>
+              </div>
+              <ProvenanceBadge provenance={candidate.sandbox.provenance} />
+            </div>
+            <EvidenceRow
+              evidence={candidate.build}
+              label="Build"
+              status={candidate.build.status}
+              value={candidate.build.status.toUpperCase()}
+            />
+            <EvidenceRow
+              evidence={candidate.tests}
+              label="Tests"
+              status={candidate.tests.status}
+              value={candidate.tests.passed + "/" + candidate.tests.total}
+            />
+            <EvidenceRow
+              evidence={candidate.safetyGate}
+              label="Hard safety gate"
+              status={gate}
+              value={gate}
+            />
+          </div>
+
+          <div className="candidate-score">
+            <div>
+              <span>
+                {hasVerifiedBraintrustScore
+                  ? "Braintrust score"
+                  : "Local evaluation score"}
+              </span>
+              <strong>{score === "—" ? score : score + "%"}</strong>
+            </div>
+            <span
+              className={
+                "eligibility eligibility--" +
+                (candidate.score.eligible === null
+                  ? "pending"
+                  : candidate.score.eligible
+                    ? "eligible"
+                    : "ineligible")
+              }
+            >
+              {candidate.score.eligible === null
+                ? "EVALUATING"
+                : candidate.score.eligible
+                  ? "ELIGIBLE"
+                  : "NOT ELIGIBLE"}
+            </span>
+            <ProvenanceBadge provenance={candidate.score.provenance} />
+          </div>
+
+          {candidate.eliminatedReason ? (
+            <div
+              className="rejection-evidence"
+              data-testid="rejection-evidence"
+            >
+              <span>Rejected with evidence</span>
+              <strong>{candidate.eliminatedReason}</strong>
+              {candidate.safetyGate.failures.length > 0 ? (
+                <ul>
+                  {candidate.safetyGate.failures.map((failure) => (
+                    <li key={failure}>{failure}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+
+          {candidate.diff ? (
+            <div className="candidate-diff">
+              <strong>Candidate diff</strong>
+              <pre>{candidate.diff}</pre>
+            </div>
           ) : null}
         </div>
-      ) : null}
-
-      {candidate.diff ? (
-        <details className="candidate-diff">
-          <summary>Inspect candidate diff</summary>
-          <pre>{candidate.diff}</pre>
-        </details>
-      ) : null}
+      </details>
     </article>
   );
 }
 
-function IncidentPanel({ session }: { session: SessionView }) {
-  const danger =
-    session.incident.sensorFault && session.incident.chargingEnabled;
+function IncidentPanel({
+  session,
+  mode,
+  device,
+  starting,
+  onStart,
+}: {
+  session: SessionView | null;
+  mode: SessionMode;
+  device: DeviceTelemetrySnapshot | null;
+  starting: boolean;
+  onStart: () => void;
+}) {
+  const selected = session?.candidates.find(
+    (candidate) => candidate.id === session.selectedCandidateId,
+  );
+  const safeOutcome =
+    selected?.selected === true &&
+    selected.safetyGate.hardGatePassed === true &&
+    session?.state !== "FAILED";
+  const recordedReadOnly = session?.mode === "cached";
 
   return (
-    <section className="panel incident-panel" aria-labelledby="incident-title">
-      <div className="panel-heading">
+    <section
+      aria-labelledby="incident-title"
+      className="hero-section narrative-section"
+      data-testid="section-incident"
+      id="incident"
+    >
+      <div className="hero-brand">
+        <ShieldMark />
         <div>
-          <span className="eyebrow">Physical incident</span>
-          <h2 id="incident-title">{session.incident.title}</h2>
+          <h1>SafeFlash</h1>
+          <p>The safety gate for AI-generated firmware.</p>
         </div>
-        <span className={"severity severity--" + session.incident.severity}>
-          {session.incident.severity.toUpperCase()}
-        </span>
       </div>
 
-      <div
-        className={"danger-readout " + (danger ? "danger-readout--unsafe" : "")}
-        data-testid={danger ? "danger-state" : "incident-state"}
-      >
-        <div className="temperature-reading">
-          <strong>
-            {session.incident.temperatureC === null
-              ? "—"
-              : String(session.incident.temperatureC)}
-          </strong>
-          <span>°C</span>
-        </div>
-        <div className="danger-flags">
-          <span>
-            <StatusPip
-              status={session.incident.sensorFault ? "failed" : "passed"}
-            />
-            SENSOR {session.incident.sensorFault ? "FAULT" : "HEALTHY"}
+      <div className="hero-incident" data-testid="pre-run-incident">
+        <span className="eyebrow">Physical incident</span>
+        <h2 id="incident-title">
+          Battery temperature sensor disconnected while charging
+        </h2>
+        <div className="hero-outcome-comparison">
+          <article
+            className="hero-outcome hero-outcome--unsafe"
+            data-testid="danger-state"
+          >
+            <span>Original firmware</span>
+            <strong>CHARGING ON</strong>
+          </article>
+          <span className="hero-outcome-arrow" aria-hidden="true">
+            →
           </span>
-          <span>
-            <StatusPip
-              status={session.incident.chargingEnabled ? "failed" : "passed"}
-            />
-            CHARGING {session.incident.chargingEnabled ? "ON" : "OFF"}
+          <article className="hero-outcome hero-outcome--safe">
+            <span>SafeFlash outcome</span>
+            <strong>
+              {safeOutcome ? "CHARGING OFF" : "PENDING HARD GATES"}
+            </strong>
+          </article>
+        </div>
+      </div>
+
+      <div className="hero-actions">
+        <div className="hero-truth-badges">
+          <span
+            className={"mode-badge mode-badge--" + (session?.mode ?? mode)}
+            data-testid="mode-badge"
+          >
+            {conciseModeLabel(session?.mode ?? mode)}
+          </span>
+          <span className="device-badge" data-testid="header-device-status">
+            {device?.displayLabel ?? "SIMULATED DEVICE"}
           </span>
         </div>
-      </div>
-      <p className="incident-summary">{session.incident.summary}</p>
-      <ProvenanceBadge provenance={session.incident.provenance} />
-
-      <div className="incident-evidence">
-        <span className="section-label">Observed evidence</span>
-        {session.incident.evidence.length === 0 ? (
-          <p className="muted">No incident evidence reported by the API.</p>
-        ) : (
-          <ul>
-            {session.incident.evidence.map((evidence) => (
-              <li key={evidence}>{evidence}</li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="policy-block">
-        <div className="section-header">
-          <div>
-            <span className="section-label">Safety policy</span>
-            <strong>{session.policy.name}</strong>
-          </div>
-          <span className="policy-version">{session.policy.version}</span>
-        </div>
-        <ProvenanceBadge provenance={session.policy.provenance} />
-        <ol className="invariant-list">
-          {session.policy.invariants.map((invariant) => (
-            <li key={invariant.id}>
-              <span aria-hidden="true">{invariant.hardGate ? "◆" : "◇"}</span>
-              <span>{invariant.description}</span>
-              <small>{invariant.hardGate ? "HARD GATE" : "ADVISORY"}</small>
-            </li>
-          ))}
-        </ol>
+        <button
+          className="button hero-start"
+          data-testid="start-tournament"
+          disabled={starting || recordedReadOnly}
+          onClick={onStart}
+          type="button"
+        >
+          {starting ? "Starting SafeFlash…" : "Start SafeFlash Run"}
+        </button>
       </div>
     </section>
   );
@@ -437,17 +633,24 @@ function IncidentPanel({ session }: { session: SessionView }) {
 
 function TimelinePanel({ session }: { session: SessionView }) {
   const events = [...session.events].sort(
-    (left, right) => right.sequence - left.sequence,
+    (left, right) => left.sequence - right.sequence,
   );
+  const milestones = events.filter(
+    (event) => event.title.trim().toUpperCase() !== "COMMAND COMPLETED",
+  );
+  const visibleEvents = milestones.length >= 3 ? milestones : events;
+  const retainedEventCount = events.length - visibleEvents.length;
 
   return (
-    <section className="panel timeline-panel" aria-labelledby="timeline-title">
+    <div className="panel timeline-panel" aria-labelledby="timeline-title">
       <div className="panel-heading">
         <div>
           <span className="eyebrow">Append-only audit</span>
           <h2 id="timeline-title">Agent timeline</h2>
         </div>
-        <span className="event-count">{events.length} events</span>
+        <span className="event-count">
+          {visibleEvents.length} milestones · {events.length} events
+        </span>
       </div>
       <div className="current-tool">
         <span className="live-dot" aria-hidden="true" />
@@ -456,42 +659,13 @@ function TimelinePanel({ session }: { session: SessionView }) {
           <strong>{humanizeState(session.state)}</strong>
         </div>
       </div>
-      {session.review ? (
-        <div className="current-tool" data-testid="coderabbit-review">
-          <div>
-            <span>
-              CodeRabbit review round {session.review.round} · {session.review.status}
-            </span>
-            <strong>
-              {session.review.findings.length} finding
-              {session.review.findings.length === 1 ? "" : "s"}
-            </strong>
-            {session.review.findings.length > 0 ? (
-              <ul className="rejection-list" data-testid="coderabbit-findings">
-                {session.review.findings.map((finding) => (
-                  <li key={finding.id}>
-                    <strong>
-                      {finding.severity.toUpperCase()} · {finding.title}
-                    </strong>
-                    <span>
-                      {finding.filePath ?? "Pull request"}
-                      {finding.line === undefined ? "" : `:${finding.line}`} · {finding.body}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            <ProvenanceBadge provenance={session.review.provenance} />
-          </div>
-        </div>
-      ) : null}
       <ol className="timeline-list" data-testid="timeline">
-        {events.length === 0 ? (
+        {visibleEvents.length === 0 ? (
           <li className="timeline-empty">
             No audit events have been reported by the API.
           </li>
         ) : (
-          events.map((event) => (
+          visibleEvents.map((event) => (
             <li className="timeline-event" key={event.id}>
               <div className="timeline-rail">
                 <span>{String(event.sequence).padStart(2, "0")}</span>
@@ -511,6 +685,338 @@ function TimelinePanel({ session }: { session: SessionView }) {
           ))
         )}
       </ol>
+      {retainedEventCount > 0 ? (
+        <p className="timeline-retained-note">
+          {retainedEventCount} low-level command events remain available in
+          Technical Evidence.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function AgentWorkflowSection({
+  session,
+  scenarioId,
+  starting,
+  onScenarioChange,
+  onStart,
+}: {
+  session: SessionView | null;
+  scenarioId: DemoScenarioId;
+  starting: boolean;
+  onScenarioChange: (scenario: DemoScenarioId) => void;
+  onStart: () => void;
+}) {
+  const hardGatesComplete =
+    session !== null &&
+    session.candidates.length > 0 &&
+    session.candidates.every(
+      (candidate) => candidate.safetyGate.hardGatePassed !== null,
+    );
+  const workflowSteps = [
+    {
+      label: "Observe",
+      detail: "Physical fault captured",
+      complete: session !== null,
+    },
+    {
+      label: "Generate",
+      detail: "Three repair strategies",
+      complete: (session?.candidates.length ?? 0) >= 3,
+    },
+    {
+      label: "Gate",
+      detail: "Hard safety constraints first",
+      complete: hardGatesComplete,
+    },
+    {
+      label: "Twin",
+      detail: "Build and executable tests",
+      complete:
+        session?.candidates.some(
+          (candidate) =>
+            candidate.build.status === "passed" &&
+            candidate.tests.status === "passed",
+        ) ?? false,
+    },
+    {
+      label: "Approve",
+      detail: "Human-bound evidence",
+      complete:
+        session?.approval?.decision === "approved" &&
+        session.approval.invalidatedAt === undefined,
+    },
+    {
+      label: "Review",
+      detail: "Exact-head independent review",
+      complete: session?.review?.status === "passed",
+    },
+  ];
+  const firstIncomplete = workflowSteps.findIndex((step) => !step.complete);
+
+  return (
+    <section
+      aria-labelledby="agent-title"
+      className="narrative-section content-section"
+      data-testid="section-agent"
+      id="agent"
+    >
+      <div className="section-intro">
+        <span className="eyebrow">Agent workflow</span>
+        <h2 id="agent-title">Evidence moves forward. Claims do not.</h2>
+        <p>
+          Every phase emits evidence, and any missing provider result closes the
+          gate instead of being filled in by the interface.
+        </p>
+      </div>
+
+      <div className="agent-state-card">
+        <span>Current phase</span>
+        <strong data-testid="workflow-state">
+          {humanizeState(session?.state ?? "NO_SESSION")}
+        </strong>
+        <small>
+          {session?.mode === "cached"
+            ? "Immutable recorded replay — no mutations are allowed."
+            : "The server owns every transition shown here."}
+        </small>
+      </div>
+
+      <ol className="workflow-stepper" aria-label="SafeFlash agent phases">
+        {workflowSteps.map((step, index) => {
+          const status = step.complete
+            ? "complete"
+            : index === firstIncomplete
+              ? "current"
+              : "guarded";
+          return (
+            <li data-status={status} key={step.label}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <strong>{step.label}</strong>
+              <small>{step.detail}</small>
+            </li>
+          );
+        })}
+      </ol>
+
+      {session ? (
+        <section className="scenario-banner" data-testid="scenario-banner">
+          <span>DEMO SCENARIO</span>
+          <strong>{session.scenario?.label ?? "Server-owned validation"}</strong>
+          <p>{session.scenario?.summary ?? "Executable evidence only."}</p>
+        </section>
+      ) : (
+        <section className="agent-empty" data-testid="empty-state">
+          <strong>No validation session reported.</strong>
+          <span>Choose a scenario, then start from the Hero.</span>
+        </section>
+      )}
+
+      {session?.mode === "cached" ? (
+        <section
+          className="new-run-control"
+          data-testid="recorded-run-read-only"
+        >
+          <strong>READ-ONLY RECORDED RUN</strong>
+          <label>Immutable replay cannot start or mutate a scenario.</label>
+        </section>
+      ) : (
+        <section className="new-run-control" data-testid="new-run-control">
+          <label htmlFor="new-run-scenario">
+            Competition scenario — unsafe high score is the default
+          </label>
+          <div>
+            <select
+              data-testid="new-run-scenario"
+              id="new-run-scenario"
+              onChange={(event) =>
+                onScenarioChange(event.target.value as DemoScenarioId)
+              }
+              value={scenarioId}
+            >
+              {DEMO_SCENARIOS.map((scenario) => (
+                <option key={scenario.id} value={scenario.id}>
+                  {scenario.label}
+                </option>
+              ))}
+            </select>
+            <button
+              className="button"
+              data-testid="start-new-run"
+              disabled={starting}
+              onClick={onStart}
+              type="button"
+            >
+              {starting ? "Starting…" : "Start selected scenario"}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {session === null ? (
+        <fieldset className="scenario-picker">
+          <legend>Scenario details</legend>
+          {DEMO_SCENARIOS.map((scenario) => (
+            <label key={scenario.id}>
+              <input
+                checked={scenarioId === scenario.id}
+                data-testid={`scenario-${scenario.id}`}
+                name="demo-scenario"
+                onChange={() => onScenarioChange(scenario.id)}
+                type="radio"
+                value={scenario.id}
+              />
+              <span>
+                <strong>{scenario.label}</strong>
+                <small>{scenario.summary}</small>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
+    </section>
+  );
+}
+
+function RepairLoopSection({ session }: { session: SessionView | null }) {
+  return (
+    <section
+      aria-labelledby="review-title"
+      className="narrative-section content-section"
+      data-testid="section-review"
+      id="review"
+    >
+      <div className="section-intro">
+        <span className="eyebrow">Real GitHub + CodeRabbit repair loop</span>
+        <h2 id="review-title">A second trust boundary reviews the exact head.</h2>
+        <p>
+          Current-run evidence and prior public review proof are deliberately
+          separated. A mock run never inherits a live review claim.
+        </p>
+      </div>
+
+      <div className="review-grid">
+        <article className="review-card review-card--current">
+          <header>
+            <span>Current run</span>
+            <strong>{conciseModeLabel(session?.mode ?? "unknown")}</strong>
+          </header>
+          <dl>
+            <div>
+              <dt>GitHub PR</dt>
+              <dd>
+                {session?.pullRequest
+                  ? `#${session.pullRequest.number} ${session.pullRequest.status.toUpperCase()}`
+                  : "NOT CREATED"}
+              </dd>
+            </div>
+            <div>
+              <dt>Exact head</dt>
+              <dd>
+                <code>{session?.currentCommitSha ?? "not available"}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>CodeRabbit</dt>
+              <dd>
+                {session?.review
+                  ? `${session.review.status.toUpperCase()} · ROUND ${session.review.round}`
+                  : "NOT RUN"}
+              </dd>
+            </div>
+            <div>
+              <dt>Daytona cleanup</dt>
+              <dd>{session?.cleanup?.status.toUpperCase() ?? "NOT RUN"}</dd>
+            </div>
+          </dl>
+          {session?.review ? (
+            <div className="review-findings" data-testid="coderabbit-review">
+              <strong>
+                {session.review.findings.length} exact-head finding
+                {session.review.findings.length === 1 ? "" : "s"}
+              </strong>
+              {session.review.findings.length > 0 ? (
+                <ul className="rejection-list" data-testid="coderabbit-findings">
+                  {session.review.findings.map((finding) => (
+                    <li key={finding.id}>
+                      <strong>
+                        {finding.severity.toUpperCase()} · {finding.title}
+                      </strong>
+                      <span>
+                        {finding.filePath ?? "Pull request"}
+                        {finding.line === undefined
+                          ? ""
+                          : `:${finding.line}`}{" "}
+                        · {finding.body}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <ProvenanceBadge provenance={session.review.provenance} />
+            </div>
+          ) : (
+            <p className="review-guardrail">
+              No current-run review is claimed before a real PR and exact-head
+              CodeRabbit evidence exist.
+            </p>
+          )}
+        </article>
+
+        <article className="review-card review-card--certified">
+          <header>
+            <span>Real prior public boundary</span>
+            <strong>NOT CURRENT LIVE</strong>
+          </header>
+          <a
+            href={CERTIFIED_REVIEW_BOUNDARY.pullRequestUrl}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Frankie744/safecommit-ai · PR #1 ↗
+          </a>
+          <ol className="review-rounds">
+            <li>
+              <span>Round 1</span>
+              <strong>CodeRabbit requested changes</strong>
+            </li>
+            <li>
+              <span>Repair</span>
+              <strong>Patch revalidated through safety gates</strong>
+            </li>
+            <li>
+              <span>Round 2</span>
+              <strong>Approved repaired head</strong>
+            </li>
+          </ol>
+          <dl className="review-shas">
+            <div>
+              <dt>Certified main</dt>
+              <dd>
+                <code>{CERTIFIED_REVIEW_BOUNDARY.certifiedMainSha}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Approved repair head</dt>
+              <dd>
+                <code>{CERTIFIED_REVIEW_BOUNDARY.approvedRepairHead}</code>
+              </dd>
+            </div>
+          </dl>
+          <p>
+            This proves the GitHub/CodeRabbit review boundary only. It is not a
+            full provider-chain Live run and not a Recorded Live replay.
+          </p>
+        </article>
+      </div>
+
+      <div className="never-merge-callout">
+        <strong>NO AUTOMATIC MERGE</strong>
+        <span>
+          SafeFlash may reach “ready for human merge”; it never presses merge.
+        </span>
+      </div>
     </section>
   );
 }
@@ -797,8 +1303,86 @@ function CopilotSessionBridge({
   return children;
 }
 
+const EXECUTABLE_ASSURANCE_PROFILES = [
+  {
+    id: "battery-sensor-disconnect",
+    device: "Battery charger",
+    incident: "Temperature sensor disconnected while charging",
+    unsafe: "Sensor fault ignored · charging ON",
+    safe: "Charging OFF · fault latched",
+    fixture: "fixtures/battery-controller",
+  },
+  {
+    id: "motor-command-nonfinite",
+    device: "Motor drive",
+    incident: "NaN torque command reaches the controller",
+    unsafe: "Range checks bypassed · PWM ON",
+    safe: "PWM OFF · zero torque · fault latched",
+    fixture: "fixtures/motor-controller",
+  },
+] as const;
+
+function CrossDeviceAssuranceProof() {
+  return (
+    <section
+      aria-labelledby="cross-device-proof-title"
+      className="panel cross-device-proof"
+      data-testid="cross-device-proof"
+    >
+      <div className="cross-device-proof__heading">
+        <div>
+          <span className="eyebrow">Cross-device executable proof</span>
+          <h3 id="cross-device-proof-title">
+            One safety gate, multiple physical device classes.
+          </h3>
+        </div>
+        <div className="cross-device-proof__badges">
+          <span>SIMULATED DEVICES</span>
+          <span>LOCAL-TEST · NOT LIVE</span>
+        </div>
+      </div>
+      <div className="cross-device-proof__grid">
+        {EXECUTABLE_ASSURANCE_PROFILES.map((profile) => (
+          <article data-profile-id={profile.id} key={profile.id}>
+            <header>
+              <strong>{profile.device}</strong>
+              <span>EXECUTABLE C / CTEST</span>
+            </header>
+            <p>{profile.incident}</p>
+            <dl>
+              <div>
+                <dt>Unsafe baseline</dt>
+                <dd>{profile.unsafe}</dd>
+              </div>
+              <div>
+                <dt>Hard-gate outcome</dt>
+                <dd>{profile.safe}</dd>
+              </div>
+              <div>
+                <dt>Server-owned fixture</dt>
+                <dd>
+                  <code>{profile.fixture}</code>
+                </dd>
+              </div>
+            </dl>
+          </article>
+        ))}
+      </div>
+      <p className="cross-device-proof__note">
+        Both profiles use the same non-compensable selector and fixed command
+        policy. Run <code>npm run demo:cross-device</code> to rebuild all six
+        isolated candidates without provider calls or hardware.
+      </p>
+    </section>
+  );
+}
+
 export function SafeFlashConsole() {
   const [session, setSession] = useState<SessionView | null>(null);
+  const [activeMode, setActiveMode] = useState<SessionMode>("unknown");
+  const [scenarioId, setScenarioId] =
+    useState<DemoScenarioId>("unsafe-high-score");
+  const [device, setDevice] = useState<DeviceTelemetrySnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -810,7 +1394,9 @@ export function SafeFlashConsole() {
     setLoading(true);
     setError(null);
     try {
-      const sessions = await listSessions();
+      const index = await getSessionIndex();
+      const sessions = index.sessions;
+      setActiveMode(index.mode);
       if (sessions.length === 0) {
         setSession(null);
         return;
@@ -820,7 +1406,33 @@ export function SafeFlashConsole() {
       try {
         setSession(await getSession(summary.id));
       } catch {
-        setSession(summary);
+        if (
+          summary.mode === "live" &&
+          summary.state === "READY_TO_MERGE"
+        ) {
+          const at = new Date().toISOString();
+          setSession({
+            ...summary,
+            state: "FAILED",
+            approval:
+              summary.approval === undefined
+                ? undefined
+                : {
+                    ...summary.approval,
+                    invalidatedAt: at,
+                    invalidationReason:
+                      "The detail endpoint could not refresh the remote READY claim.",
+                  },
+            review: undefined,
+            failure: {
+              reason:
+                "The exact remote READY claim could not be refreshed; stale readiness is hidden.",
+              recoverable: false,
+            },
+          });
+        } else {
+          setSession(summary);
+        }
         setPollWarning(
           "Detail endpoint unavailable; showing the API list snapshot without inventing missing evidence.",
         );
@@ -841,7 +1453,34 @@ export function SafeFlashConsole() {
   }, [loadInitialSession]);
 
   useEffect(() => {
-    if (!session || TERMINAL_STATES.has(session.state)) return;
+    let cancelled = false;
+    const refresh = () => {
+      void getDeviceTelemetry()
+        .then((snapshot) => {
+          if (!cancelled) setDevice(snapshot);
+        })
+        .catch(() => {
+          if (!cancelled) setDevice(null);
+        });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, DEVICE_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    const requiresFreshnessPolling =
+      session.mode === "live" &&
+      (session.state === "READY_TO_MERGE" ||
+        (session.state === "FAILED" &&
+          session.failure?.recoverable === true &&
+          session.failure.retryAction ===
+            "retry-ready-freshness-check"));
+    if (TERMINAL_STATES.has(session.state) && !requiresFreshnessPolling) return;
     const approvalIsCurrent =
       session.approval?.decision === "approved" &&
       !session.approval.invalidatedAt &&
@@ -857,6 +1496,35 @@ export function SafeFlashConsole() {
         })
         .catch((pollError: unknown) => {
           if (cancelled) return;
+          setSession((current) => {
+            if (
+              current === null ||
+              current.mode !== "live" ||
+              current.state !== "READY_TO_MERGE"
+            ) {
+              return current;
+            }
+            const at = new Date().toISOString();
+            return {
+              ...current,
+              state: "FAILED",
+              approval:
+                current.approval === undefined
+                  ? undefined
+                  : {
+                      ...current.approval,
+                      invalidatedAt: at,
+                      invalidationReason:
+                        "The client could not refresh the remote READY claim.",
+                    },
+              review: undefined,
+              failure: {
+                reason:
+                  "The exact remote READY claim could not be refreshed; stale readiness is hidden.",
+                recoverable: false,
+              },
+            };
+          });
           setPollWarning(
             pollError instanceof Error
               ? "Live refresh paused: " + pollError.message
@@ -875,7 +1543,7 @@ export function SafeFlashConsole() {
     setStarting(true);
     setError(null);
     try {
-      const created = await createSession();
+      const created = await createSession(scenarioId);
       setSession(created);
     } catch (startError) {
       setError(
@@ -886,7 +1554,7 @@ export function SafeFlashConsole() {
     } finally {
       setStarting(false);
     }
-  }, []);
+  }, [scenarioId]);
 
   const handleDecision = useCallback(
     async (decision: DecisionAction): Promise<SessionView> => {
@@ -931,158 +1599,209 @@ export function SafeFlashConsole() {
   return (
     <CopilotSessionBridge session={session} onDecision={handleDecision}>
       <main className="console-shell" data-testid="safeflash-console">
-        <header className="topbar">
-          <div className="brand">
-            <ShieldMark />
-            <div>
-              <strong>SafeFlash</strong>
-              <span>The safety gate for AI-generated firmware</span>
-            </div>
-          </div>
+        <NarrativeNavigation
+          refreshKey={`${session?.id ?? "none"}:${loading ? "loading" : "ready"}`}
+        />
 
-          <div className="session-metadata">
-            <span
-              className={"mode-badge mode-badge--" + (session?.mode ?? "unknown")}
-              data-testid="mode-badge"
-            >
-              {modeLabel(session?.mode ?? "unknown")}
-            </span>
-            <span className="metadata-item">
-              SESSION
-              <strong data-testid="session-id">
-                {compactIdentifier(session?.id, 16)}
-              </strong>
-            </span>
-            <span className="metadata-item">
-              COMMIT
-              <strong data-testid="commit-sha">
-                {compactIdentifier(session?.currentCommitSha, 12)}
-              </strong>
-            </span>
-            <span className="metadata-item">
-              STATE
-              <strong data-testid="workflow-state">
-                {humanizeState(session?.state ?? "NO_SESSION")}
-              </strong>
-            </span>
-          </div>
-        </header>
+        <IncidentPanel
+          device={device}
+          mode={session?.mode ?? activeMode}
+          onStart={() => void handleStart()}
+          session={session}
+          starting={starting}
+        />
 
-        {error ? (
-          <div className="error-banner" data-testid="api-error" role="alert">
-            <strong>Backend evidence unavailable.</strong>
-            <span>{error} No provider success is being claimed.</span>
-            <button onClick={() => void loadInitialSession()} type="button">
-              Retry
-            </button>
-          </div>
-        ) : null}
-        {pollWarning ? (
-          <div className="warning-banner" role="status">
-            {pollWarning}
-          </div>
-        ) : null}
-        {session?.failure ? (
-          <div className="error-banner" data-testid="workflow-failure" role="alert">
-            <strong>Workflow failed closed.</strong>
-            <span>
-              {session.failure.reason} {session.failure.recoverable
-                ? `Resume action: ${session.failure.retryAction ?? "available"}.`
-                : "This failure is not recoverable from the UI."}
-            </span>
-            {session.failure.recoverable ? (
-              <button
-                data-testid="resume-live-workflow"
-                disabled={retrying}
-                onClick={() => void handleRetry()}
-                type="button"
-              >
-                {retrying ? "Resuming…" : "Resume live workflow"}
+        <div className="narrative-alerts">
+          {error ? (
+            <div className="error-banner" data-testid="api-error" role="alert">
+              <strong>Backend evidence unavailable.</strong>
+              <span>{error} No provider success is being claimed.</span>
+              <button onClick={() => void loadInitialSession()} type="button">
+                Retry
               </button>
-            ) : null}
-          </div>
-        ) : null}
-
-        {loading && session === null ? (
-          <section className="loading-state" data-testid="loading-state">
-            <span className="loading-mark" aria-hidden="true" />
-            <strong>Loading session state from the SafeFlash API…</strong>
-            <p>No demo animation is playing. The console is awaiting API data.</p>
-          </section>
-        ) : session === null ? (
-          <section className="empty-state" data-testid="empty-state">
-            <ShieldMark />
-            <span className="eyebrow">No validation session reported</span>
-            <h1>Start with executable evidence.</h1>
-            <p>
-              This creates a server-owned Battery Sensor Disconnect tournament.
-              The UI will only display states returned by the API.
-            </p>
-            <button
-              className="button button--approve"
-              data-testid="start-tournament"
-              disabled={starting}
-              onClick={() => void handleStart()}
-              type="button"
-            >
-              {starting ? "Starting…" : "Run Safety Tournament"}
-            </button>
-          </section>
-        ) : (
-          <>
-            <div className="workspace-grid">
-              <IncidentPanel session={session} />
-
-              <section
-                className="panel tournament-panel"
-                aria-labelledby="tournament-title"
-              >
-                <div className="panel-heading tournament-heading">
-                  <div>
-                    <span className="eyebrow">Evidence-based selection</span>
-                    <h2 id="tournament-title">Safety tournament</h2>
-                  </div>
-                  <div className="tournament-legend">
-                    <span>
-                      <StatusPip status="failed" />
-                      hard gate
-                    </span>
-                    <span>
-                      <StatusPip status="passed" />
-                      eligible
-                    </span>
-                  </div>
-                </div>
-                <div className="candidate-grid" data-testid="candidate-grid">
-                  {session.candidates.length === 0 ? (
-                    <div className="candidate-empty">
-                      Candidate evidence has not been reported by the API.
-                    </div>
-                  ) : (
-                    session.candidates.map((candidate) => (
-                      <CandidateCard candidate={candidate} key={candidate.id} />
-                    ))
-                  )}
-                </div>
-                <div className="selection-rule">
-                  <span aria-hidden="true">◆</span>
-                  <strong>Hard gates run before weighted ranking.</strong>
-                  <span>
-                    A high average score cannot compensate for unsafe firmware.
-                  </span>
-                </div>
-              </section>
-
-              <TimelinePanel session={session} />
             </div>
+          ) : null}
+          {pollWarning ? (
+            <div className="warning-banner" role="status">
+              {pollWarning}
+            </div>
+          ) : null}
+          {session?.failure ? (
+            <div
+              className="error-banner"
+              data-testid="workflow-failure"
+              role="alert"
+            >
+              <strong>Workflow failed closed.</strong>
+              <span>
+                {session.failure.reason}{" "}
+                {session.failure.recoverable
+                  ? `Resume action: ${session.failure.retryAction ?? "available"}.`
+                  : "This failure is not recoverable from the UI."}
+              </span>
+              {session.failure.recoverable ? (
+                <button
+                  data-testid="resume-live-workflow"
+                  disabled={retrying}
+                  onClick={() => void handleRetry()}
+                  type="button"
+                >
+                  {retrying ? "Resuming…" : "Resume live workflow"}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
 
+        <AgentWorkflowSection
+          onScenarioChange={setScenarioId}
+          onStart={() => void handleStart()}
+          scenarioId={scenarioId}
+          session={session}
+          starting={starting}
+        />
+
+        <section
+          aria-labelledby="tournament-title"
+          className="narrative-section content-section"
+          data-testid="section-candidates"
+          id="candidates"
+        >
+          <div className="section-intro">
+            <span className="eyebrow">Candidate safety tournament</span>
+            <h2 id="tournament-title">
+              The highest score can still lose.
+            </h2>
+            <p>
+              Build, hard safety gate, and final decision stay visible. Tests,
+              diffs, and provenance expand only when judges ask.
+            </p>
+          </div>
+
+          <div className="panel tournament-panel">
+            <div className="panel-heading tournament-heading">
+              <div>
+                <span className="section-label">Evidence-based selection</span>
+                <strong>Three persistent repair strategies</strong>
+              </div>
+              <div className="tournament-legend">
+                <span>
+                  <StatusPip status="failed" />
+                  hard gate
+                </span>
+                <span>
+                  <StatusPip status="passed" />
+                  eligible
+                </span>
+              </div>
+            </div>
+            <div className="candidate-grid" data-testid="candidate-grid">
+              {loading && session === null ? (
+                <div className="candidate-empty" data-testid="loading-state">
+                  Loading executable session evidence…
+                </div>
+              ) : session === null || session.candidates.length === 0 ? (
+                <div className="candidate-empty">
+                  {session?.state === "FAILED"
+                    ? "Provider evidence is missing. Candidate selection failed closed."
+                    : "Start a run to compare candidate evidence."}
+                </div>
+              ) : (
+                session.candidates.map((candidate) => (
+                  <CandidateCard candidate={candidate} key={candidate.id} />
+                ))
+              )}
+            </div>
+            <div className="selection-rule">
+              <span aria-hidden="true">◆</span>
+              <strong>Hard gates run before weighted ranking.</strong>
+              <span>
+                A high average score cannot compensate for unsafe firmware.
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section
+          aria-labelledby="twin-title"
+          className="narrative-section content-section"
+          data-testid="section-twin"
+          id="twin"
+        >
+          <div className="section-intro">
+            <span className="eyebrow">Digital twin timeline</span>
+            <h2 id="twin-title">Every transition remains auditable.</h2>
+            <p>
+              Events are shown in execution order. The page grows with the
+              evidence; the timeline never becomes a scroll box.
+            </p>
+          </div>
+          {session ? (
+            <TimelinePanel session={session} />
+          ) : (
+            <div className="section-placeholder">
+              Start a run to populate the append-only digital twin timeline.
+            </div>
+          )}
+        </section>
+
+        <RepairLoopSection session={session} />
+
+        <section
+          aria-labelledby="decision-title"
+          className="narrative-section content-section decision-section"
+          data-testid="section-decision"
+          id="decision"
+        >
+          <div className="section-intro">
+            <span className="eyebrow">Human approval and final decision</span>
+            <h2 id="decision-title">The agent stops at the human boundary.</h2>
+            <p>
+              Approval is bound to the candidate, evidence digest, patch digest,
+              commit, and policy version. A changed head invalidates old proof.
+            </p>
+          </div>
+          {session ? (
             <ApprovalGate
               busyDecision={busyDecision}
               onDecision={handleDecision}
               session={session}
             />
-          </>
-        )}
+          ) : (
+            <div className="section-placeholder">
+              No decision is available before a candidate passes every hard
+              gate.
+            </div>
+          )}
+        </section>
+
+        <section
+          aria-labelledby="evidence-title"
+          className="narrative-section content-section evidence-section"
+          data-testid="section-evidence"
+          id="evidence"
+        >
+          <div className="section-intro">
+            <span className="eyebrow">Technical evidence</span>
+            <h2 id="evidence-title">Raw proof, kept out of the main story.</h2>
+            <p>
+              Session bindings, complete provider/resource IDs, cleanup proof,
+              policy, audit events, and sanitized JSON remain available here.
+            </p>
+          </div>
+          <CrossDeviceAssuranceProof />
+          {session ? (
+            <>
+              <CompetitionStatusRail device={device} session={session} />
+              <EvidenceDrawer session={session} />
+            </>
+          ) : (
+            <div className="section-placeholder">
+              Technical evidence appears only after the server reports a
+              session.
+            </div>
+          )}
+        </section>
       </main>
     </CopilotSessionBridge>
   );

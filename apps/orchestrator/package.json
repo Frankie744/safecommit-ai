@@ -10,6 +10,7 @@
     "@safeflash/domain": "0.1.0",
     "@safeflash/evals": "0.1.0",
     "@safeflash/integrations": "0.1.0",
-    "@safeflash/safety-policy": "0.1.0"
+    "@safeflash/safety-policy": "0.1.0",
+    "mysql2": "3.23.1"
   }
 }

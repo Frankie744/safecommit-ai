@@ -1,0 +1,23 @@
+{
+  "profile": "openboxes-mysql-v1",
+  "fixtureKind": "OpenBoxes-derived executable fixture",
+  "mysqlVersion": "8.0.36",
+  "counts": {
+    "tenant": 2,
+    "warehouse": 3,
+    "location": 3,
+    "product": 4,
+    "lot": 4,
+    "inventory_item": 4,
+    "serial_number": 4,
+    "order_header": 4,
+    "order_line": 4,
+    "allocation": 4,
+    "inventory_transaction": 4,
+    "stock_movement": 1
+  },
+  "inventoryUnits": 34,
+  "allocatedUnits": 14,
+  "protectedOrderCount": 1,
+  "sourceRevision": "99fb3e61d2ba220dc1d83847e4852e2846ee17f0"
+}

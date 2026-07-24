@@ -83,6 +83,13 @@ export interface BraintrustExperimentEvidence {
   experimentUrl: string;
   resultCount: number;
   candidateResults: readonly {
+    /**
+     * Braintrust's immutable Eval root/result ID from the scorer trace
+     * (`Trace.getConfiguration().root_span_id`).
+     * Braintrust does not expose a distinct provider ID for each named score,
+     * so the result row is the provider-owned provenance boundary for scores.
+     */
+    resultId: string;
     candidateId: string;
     evidenceDigest: string;
     evaluationEvidence: CandidateEvaluationEvidence;
@@ -98,6 +105,12 @@ export interface BraintrustReturnedExperimentResult {
   metadata?: Record<string, unknown>;
   error: unknown;
   scores: Record<string, number | null>;
+}
+
+export interface BraintrustResultTraceConfiguration {
+  object_type: string;
+  object_id: string;
+  root_span_id: string;
 }
 
 /**
@@ -125,6 +138,24 @@ export function evaluateBraintrustCandidateScorers(
 type BraintrustCandidateResult =
   BraintrustExperimentEvidence["candidateResults"][number];
 
+const DETERMINISTIC_SCORE_NAMES = [
+  "BuildSuccess",
+  "UnitTestPassRate",
+  "SafetyInvariant",
+  "RegressionProtection",
+  "PatchIntegrity",
+  "PatchMinimality",
+  "ExplanationGroundedness",
+  "Reproducibility",
+] as const satisfies readonly DeterministicScore["name"][];
+
+const HARD_GATE_SCORE_NAMES = new Set<DeterministicScore["name"]>([
+  "BuildSuccess",
+  "UnitTestPassRate",
+  "SafetyInvariant",
+  "PatchIntegrity",
+]);
+
 /**
  * Normalize only values confirmed by Braintrust's returned Eval rows. The
  * caller-supplied cases are comparison oracles, never the evidence source.
@@ -132,7 +163,10 @@ type BraintrustCandidateResult =
 export function normalizeBraintrustReturnedResults(
   cases: readonly BraintrustPreparedExperimentCase[],
   results: readonly BraintrustReturnedExperimentResult[],
+  expectedExperimentId: string,
+  resultTraces: ReadonlyMap<string, BraintrustResultTraceConfiguration>,
 ): readonly BraintrustCandidateResult[] {
+  assertRemoteIdentifier("experiment ID", expectedExperimentId);
   if (results.length !== cases.length || cases.length === 0) {
     throw new ProviderResponseError(
       "braintrust",
@@ -156,6 +190,7 @@ export function normalizeBraintrustReturnedResults(
   }
 
   const seen = new Set<string>();
+  const seenResultIds = new Set<string>();
   return results.map((remote) => {
     const candidateId = remote.input?.candidateId;
     const expected = expectedByCandidate.get(candidateId);
@@ -176,6 +211,29 @@ export function normalizeBraintrustReturnedResults(
       throw new ProviderResponseError(
         "braintrust",
         "Braintrust returned an errored, duplicate, or mismatched candidate result",
+        false,
+      );
+    }
+    const resultTrace = resultTraces.get(candidateId);
+    if (
+      resultTrace === undefined ||
+      resultTrace.object_type !== "experiment" ||
+      resultTrace.object_id !== expectedExperimentId
+    ) {
+      throw new ProviderResponseError(
+        "braintrust",
+        "Braintrust scorer trace is missing or belongs to another Experiment",
+        false,
+      );
+    }
+    const resultId = assertRemoteIdentifier(
+      "Eval result ID",
+      resultTrace.root_span_id,
+    );
+    if (seenResultIds.has(resultId)) {
+      throw new ProviderResponseError(
+        "braintrust",
+        "Braintrust returned duplicate Eval result IDs",
         false,
       );
     }
@@ -202,7 +260,9 @@ export function normalizeBraintrustReturnedResults(
       );
     }
     seen.add(candidateId);
+    seenResultIds.add(resultId);
     return {
+      resultId,
       candidateId,
       evidenceDigest: remote.output.evidenceDigest,
       evaluationEvidence: structuredClone(remote.input.evaluationEvidence),
@@ -263,15 +323,228 @@ export function readBraintrustConfig(
   };
 }
 
-function assertRemoteIdentifier(label: string, value: string | undefined): string {
-  if (value === undefined || value.trim() === "") {
+function assertRemoteIdentifier(label: string, value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.trim() === "" ||
+    value !== value.trim() ||
+    value.length > 512 ||
+    /[\u0000-\u001f\u007f]/u.test(value)
+  ) {
     throw new ProviderResponseError(
       "braintrust",
       `Braintrust did not return a real ${label}`,
       false,
     );
   }
+  if (label.endsWith("URL")) {
+    let parsed: URL;
+    try {
+      parsed = new URL(value);
+    } catch {
+      throw new ProviderResponseError(
+        "braintrust",
+        `Braintrust did not return a real ${label}`,
+        false,
+      );
+    }
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username !== "" ||
+      parsed.password !== ""
+    ) {
+      throw new ProviderResponseError(
+        "braintrust",
+        `Braintrust did not return a real ${label}`,
+        false,
+      );
+    }
+  }
   return value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validateDatasetEvidence(
+  value: BraintrustDatasetEvidence,
+): BraintrustDatasetEvidence {
+  if (typeof value !== "object" || value === null) {
+    throw new ProviderResponseError(
+      "braintrust",
+      "Braintrust returned malformed Dataset evidence",
+      false,
+    );
+  }
+  assertRemoteIdentifier("dataset ID", value.datasetId);
+  assertRemoteIdentifier("dataset name", value.datasetName);
+  assertRemoteIdentifier("dataset version", value.datasetVersion);
+  assertRemoteIdentifier("dataset URL", value.datasetUrl);
+  if (
+    !Number.isSafeInteger(value.totalRecords) ||
+    value.totalRecords < 1 ||
+    !Array.isArray(value.rowIds) ||
+    value.rowIds.length < 1 ||
+    value.rowIds.some(
+      (rowId) => assertRemoteIdentifier("Dataset row ID", rowId) !== rowId,
+    ) ||
+    value.totalRecords < value.rowIds.length ||
+    new Set(value.rowIds).size !== value.rowIds.length
+  ) {
+    throw new ProviderResponseError(
+      "braintrust",
+      "Braintrust returned malformed Dataset evidence",
+      false,
+    );
+  }
+  return value;
+}
+
+function validateTraceEvidence(
+  value: BraintrustTraceEvidence,
+): BraintrustTraceEvidence {
+  if (typeof value !== "object" || value === null) {
+    throw new ProviderResponseError(
+      "braintrust",
+      "Braintrust returned malformed Trace evidence",
+      false,
+    );
+  }
+  assertRemoteIdentifier("trace ID", value.traceId);
+  assertRemoteIdentifier("span ID", value.spanId);
+  assertRemoteIdentifier("trace URL", value.traceUrl);
+  return value;
+}
+
+function validateExperimentEvidence(
+  value: BraintrustExperimentEvidence,
+): BraintrustExperimentEvidence {
+  if (typeof value !== "object" || value === null) {
+    throw new ProviderResponseError(
+      "braintrust",
+      "Braintrust returned malformed Experiment evidence",
+      false,
+    );
+  }
+  assertRemoteIdentifier("project name", value.projectName);
+  assertRemoteIdentifier("experiment name", value.experimentName);
+  assertRemoteIdentifier("project ID", value.projectId);
+  assertRemoteIdentifier("experiment ID", value.experimentId);
+  assertRemoteIdentifier("experiment URL", value.experimentUrl);
+  if (
+    !Number.isSafeInteger(value.resultCount) ||
+    value.resultCount < 1 ||
+    !Array.isArray(value.candidateResults)
+  ) {
+    throw new ProviderResponseError(
+      "braintrust",
+      "Braintrust returned malformed Experiment or Score evidence",
+      false,
+    );
+  }
+  const resultIds = value.candidateResults.map((result) => {
+    if (!isRecord(result)) {
+      throw new ProviderResponseError(
+        "braintrust",
+        "Braintrust returned malformed Experiment result evidence",
+        false,
+      );
+    }
+    return assertRemoteIdentifier("Eval result ID", result.resultId);
+  });
+  if (
+    value.resultCount !== value.candidateResults.length ||
+    new Set(resultIds).size !== resultIds.length ||
+    new Set(value.candidateResults.map((result) => result.candidateId)).size !==
+      value.candidateResults.length ||
+    value.candidateResults.some(
+      (result) => {
+        if (
+          !isRecord(result) ||
+          !Array.isArray(result.scores) ||
+          !isRecord(result.metadata) ||
+          typeof result.evidenceDigest !== "string" ||
+          result.scores.some(
+            (score) =>
+              !isRecord(score) ||
+              !isRecord(score.metadata),
+          )
+        ) {
+          return true;
+        }
+        const scoreNames = result.scores.map(
+          (score: DeterministicScore) => score.name,
+        );
+        return (
+          assertRemoteIdentifier("candidate ID", result.candidateId) !==
+            result.candidateId ||
+          !/^[0-9a-f]{64}$/iu.test(result.evidenceDigest) ||
+          scoreNames.length !== DETERMINISTIC_SCORE_NAMES.length ||
+          new Set(scoreNames).size !== scoreNames.length ||
+          DETERMINISTIC_SCORE_NAMES.some(
+            (name) => !scoreNames.includes(name),
+          ) ||
+          result.scores.some(
+            (score: DeterministicScore) =>
+              !Number.isFinite(score.score) ||
+              score.score < 0 ||
+              score.score > 1 ||
+              score.metadata.deterministic !== true ||
+              score.metadata.hardGate !== HARD_GATE_SCORE_NAMES.has(score.name),
+          )
+        );
+      },
+    )
+  ) {
+    throw new ProviderResponseError(
+      "braintrust",
+      "Braintrust returned malformed Experiment or Score IDs",
+      false,
+    );
+  }
+  return value;
+}
+
+function braintrustRetryable(
+  error: unknown,
+  depth = 0,
+  seen = new Set<object>(),
+): boolean {
+  if (typeof error === "object" && error !== null) {
+    if (depth > 3 || seen.has(error)) return false;
+    seen.add(error);
+    const status =
+      "status" in error && typeof error.status === "number"
+        ? error.status
+        : "statusCode" in error && typeof error.statusCode === "number"
+          ? error.statusCode
+          : "response" in error &&
+              isRecord(error.response) &&
+              typeof error.response.status === "number"
+            ? error.response.status
+          : undefined;
+    if (status !== undefined) {
+      if ([408, 429].includes(status) || status >= 500) return true;
+      if ([400, 401, 403, 404, 409, 422].includes(status)) return false;
+    }
+    const code =
+      "code" in error && typeof error.code === "string"
+        ? error.code.toUpperCase()
+        : "";
+    if (
+      ["ETIMEDOUT", "ECONNRESET", "EAI_AGAIN", "UND_ERR_CONNECT_TIMEOUT"].includes(
+        code,
+      )
+    ) {
+      return true;
+    }
+    if ("cause" in error && error.cause !== undefined) {
+      return braintrustRetryable(error.cause, depth + 1, seen);
+    }
+  }
+  return error instanceof TypeError ||
+    (error instanceof Error && /timeout|timed out/iu.test(error.message));
 }
 
 function createLogger(config: BraintrustConfig): Logger<true> {
@@ -382,6 +655,8 @@ export function createBraintrustSdkPort(): BraintrustSdkPort {
         );
       }
       const logger = createLogger(config);
+      const resultTraces =
+        new Map<string, BraintrustResultTraceConfiguration>();
       let startedSummary:
         | Omit<ExperimentSummary, "scores" | "metrics">
         | undefined;
@@ -399,12 +674,33 @@ export function createBraintrustSdkPort(): BraintrustSdkPort {
           })),
           task: (testCase) => testCase.output,
           scores: [
-            ({ input, output }) =>
-              evaluateBraintrustCandidateScorers(input, output).map((resultScore) => ({
+            ({ input, output, trace }) => {
+              if (trace === undefined) {
+                throw new ProviderResponseError(
+                  "braintrust",
+                  "Braintrust scorer did not expose an Experiment trace",
+                  false,
+                );
+              }
+              const traceConfiguration = trace.getConfiguration();
+              const existing = resultTraces.get(input.candidateId);
+              if (
+                existing !== undefined &&
+                canonicalJson(existing) !== canonicalJson(traceConfiguration)
+              ) {
+                throw new ProviderResponseError(
+                  "braintrust",
+                  "Braintrust returned conflicting scorer traces for a candidate",
+                  false,
+                );
+              }
+              resultTraces.set(input.candidateId, traceConfiguration);
+              return evaluateBraintrustCandidateScorers(input, output).map((resultScore) => ({
                 name: resultScore.name,
                 score: resultScore.score,
                 metadata: resultScore.metadata,
-              })),
+              }));
+            },
           ],
           metadata: {
             application: "SafeFlash",
@@ -443,6 +739,8 @@ export function createBraintrustSdkPort(): BraintrustSdkPort {
         candidateResults: normalizeBraintrustReturnedResults(
           cases,
           result.results,
+          experimentId,
+          resultTraces,
         ),
       };
     },
@@ -463,14 +761,16 @@ export class BraintrustAdapter {
       return transportEnvelope(
         "braintrust",
         this.sdk,
-        await this.sdk.seedDataset(this.config, cases),
+        validateDatasetEvidence(
+          await this.sdk.seedDataset(this.config, cases),
+        ),
       );
     } catch (error) {
       if (error instanceof ProviderResponseError) throw error;
       throw new ProviderResponseError(
         "braintrust",
         "Braintrust dataset seed/verification failed",
-        true,
+        braintrustRetryable(error),
         { cause: error },
       );
     }
@@ -486,14 +786,14 @@ export class BraintrustAdapter {
       return transportEnvelope(
         "braintrust",
         this.sdk,
-        await this.sdk.writeTrace(this.config, event),
+        validateTraceEvidence(await this.sdk.writeTrace(this.config, event)),
       );
     } catch (error) {
       if (error instanceof ProviderResponseError) throw error;
       throw new ProviderResponseError(
         "braintrust",
         "Braintrust trace write/flush failed",
-        true,
+        braintrustRetryable(error),
         { cause: error },
       );
     }
@@ -542,14 +842,20 @@ export class BraintrustAdapter {
       return transportEnvelope(
         "braintrust",
         this.sdk,
-        await this.sdk.runExperiment(this.config, experimentName, prepared),
+        validateExperimentEvidence(
+          await this.sdk.runExperiment(
+            this.config,
+            experimentName,
+            prepared,
+          ),
+        ),
       );
     } catch (error) {
       if (error instanceof ProviderResponseError) throw error;
       throw new ProviderResponseError(
         "braintrust",
         "Braintrust Experiment failed",
-        true,
+        braintrustRetryable(error),
         { cause: error },
       );
     }

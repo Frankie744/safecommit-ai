@@ -1,5 +1,9 @@
 # SafeFlash demo runbook
 
+> This legacy P0 runbook is superseded for competition use by
+> [`docs/demo-runbook.md`](docs/demo-runbook.md). The competition command and
+> rehearsed port are `npm run dev:competition` and `127.0.0.1:3018`.
+
 ## Demo status
 
 The reliable demo today is a **real local CMake/CTest tournament** presented in
@@ -44,10 +48,10 @@ Target runtime: 2:40–2:55, leaving a few seconds for transition.
 
    ```powershell
    npm run build
-   npm run start --workspace @safeflash/web -- --hostname 127.0.0.1 --port 3000
+   npm run start --workspace @safeflash/web -- --hostname 127.0.0.1 --port 3018
    ```
 
-4. Open `http://127.0.0.1:3000` in Chrome at 1440×900. Confirm:
+4. Open `http://127.0.0.1:3018` in Chrome at 1440×900. Confirm:
 
    - the empty-state page is visible;
    - the mode badge will be `MOCK • NOT PROVIDER-VERIFIED`;

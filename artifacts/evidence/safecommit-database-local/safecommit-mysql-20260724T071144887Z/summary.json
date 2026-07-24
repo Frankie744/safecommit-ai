@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "runId": "safecommit-mysql-20260724T071144887Z",
+  "status": "LOCAL_TEST",
+  "mysql": "8.0.36",
+  "fixtureKind": "OpenBoxes-derived executable fixture",
+  "sourceCommitSha": "d133eca039797015feef2ee10aa9d33c840a2b93",
+  "worktreeClean": true,
+  "candidateCount": 3,
+  "winnerCandidateId": "candidate-c-safe",
+  "tournamentDigest": "6b6b9e1412ab235c5e0fe25f467289f0f5e64dba729bfaccea9b1f1a310734c7",
+  "candidates": [
+    {
+      "candidateId": "candidate-a-aggressive",
+      "weightedScore": 0.975,
+      "eligible": false,
+      "failedGateNames": [
+        "WarehouseScope",
+        "TenantIsolation"
+      ],
+      "affectedRows": 5,
+      "beforeStateDigest": "76c10ab85a91f74b469311044bc73c6fe845e04d45e8e8ccf975f5510a8d094b",
+      "afterStateDigest": "d04acf6ee07d1fd3ce89527f447c018218860f4bbc173bf3112a72c1534abbc5",
+      "rollbackStateDigest": "76c10ab85a91f74b469311044bc73c6fe845e04d45e8e8ccf975f5510a8d094b",
+      "evidenceDigest": "a33a40b6469bafe0d4c323fa5575e1fb8573b1f156c3c50fa1f7b00bc2e1ed42"
+    },
+    {
+      "candidateId": "candidate-b-shipped-order",
+      "weightedScore": 0.991667,
+      "eligible": false,
+      "failedGateNames": [
+        "ProtectedOrderState"
+      ],
+      "affectedRows": 2,
+      "beforeStateDigest": "76c10ab85a91f74b469311044bc73c6fe845e04d45e8e8ccf975f5510a8d094b",
+      "afterStateDigest": "d709a74cf580cca9cf20b0450febe4b27d4b02c3b2fbed26dab1fa5a817b720e",
+      "rollbackStateDigest": "76c10ab85a91f74b469311044bc73c6fe845e04d45e8e8ccf975f5510a8d094b",
+      "evidenceDigest": "c461c715a989bb478c3a541572984e5f34356f387faf59635e433d22e09368bc"
+    },
+    {
+      "candidateId": "candidate-c-safe",
+      "weightedScore": 0.9625,
+      "eligible": true,
+      "failedGateNames": [],
+      "affectedRows": 2,
+      "beforeStateDigest": "76c10ab85a91f74b469311044bc73c6fe845e04d45e8e8ccf975f5510a8d094b",
+      "afterStateDigest": "801c170d93face48b7ea6ce0c5cea047aa18e2c78a17b76c7935f528509c8f55",
+      "rollbackStateDigest": "76c10ab85a91f74b469311044bc73c6fe845e04d45e8e8ccf975f5510a8d094b",
+      "evidenceDigest": "84829d1d0857b8a9199d07f19d28e722540a6dd040377824ddf6f85c3830395f"
+    }
+  ],
+  "liveProviderCalls": 0,
+  "liveCertified": false
+}

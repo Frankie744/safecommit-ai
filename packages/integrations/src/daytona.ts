@@ -23,6 +23,7 @@ import {
 } from "./provider";
 
 export const DAYTONA_REPOSITORY_PATH = "/workspace/safeflash-repository";
+export const DAYTONA_DELETE_MAX_ATTEMPTS = 3;
 const PATCH_PATH = "/tmp/safeflash-candidate.patch";
 
 export type DaytonaCommandId =
@@ -169,6 +170,8 @@ export interface DaytonaClientPort {
       ephemeral: boolean;
       autoStopInterval: number;
       ttlMinutes: number;
+      snapshot?: string;
+      envVars?: Record<string, string>;
       networkBlockAll?: boolean;
       domainAllowList?: string;
     },
@@ -279,12 +282,19 @@ export function readDaytonaConfig(
   );
   const apiUrl = environment.DAYTONA_API_URL?.trim() || undefined;
   assertOfficialDaytonaApiUrl(apiUrl);
+  if (environment.SAFEFLASH_RETAIN_SANDBOXES === "true") {
+    throw new ProviderResponseError(
+      "daytona",
+      "Production live validation requires every Daytona sandbox to be deleted",
+      false,
+    );
+  }
   return {
     mode: "live",
     apiKey: values.DAYTONA_API_KEY,
     apiUrl,
     target: environment.DAYTONA_TARGET?.trim() || undefined,
-    retainSandboxes: environment.SAFEFLASH_RETAIN_SANDBOXES === "true",
+    retainSandboxes: false,
     createTimeoutSeconds: 90,
     deleteTimeoutSeconds: 60,
     ttlMinutes: 10,
@@ -380,6 +390,70 @@ function outputSummary(output: string): string {
     : `${normalized.slice(0, 4_000)}\n...[truncated]`;
 }
 
+async function deleteSandboxWithRetry(
+  client: DaytonaClientPort,
+  sandbox: DaytonaSandboxPort,
+  timeoutSeconds: number,
+): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= DAYTONA_DELETE_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      await client.delete(sandbox, timeoutSeconds, true);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+function daytonaFailureStatus(error: unknown, depth = 0): number | undefined {
+  if (depth > 4 || typeof error !== "object" || error === null) return undefined;
+  for (const value of [
+    (error as { status?: unknown }).status,
+    (error as { statusCode?: unknown }).statusCode,
+    (error as { response?: { status?: unknown } }).response?.status,
+  ]) {
+    const status =
+      typeof value === "number"
+        ? value
+        : typeof value === "string" && /^\d{3}$/u.test(value)
+          ? Number(value)
+          : Number.NaN;
+    if (Number.isSafeInteger(status) && status >= 100 && status <= 599) {
+      return status;
+    }
+  }
+  return daytonaFailureStatus(
+    (error as { cause?: unknown }).cause,
+    depth + 1,
+  );
+}
+
+export function isRetryableDaytonaFailure(error: unknown): boolean {
+  if (error instanceof ProviderResponseError) return error.retryable;
+  const status = daytonaFailureStatus(error);
+  if (status !== undefined) {
+    return status === 408 || status === 429 || status >= 500;
+  }
+  if (typeof error === "object" && error !== null) {
+    const code = String(
+      (error as { code?: unknown }).code ?? "",
+    ).toUpperCase();
+    if (
+      ["ETIMEDOUT", "ECONNRESET", "EAI_AGAIN", "ECONNREFUSED"].includes(code)
+    ) {
+      return true;
+    }
+    const message = String((error as { message?: unknown }).message ?? "");
+    if (/(?:\btimeout\b|\btimed?\s+out\b)/iu.test(message)) return true;
+  }
+  // The SDK does not guarantee a status/code for every transport exception.
+  // Unknown transport failures remain retryable, but known client/auth/schema
+  // failures above never receive that classification.
+  return true;
+}
+
 export class DaytonaAdapter {
   private readonly commandPolicy = DEFAULT_DAYTONA_COMMAND_POLICY;
 
@@ -390,12 +464,20 @@ export class DaytonaAdapter {
       DEFAULT_DAYTONA_COMMAND_POLICY,
     private readonly clock: () => Date = () => new Date(),
   ) {
+    if (config.retainSandboxes) {
+      throw new ProviderResponseError(
+        "daytona",
+        "Production live validation cannot retain Daytona sandboxes",
+        false,
+      );
+    }
     validateCommandPolicy(commandPolicy);
   }
 
   async smoke(): Promise<ProviderEnvelope<DaytonaSmokeEvidence>> {
     let sandbox: DaytonaSandboxPort | undefined;
     let destroyed = false;
+    let cleanupAttempted = false;
     try {
       sandbox = await this.client.create(
         {
@@ -425,10 +507,11 @@ export class DaytonaAdapter {
           false,
         );
       }
-      await this.client.delete(
+      cleanupAttempted = true;
+      await deleteSandboxWithRetry(
+        this.client,
         sandbox,
         this.config.deleteTimeoutSeconds,
-        true,
       );
       destroyed = true;
       return transportEnvelope("daytona", this.client, {
@@ -440,28 +523,36 @@ export class DaytonaAdapter {
         destroyed: true,
       });
     } catch (error) {
-      if (sandbox !== undefined && !destroyed) {
+      let cause: unknown = error;
+      let cleanupFailed = cleanupAttempted && !destroyed;
+      if (sandbox !== undefined && !destroyed && !cleanupAttempted) {
+        cleanupAttempted = true;
         try {
-          await this.client.delete(
+          await deleteSandboxWithRetry(
+            this.client,
             sandbox,
             this.config.deleteTimeoutSeconds,
-            true,
           );
+          destroyed = true;
         } catch (cleanupError) {
-          throw new ProviderResponseError(
-            "daytona",
-            "Daytona smoke failed and sandbox cleanup also failed",
-            true,
-            { cause: cleanupError },
-          );
+          cleanupFailed = true;
+          cause = cleanupError;
         }
       }
-      if (error instanceof ProviderResponseError) throw error;
+      if (cleanupFailed) {
+        throw new ProviderResponseError(
+          "daytona",
+          "Daytona smoke sandbox cleanup failed after bounded retries",
+          false,
+          { cause },
+        );
+      }
+      if (cause instanceof ProviderResponseError) throw cause;
       throw new ProviderResponseError(
         "daytona",
         "Daytona smoke failed",
-        true,
-        { cause: error },
+        isRetryableDaytonaFailure(cause),
+        { cause },
       );
     }
   }
@@ -503,6 +594,7 @@ export class DaytonaAdapter {
     }
     let sandbox: DaytonaSandboxPort | undefined;
     let destroyed = false;
+    let cleanupAttempted = false;
     let validatedTreeSha: string | undefined;
     const commands: CommandEvidence[] = [];
 
@@ -517,7 +609,7 @@ export class DaytonaAdapter {
             run: request.runId,
           },
           public: false,
-          ephemeral: !this.config.retainSandboxes,
+          ephemeral: true,
           autoStopInterval: 5,
           ttlMinutes: this.config.ttlMinutes,
           domainAllowList: "github.com,*.githubusercontent.com",
@@ -607,14 +699,13 @@ export class DaytonaAdapter {
         validatedTreeSha !== undefined &&
         commands.every((command) => command.exitCode === 0);
 
-      if (!this.config.retainSandboxes) {
-        await this.client.delete(
-          sandbox,
-          this.config.deleteTimeoutSeconds,
-          true,
-        );
-        destroyed = true;
-      }
+      cleanupAttempted = true;
+      await deleteSandboxWithRetry(
+        this.client,
+        sandbox,
+        this.config.deleteTimeoutSeconds,
+      );
+      destroyed = true;
 
       return transportEnvelope("daytona", this.client, {
         runId: request.runId,
@@ -627,53 +718,49 @@ export class DaytonaAdapter {
         validatedTreeSha,
         isolatedFilesystem: true,
         networkBlockedBeforePatch: true,
-        retained: this.config.retainSandboxes,
+        retained: false,
         destroyed,
         passed,
         commands,
       });
     } catch (error) {
-      let cleanupFailed = false;
-      if (sandbox !== undefined && !this.config.retainSandboxes && !destroyed) {
+      let cause: unknown = error;
+      let cleanupFailed = cleanupAttempted && !destroyed;
+      if (sandbox !== undefined && !destroyed && !cleanupAttempted) {
+        cleanupAttempted = true;
         try {
-          await this.client.delete(
+          await deleteSandboxWithRetry(
+            this.client,
             sandbox,
             this.config.deleteTimeoutSeconds,
-            true,
           );
           destroyed = true;
         } catch (cleanupError) {
           cleanupFailed = true;
-          error = cleanupError;
+          cause = cleanupError;
         }
       }
       if (sandbox !== undefined) {
         const retryable = cleanupFailed
-          ? true
-          : error instanceof ProviderResponseError
-            ? error.retryable
-            : true;
+          ? false
+          : isRetryableDaytonaFailure(cause);
         throw new DaytonaAttemptError({
           attempt: {
             sandboxId: sandbox.id,
             runId: request.runId,
             candidateId: candidate.candidateId,
             capturedAt: this.clock().toISOString(),
-            disposition: cleanupFailed
-              ? "cleanup-failed"
-              : this.config.retainSandboxes
-                ? "failed-retained"
-                : "failed-destroyed",
+            disposition: cleanupFailed ? "cleanup-failed" : "failed-destroyed",
           },
           retryable,
         });
       }
-      if (error instanceof ProviderResponseError) throw error;
+      if (cause instanceof ProviderResponseError) throw cause;
       throw new ProviderResponseError(
         "daytona",
         "Daytona sandbox validation failed",
-        true,
-        { cause: error },
+        isRetryableDaytonaFailure(cause),
+        { cause },
       );
     }
   }

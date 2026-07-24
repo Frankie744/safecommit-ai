@@ -1,0 +1,146 @@
+COMMAND: npm run test:e2e
+EXIT_CODE: 0
+DURATION_MS: 103212.488
+
+
+> safeflash@0.1.0 test:e2e
+> playwright test
+
+[WebServer] 
+[WebServer] > @safeflash/web@0.1.0 build
+[WebServer] > npm run typecheck && next build --experimental-build-mode compile && next build --experimental-build-mode generate
+[WebServer] 
+[WebServer] 
+[WebServer] > @safeflash/web@0.1.0 typecheck
+[WebServer] > tsc --noEmit
+[WebServer] 
+[WebServer] ▲ Next.js 16.2.11 (Turbopack)
+[WebServer] 
+[WebServer]   Creating an optimized production build ...
+[WebServer] ✓ Compiled successfully in 11.3s
+[WebServer]   Collecting page data using 13 workers ...
+[WebServer]   Finalizing page optimization ...
+[WebServer]   Build ran with "compile" mode, to finalize the build run either "generate" or "generate-env" mode as well
+[WebServer] 
+[WebServer] Route (app)
+[WebServer] ┌ ƒ /
+[WebServer] ├ ƒ /_not-found
+[WebServer] ├ ƒ /api/copilotkit
+[WebServer] ├ ƒ /api/copilotkit/info
+[WebServer] ├ ƒ /api/device
+[WebServer] ├ ƒ /api/sessions
+[WebServer] ├ ƒ /api/sessions/[sessionId]
+[WebServer] ├ ƒ /api/sessions/[sessionId]/decision
+[WebServer] ├ ƒ /api/sessions/[sessionId]/retry
+[WebServer] ├ ƒ /icon.svg
+[WebServer] └ ƒ /policy-composer
+[WebServer] 
+[WebServer] 
+[WebServer] ƒ  (Dynamic)  server-rendered on demand
+[WebServer] 
+[WebServer] ▲ Next.js 16.2.11 (Turbopack)
+[WebServer] 
+[WebServer]   Creating an optimized production build ...
+[WebServer]   Collecting page data using 13 workers ...
+[WebServer]   Generating static pages using 13 workers (0/4) ...
+[WebServer]   Generating static pages using 13 workers (1/4) 
+[WebServer]   Generating static pages using 13 workers (2/4) 
+[WebServer]   Generating static pages using 13 workers (3/4) 
+[WebServer] ✓ Generating static pages using 13 workers (4/4) in 853ms
+[WebServer]   Finalizing page optimization ...
+[WebServer] 
+[WebServer] Route (app)
+[WebServer] ┌ ○ /
+[WebServer] ├ ○ /_not-found
+[WebServer] ├ ƒ /api/copilotkit
+[WebServer] ├ ƒ /api/copilotkit/info
+[WebServer] ├ ƒ /api/device
+[WebServer] ├ ƒ /api/sessions
+[WebServer] ├ ƒ /api/sessions/[sessionId]
+[WebServer] ├ ƒ /api/sessions/[sessionId]/decision
+[WebServer] ├ ƒ /api/sessions/[sessionId]/retry
+[WebServer] ├ ○ /icon.svg
+[WebServer] └ ƒ /policy-composer
+[WebServer] 
+[WebServer] 
+[WebServer] ○  (Static)   prerendered as static content
+[WebServer] ƒ  (Dynamic)  server-rendered on demand
+[WebServer] 
+[WebServer] 
+[WebServer] > @safeflash/web@0.1.0 start
+[WebServer] > next start --hostname 127.0.0.1 --port 32592
+[WebServer] 
+[WebServer] ▲ Next.js 16.2.11
+[WebServer] - Local:         http://127.0.0.1:32592
+[WebServer] - Network:       http://127.0.0.1:32592
+[WebServer] ✓ Ready in 237ms
+
+Running 42 tests using 1 worker
+
+  ok  1 [chrome-1366x768] › tests\e2e\safeflash-console.spec.ts:570:5 › defaults the competition selector to unsafe-high-score (981ms)
+  ok  2 [chrome-1366x768] › tests\e2e\safeflash-console.spec.ts:595:5 › explains the incident, value, provenance, and run entry in the hero (1.0s)
+  ok  3 [chrome-1366x768] › tests\e2e\safeflash-console.spec.ts:638:5 › orders the narrative and keeps sticky hash navigation active without obscuring headings (7.2s)
+  ok  4 [chrome-1366x768] › tests\e2e\safeflash-console.spec.ts:709:5 › supports direct section hashes and preserves the active section on refresh (2.2s)
+  ok  5 [chrome-1366x768] › tests\e2e\safeflash-console.spec.ts:735:5 › supports keyboard section navigation and reduced motion (989ms)
+  ok  6 [chrome-1366x768] › tests\e2e\safeflash-console.spec.ts:767:5 › uses the document as the only scroll container and keeps candidate detail collapsed (874ms)
+  ok  7 [chrome-1366x768] › tests\e2e\safeflash-console.spec.ts:833:5 › renders danger, three persistent candidates, provenance, and a closed PR gate (786ms)
+  ok  8 [chrome-1366x768] › tests\e2e\safeflash-console.spec.ts:883:5 › marks mock mode and every visible provider result as not verified (971ms)
+  ok  9 [chrome-1366x768] › tests\e2e\safeflash-console.spec.ts:906:5 › does not poll or permit a duplicate decision after bound approval (3.1s)
+  ok 10 [chrome-1366x768] › tests\e2e\safeflash-console.spec.ts:927:5 › keeps full provider IDs and sanitized JSON inside the Evidence drawer (1.4s)
+  ok 11 [chrome-1366x768] › tests\e2e\safeflash-console.spec.ts:950:5 › labels a recorded replay as recorded, never LIVE (1.1s)
+  ok 12 [chrome-1366x768] › tests\e2e\safeflash-console.spec.ts:969:5 › labels a current provider workflow as LIVE PROVIDERS (981ms)
+  ok 13 [chrome-1366x768] › tests\e2e\safeflash-console.spec.ts:983:5 › shows an injected provider failure as MOCK and failed closed (1.2s)
+  ok 14 [chrome-1366x768] › tests\e2e\safeflash-console.spec.ts:1046:5 › submits bound evidence to the decision API and only then shows ready for human merge (2.2s)
+  ok 15 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:570:5 › defaults the competition selector to unsafe-high-score (1.1s)
+  ok 16 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:595:5 › explains the incident, value, provenance, and run entry in the hero (883ms)
+  ok 17 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:638:5 › orders the narrative and keeps sticky hash navigation active without obscuring headings (7.3s)
+  ok 18 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:709:5 › supports direct section hashes and preserves the active section on refresh (2.6s)
+  ok 19 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:735:5 › supports keyboard section navigation and reduced motion (1.3s)
+  ok 20 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:767:5 › uses the document as the only scroll container and keeps candidate detail collapsed (1.2s)
+  ok 21 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:833:5 › renders danger, three persistent candidates, provenance, and a closed PR gate (1.2s)
+  ok 22 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:883:5 › marks mock mode and every visible provider result as not verified (1.1s)
+  ok 23 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:906:5 › does not poll or permit a duplicate decision after bound approval (3.0s)
+  ok 24 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:927:5 › keeps full provider IDs and sanitized JSON inside the Evidence drawer (981ms)
+  ok 25 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:950:5 › labels a recorded replay as recorded, never LIVE (928ms)
+  ok 26 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:969:5 › labels a current provider workflow as LIVE PROVIDERS (940ms)
+  ok 27 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:983:5 › shows an injected provider failure as MOCK and failed closed (943ms)
+  ok 28 [chrome-1440x900] › tests\e2e\safeflash-console.spec.ts:1046:5 › submits bound evidence to the decision API and only then shows ready for human merge (1.7s)
+  ok 29 [chrome-1920x1080] › tests\e2e\safeflash-console.spec.ts:570:5 › defaults the competition selector to unsafe-high-score (1.2s)
+  ok 30 [chrome-1920x1080] › tests\e2e\safeflash-console.spec.ts:595:5 › explains the incident, value, provenance, and run entry in the hero (1.2s)
+  ok 31 [chrome-1920x1080] › tests\e2e\safeflash-console.spec.ts:638:5 › orders the narrative and keeps sticky hash navigation active without obscuring headings (7.0s)
+  ok 32 [chrome-1920x1080] › tests\e2e\safeflash-console.spec.ts:709:5 › supports direct section hashes and preserves the active section on refresh (2.5s)
+  ok 33 [chrome-1920x1080] › tests\e2e\safeflash-console.spec.ts:735:5 › supports keyboard section navigation and reduced motion (911ms)
+  ok 34 [chrome-1920x1080] › tests\e2e\safeflash-console.spec.ts:767:5 › uses the document as the only scroll container and keeps candidate detail collapsed (944ms)
+  ok 35 [chrome-1920x1080] › tests\e2e\safeflash-console.spec.ts:833:5 › renders danger, three persistent candidates, provenance, and a closed PR gate (1.1s)
+  ok 36 [chrome-1920x1080] › tests\e2e\safeflash-console.spec.ts:883:5 › marks mock mode and every visible provider result as not verified (1.0s)
+  ok 37 [chrome-1920x1080] › tests\e2e\safeflash-console.spec.ts:906:5 › does not poll or permit a duplicate decision after bound approval (3.1s)
+  ok 38 [chrome-1920x1080] › tests\e2e\safeflash-console.spec.ts:927:5 › keeps full provider IDs and sanitized JSON inside the Evidence drawer (897ms)
+  ok 39 [chrome-1920x1080] › tests\e2e\safeflash-console.spec.ts:950:5 › labels a recorded replay as recorded, never LIVE (762ms)
+  ok 40 [chrome-1920x1080] › tests\e2e\safeflash-console.spec.ts:969:5 › labels a current provider workflow as LIVE PROVIDERS (720ms)
+  ok 41 [chrome-1920x1080] › tests\e2e\safeflash-console.spec.ts:983:5 › shows an injected provider failure as MOCK and failed closed (752ms)
+  ok 42 [chrome-1920x1080] › tests\e2e\safeflash-console.spec.ts:1046:5 › submits bound evidence to the decision API and only then shows ready for human merge (1.8s)
+
+  42 passed (1.7m)
+
+
+STDERR:
+[WebServer] Turbopack build encountered 1 warnings:
+[WebServer] ./apps/web/next.config.ts
+[WebServer] Encountered unexpected file in NFT list
+[WebServer] A file was traced that indicates that the whole project was traced unintentionally. Somewhere in the import trace below, there are:
+[WebServer] - filesystem operations (like path.join, path.resolve or fs.readFile), or
+[WebServer] - very dynamic requires (like require('./' + foo)).
+[WebServer] To resolve this, you can
+[WebServer] - remove them if possible, or
+[WebServer] - only use them in development, or
+[WebServer] - make sure they are statically scoped to some subfolder: path.join(process.cwd(), 'data', bar), or
+[WebServer] - add ignore comments: path.join(/*turbopackIgnore: true*/ process.cwd(), bar)
+[WebServer] 
+[WebServer] Import trace:
+[WebServer]   App Route:
+[WebServer]     ./apps/web/next.config.ts
+[WebServer]     ./apps/orchestrator/src/local-tournament.ts
+[WebServer]     ./apps/web/server/session-service.ts
+[WebServer]     ./apps/web/app/api/sessions/[sessionId]/retry/route.ts
+[WebServer] 
+[WebServer] 

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   P0_LIVE_WORKFLOW_REGISTRY,
   createProductionLiveSafetyWorkflow,
+  demoScenario,
   type LiveSafetyWorkflow,
   type LiveWorkflowProgressEvent,
   type LiveWorkflowSnapshot,
@@ -12,6 +13,7 @@ import type {
   CandidateEvidenceView,
   CandidateView,
   EvidenceProvenance,
+  ProviderEvidenceView,
   ProvenanceKind,
   SessionView,
   TimelineEventView,
@@ -36,11 +38,13 @@ export type LiveWorkflowPort = Pick<
   | "repairBlockedReview"
   | "subscribeProgress"
   | "getProgress"
->;
+> &
+  Partial<Pick<LiveSafetyWorkflow, "refreshReadyToMerge">>;
 
 export interface LiveSessionServiceOptions {
   now?: () => Date;
   idFactory?: () => string;
+  readyRefreshIntervalMs?: number;
 }
 
 interface LiveSessionRecord {
@@ -50,6 +54,8 @@ interface LiveSessionRecord {
   resume?: () => void;
   unsubscribeProgress?: () => void;
   lastProgressSequence?: number;
+  lastReadyRefreshAtMs?: number;
+  readyRefreshOperation?: Promise<void>;
 }
 
 interface ResumableStage<T> {
@@ -224,6 +230,7 @@ export class LiveSessionService {
   private readonly records = new Map<string, LiveSessionRecord>();
   private readonly now: () => Date;
   private readonly idFactory: () => string;
+  private readonly readyRefreshIntervalMs: number;
   private readonly providerKind: ProvenanceKind;
   private readonly providerVerified: boolean;
 
@@ -234,6 +241,10 @@ export class LiveSessionService {
   ) {
     this.now = options.now ?? (() => new Date());
     this.idFactory = options.idFactory ?? (() => `live-web-${randomUUID()}`);
+    this.readyRefreshIntervalMs = Math.max(
+      1_000,
+      options.readyRefreshIntervalMs ?? 15_000,
+    );
     this.providerKind =
       trust === PRODUCTION_LIVE_TRUST ? "live" : "local-test";
     this.providerVerified = trust === PRODUCTION_LIVE_TRUST;
@@ -260,12 +271,17 @@ export class LiveSessionService {
     };
   }
 
-  private placeholder(sessionId: string, at: string): SessionView {
+  private placeholder(
+    sessionId: string,
+    at: string,
+    scenarioId: "happy-path" | "unsafe-high-score",
+  ): SessionView {
     const orchestrator = this.orchestratorProvenance(at);
     const view: SessionView = {
       id: sessionId,
       mode: "live",
       state: "INGESTING_REPOSITORY",
+      scenario: { ...demoScenario(scenarioId) },
       createdAt: at,
       updatedAt: at,
       repository: { commitSha: "unreported" },
@@ -293,6 +309,26 @@ export class LiveSessionService {
         provenance: { ...orchestrator },
       },
       candidates: [],
+      providerEvidence: [
+        "fireworks",
+        "daytona",
+        "braintrust",
+        "github",
+        "coderabbit",
+      ].map((provider) => ({
+        provider,
+        operation: "live workflow pending",
+        status: "pending",
+        resourceIds: [],
+        urls: [],
+        provenance: this.pendingProvenance(provider, at),
+      })),
+      cleanup: {
+        status: "pending",
+        sandboxIds: [],
+        summary: "No Daytona sandbox receipt has been observed yet.",
+        provenance: this.pendingProvenance("daytona", at),
+      },
       events: [],
     };
     return appendEvent(view, view.state, at, orchestrator);
@@ -313,7 +349,7 @@ export class LiveSessionService {
         capturedAt: validation.capturedAt,
       });
       const braintrust = this.providerProvenance("braintrust", {
-        externalId: scoring.evidenceDigest,
+        externalId: scoring.resultId,
         capturedAt: scoring.capturedAt,
         url: scoring.experimentUrl,
       });
@@ -343,7 +379,7 @@ export class LiveSessionService {
           profile: summary.evaluationProfile,
           patchDigest: validation.patchDigest,
           provenance: this.providerProvenance("fireworks", {
-            externalId: generation.requestId ?? generation.requestDigest,
+            externalId: generation.requestId,
             capturedAt: generation.capturedAt,
           }),
         },
@@ -387,12 +423,183 @@ export class LiveSessionService {
           weighted: scoring.weightedScore,
           eligible: scoring.eligible,
           experimentId: scoring.experimentId,
-          traceId: scoring.traceUrl,
+          traceId: scoring.traceId,
+          resultId: scoring.resultId,
           provenance: { ...braintrust },
         },
         diff: candidate.unifiedDiff,
       };
     });
+  }
+
+  private providerEvidence(
+    snapshot: LiveWorkflowSnapshot,
+  ): readonly ProviderEvidenceView[] {
+    const { session, candidates, providerEvidence } = snapshot;
+    const fireworksRequestIds = candidates
+      .map((candidate) => candidate.generation.requestId)
+      .filter((id): id is string => Boolean(id));
+    const daytonaResources = candidates.flatMap((candidate) => [
+      `sandbox:${candidate.validation.sandboxId}`,
+      `run:${candidate.validation.runId}`,
+    ]);
+    const braintrustResources = [
+      `dataset:${providerEvidence.braintrustDatasetId}`,
+      `experiment:${providerEvidence.braintrustExperimentId}`,
+      `trace:${providerEvidence.braintrustTraceId}`,
+      ...providerEvidence.stageTraceIds.map((id) => `trace:${id}`),
+      ...candidates.flatMap((candidate) => [
+        `experiment:${candidate.scoring.experimentId}`,
+        `trace:${candidate.scoring.traceId}`,
+        `eval-result:${candidate.scoring.resultId}`,
+      ]),
+    ];
+    const unique = (values: readonly string[]) => [...new Set(values)];
+    const urls = (values: readonly (string | undefined)[]) =>
+      unique(values.filter((value): value is string => Boolean(value)));
+    const githubResources =
+      session.pullRequest === undefined
+        ? []
+        : [
+            `repository:${session.pullRequest.owner}/${session.pullRequest.repository}`,
+            `pull-request:${session.pullRequest.number}`,
+            `base:${session.pullRequest.baseBranch}@${session.pullRequest.baseSha}`,
+            `head:${session.pullRequest.headSha}`,
+          ];
+    const codeRabbitResources =
+      session.reviewReceipt === undefined
+        ? []
+        : [
+            `pull-request:${session.reviewReceipt.pullNumber}`,
+            `head:${session.reviewReceipt.headSha}`,
+            ...session.reviewReceipt.evidenceIds.map(
+              (id) => `review-evidence:${id}`,
+            ),
+          ];
+    return [
+      {
+        provider: "fireworks",
+        operation: "CandidatePatch structured generation",
+        status: "passed",
+        requestId: fireworksRequestIds[0],
+        requestIds: fireworksRequestIds,
+        resourceIds: unique(
+          fireworksRequestIds.map((id) => `request:${id}`),
+        ),
+        urls: [],
+        capturedAt: candidates[0]?.generation.capturedAt,
+        provenance: this.providerProvenance("fireworks", {
+          externalId: fireworksRequestIds.join(","),
+          capturedAt: candidates[0]?.generation.capturedAt,
+        }),
+      },
+      {
+        provider: "daytona",
+        operation: "ephemeral sandbox create, execute, delete",
+        status:
+          session.sandboxAttemptHistory.some(
+            (attempt) =>
+              attempt.disposition === "cleanup-failed" ||
+              attempt.disposition === "failed-retained",
+          )
+            ? "failed"
+            : "passed",
+        resourceIds: unique(daytonaResources),
+        urls: [],
+        capturedAt: candidates[0]?.validation.capturedAt,
+        provenance: this.providerProvenance("daytona", {
+          externalId: unique(daytonaResources).join(","),
+          capturedAt: candidates[0]?.validation.capturedAt,
+        }),
+      },
+      {
+        provider: "braintrust",
+        operation: "dataset, experiment, trace, and hard-gate scores",
+        status: "passed",
+        resourceIds: unique(braintrustResources),
+        urls: urls([
+          providerEvidence.braintrustDatasetUrl,
+          providerEvidence.braintrustExperimentUrl,
+          providerEvidence.braintrustTraceUrl,
+          ...providerEvidence.stageTraceUrls,
+          ...candidates.flatMap((candidate) => [
+            candidate.scoring.experimentUrl,
+            candidate.scoring.traceUrl,
+          ]),
+        ]),
+        capturedAt: candidates[0]?.scoring.capturedAt,
+        provenance: this.providerProvenance("braintrust", {
+          externalId: unique(braintrustResources).join(","),
+          capturedAt: candidates[0]?.scoring.capturedAt,
+          url: providerEvidence.braintrustExperimentUrl,
+        }),
+      },
+      {
+        provider: "github",
+        operation: "exact repository, base, head, and pull request",
+        status: session.pullRequest === undefined ? "pending" : "passed",
+        resourceIds: githubResources,
+        urls: urls([session.pullRequest?.url]),
+        capturedAt: session.pullRequest?.updatedAt,
+        provenance:
+          session.pullRequest === undefined
+            ? this.pendingProvenance("github", session.updatedAt)
+            : this.providerProvenance("github", {
+                externalId: githubResources.join(","),
+                capturedAt: session.pullRequest.updatedAt,
+                url: session.pullRequest.url,
+              }),
+      },
+      {
+        provider: "coderabbit",
+        operation: "exact PR head independent review",
+        status:
+          session.reviewReceipt === undefined
+            ? "pending"
+            : session.reviewReceipt.status === "passed"
+              ? "passed"
+              : "failed",
+        resourceIds: codeRabbitResources,
+        urls: urls([session.reviewReceipt?.reviewUrl]),
+        capturedAt: session.reviewReceipt?.capturedAt,
+        provenance:
+          session.reviewReceipt === undefined
+            ? this.pendingProvenance("coderabbit", session.updatedAt)
+            : this.providerProvenance("coderabbit", {
+                externalId: codeRabbitResources.join(","),
+                capturedAt: session.reviewReceipt.capturedAt,
+                url: session.reviewReceipt.reviewUrl,
+              }),
+      },
+    ];
+  }
+
+  private cleanupView(
+    snapshot: LiveWorkflowSnapshot,
+  ): NonNullable<SessionView["cleanup"]> {
+    const attempts = snapshot.session.sandboxAttemptHistory;
+    const sandboxIds = [...new Set(attempts.map((attempt) => attempt.sandboxId))];
+    const failed = attempts.some(
+      (attempt) =>
+        attempt.disposition === "cleanup-failed" ||
+        attempt.disposition === "failed-retained",
+    );
+    return {
+      status: failed ? "failed" : attempts.length === 0 ? "pending" : "deleted",
+      sandboxIds,
+      summary: failed
+        ? "At least one Daytona sandbox lacks a deletion receipt; the workflow is failed closed."
+        : attempts.length === 0
+          ? "No Daytona sandbox receipt has been observed yet."
+          : `Deletion was confirmed for ${sandboxIds.length} unique Daytona sandbox resource(s).`,
+      provenance:
+        attempts.length === 0
+          ? this.pendingProvenance("daytona", snapshot.session.updatedAt)
+          : this.providerProvenance("daytona", {
+              externalId: sandboxIds.join(","),
+              capturedAt: attempts.at(-1)?.capturedAt,
+            }),
+    };
   }
 
   private mapSnapshot(
@@ -406,6 +613,7 @@ export class LiveSessionService {
       id: session.sessionId,
       mode: "live",
       state: session.state,
+      scenario: previous.scenario,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
       repository: {
@@ -450,7 +658,9 @@ export class LiveSessionService {
               }),
             },
       review:
-        session.reviewReceipt === undefined &&
+        session.reviewReceipt === undefined && session.state === "FAILED"
+          ? undefined
+          : session.reviewReceipt === undefined &&
         !["AWAITING_CODERABBIT", "REVIEW_BLOCKED", "REVIEW_PASSED"].includes(
           session.state,
         )
@@ -499,6 +709,8 @@ export class LiveSessionService {
               recoverable: session.failure.recoverable,
               retryAction: session.failure.retryAction,
             },
+      providerEvidence: this.providerEvidence(snapshot),
+      cleanup: this.cleanupView(snapshot),
       events: previous.events,
     };
   }
@@ -851,12 +1063,117 @@ export class LiveSessionService {
     });
   }
 
+  private startReadyRefresh(
+    record: LiveSessionRecord,
+    sessionId: string,
+  ): void {
+    record.lastReadyRefreshAtMs = undefined;
+    this.launch(record, () =>
+      this.refreshReadyClaimIfDue(record, sessionId, true),
+    );
+  }
+
+  private async refreshReadyClaimIfDue(
+    record: LiveSessionRecord,
+    sessionId: string,
+    force = false,
+  ): Promise<void> {
+    if (record.readyRefreshOperation !== undefined) {
+      await record.readyRefreshOperation;
+      return;
+    }
+    const operation = this.performReadyClaimRefreshIfDue(
+      record,
+      sessionId,
+      force,
+    );
+    record.readyRefreshOperation = operation;
+    try {
+      await operation;
+    } finally {
+      if (record.readyRefreshOperation === operation) {
+        record.readyRefreshOperation = undefined;
+      }
+    }
+  }
+
+  private async performReadyClaimRefreshIfDue(
+    record: LiveSessionRecord,
+    sessionId: string,
+    force: boolean,
+  ): Promise<void> {
+    const authoritativeReady =
+      record.snapshot?.session.state === "READY_TO_MERGE";
+    if (
+      (record.view.state !== "READY_TO_MERGE" &&
+        !(force && authoritativeReady)) ||
+      this.workflow.refreshReadyToMerge === undefined
+    ) {
+      return;
+    }
+    const nowMs = this.now().getTime();
+    if (
+      !force &&
+      record.lastReadyRefreshAtMs !== undefined &&
+      nowMs - record.lastReadyRefreshAtMs < this.readyRefreshIntervalMs
+    ) {
+      return;
+    }
+    try {
+      const refreshed = await this.workflow.refreshReadyToMerge(sessionId);
+      record.lastReadyRefreshAtMs = nowMs;
+      this.updateFromSnapshot(record, refreshed, {
+        title:
+          refreshed.session.state === "READY_TO_MERGE"
+            ? "REMOTE READY CLAIM REVALIDATED"
+            : "REMOTE READY CLAIM REVOKED",
+        summary:
+          refreshed.session.state === "READY_TO_MERGE"
+            ? "A read-only exact repo/base/head/review check confirmed that the approval remains current."
+            : "The remote PR or independent review no longer matches the approval-bound evidence.",
+      });
+    } catch {
+      const at = this.now().toISOString();
+      record.view = {
+        ...record.view,
+        approval:
+          record.view.approval === undefined
+            ? undefined
+            : {
+                ...record.view.approval,
+                invalidatedAt: at,
+                invalidationReason:
+                  "Remote READY freshness could not be verified.",
+              },
+        review: undefined,
+      };
+      this.failClosed(
+        record,
+        {
+          reason:
+            "Read-only GitHub/CodeRabbit freshness verification failed; the cached READY claim is hidden.",
+          recoverable: true,
+          retryAction: "retry-ready-freshness-check",
+        },
+        () => this.startReadyRefresh(record, sessionId),
+      );
+    }
+  }
+
   async create(input: unknown): Promise<SessionView> {
-    if (!CreateSessionRequestSchema.safeParse(input).success) {
+    const request = CreateSessionRequestSchema.safeParse(input);
+    if (!request.success) {
       throw new SessionServiceError(
         400,
         "INVALID_REQUEST",
         "Session request failed validation.",
+      );
+    }
+    if (request.data.scenarioId === "provider-failure") {
+      throw new SessionServiceError(
+        409,
+        "MOCK_SCENARIO_REQUIRED",
+        "The provider-failure fixture is mock-only and never consumes live provider quota.",
       );
     }
     const sessionId = assertSafeSessionId(this.idFactory());
@@ -868,7 +1185,11 @@ export class LiveSessionService {
       );
     }
     const record: LiveSessionRecord = {
-      view: this.placeholder(sessionId, this.now().toISOString()),
+      view: this.placeholder(
+        sessionId,
+        this.now().toISOString(),
+        request.data.scenarioId,
+      ),
     };
     record.unsubscribeProgress = this.workflow.subscribeProgress(
       sessionId,
@@ -880,7 +1201,8 @@ export class LiveSessionService {
   }
 
   async get(sessionId: string): Promise<SessionView> {
-    const record = this.records.get(assertSafeSessionId(sessionId));
+    const safeId = assertSafeSessionId(sessionId);
+    const record = this.records.get(safeId);
     if (record === undefined) {
       throw new SessionServiceError(
         404,
@@ -888,10 +1210,18 @@ export class LiveSessionService {
         "Session was not found.",
       );
     }
+    if (record.operation === undefined) {
+      await this.refreshReadyClaimIfDue(record, safeId);
+    }
     return cloneView(record.view);
   }
 
   async list(): Promise<readonly SessionView[]> {
+    for (const [sessionId, record] of this.records) {
+      if (record.operation === undefined) {
+        await this.refreshReadyClaimIfDue(record, sessionId);
+      }
+    }
     return [...this.records.values()]
       .map((record) => cloneView(record.view))
       .sort((left, right) =>
