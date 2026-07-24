@@ -151,20 +151,25 @@ export async function main(): Promise<void> {
       generationAttempt <= MAX_EXECUTABLE_GENERATION_ATTEMPTS;
       generationAttempt += 1
     ) {
-      const candidate = await fireworks.generateCandidate({
-        sessionId,
-        candidateId: slot.candidateId,
-        strategy: slot.strategy,
-        seed:
-          202_607_240 +
-          index * MAX_EXECUTABLE_GENERATION_ATTEMPTS +
-          generationAttempt -
-          1,
-        intentContract: profile.intentContract,
-        databaseProfile,
-      });
       const runId = `daytona-${index + 1}-${generationAttempt}-${randomUUID()}`;
       try {
+        const candidate = await fireworks.generateCandidate({
+          sessionId,
+          candidateId: slot.candidateId,
+          strategy: slot.strategy,
+          candidateScenario: {
+            hypothesis: slot.hypothesis,
+            expectedEffects: slot.expectedEffects,
+            risks: slot.risks,
+          },
+          seed:
+            202_607_240 +
+            index * MAX_EXECUTABLE_GENERATION_ATTEMPTS +
+            generationAttempt -
+            1,
+          intentContract: profile.intentContract,
+          databaseProfile,
+        });
         const result = await daytona.validateCandidate({
           sessionId,
           runId,
@@ -216,8 +221,22 @@ export async function main(): Promise<void> {
         const executablePlanFailure =
           error instanceof ProviderResponseError &&
           error.message === "SafeCommit Daytona database runner failed";
+        const generatedPlanFailure =
+          error instanceof ProviderResponseError &&
+          error.provider === "fireworks" &&
+          (error.retryable ||
+            error.message ===
+              "Fireworks returned incomplete SafeCommit evidence" ||
+            error.message ===
+              "Fireworks truncated the SafeCommit structured response" ||
+            error.message === "Fireworks returned invalid JSON" ||
+            error.message ===
+              "Fireworks changed the required candidate identity or strategy" ||
+            error.message.startsWith(
+              "Fireworks plan failed server-owned SQL integrity:",
+            ));
         if (
-          !executablePlanFailure ||
+          (!executablePlanFailure && !generatedPlanFailure) ||
           generationAttempt >= MAX_EXECUTABLE_GENERATION_ATTEMPTS
         ) {
           throw error;
@@ -258,8 +277,37 @@ export async function main(): Promise<void> {
       runId: candidate.daytona.runId,
     },
   }));
-  const experimentName = `safecommit-live-${timestampId()}`;
-  const [dataset, trace, experiment] = await Promise.all([
+  const directSelected = [...validated].sort(
+    (left, right) =>
+      right.weightedScore - left.weightedScore ||
+      left.plan.candidateId.localeCompare(right.plan.candidateId),
+  )[0];
+  if (directSelected === undefined) {
+    throw new Error("Direct baseline requires at least one validated candidate");
+  }
+  const gatedSelected =
+    winnerCandidateId === null
+      ? undefined
+      : validated.find(
+          (candidate) => candidate.plan.candidateId === winnerCandidateId,
+        );
+  const experimentRunId = timestampId();
+  const baselineExperimentName = `direct-agent-baseline-${experimentRunId}`;
+  const gatedExperimentName = `safecommit-gated-${experimentRunId}`;
+  const baselineCase = experimentCases.find(
+    (candidate) => candidate.candidateId === directSelected.plan.candidateId,
+  );
+  if (baselineCase === undefined) {
+    throw new Error("Direct baseline selection lost its bound evidence");
+  }
+  const gatedCases =
+    gatedSelected === undefined
+      ? experimentCases
+      : experimentCases.filter(
+          (candidate) =>
+            candidate.candidateId === gatedSelected.plan.candidateId,
+        );
+  const [dataset, trace, baselineExperiment] = await Promise.all([
     braintrust.seedLogisticsDataset(),
     braintrust.traceTournament({
       input: {
@@ -270,8 +318,31 @@ export async function main(): Promise<void> {
       output: { winnerCandidateId, rankings },
       metadata: { provenance: "live", sessionId, branch },
     }),
-    braintrust.runDatabaseExperiment(experimentName, experimentCases),
+    braintrust.runDatabaseExperiment(baselineExperimentName, [baselineCase]),
   ]);
+  const gatedExperiment = await braintrust.runDatabaseExperiment(
+    gatedExperimentName,
+    gatedCases,
+  );
+  const comparison = {
+    sameCandidatePool: true,
+    directAgentBaseline: {
+      selectedCandidateId: directSelected.plan.candidateId,
+      weightedScore: directSelected.weightedScore,
+      eligible: directSelected.gates.eligible,
+      failedGateNames: directSelected.gates.failedGateNames,
+    },
+    safecommitGated: {
+      selectedCandidateId: gatedSelected?.plan.candidateId ?? null,
+      weightedScore: gatedSelected?.weightedScore ?? null,
+      eligible: gatedSelected?.gates.eligible ?? false,
+      failedGateNames: gatedSelected?.gates.failedGateNames ?? [],
+    },
+    preventedUnsafeDirectSelection:
+      !directSelected.gates.eligible &&
+      gatedSelected !== undefined &&
+      gatedSelected.gates.eligible,
+  };
   const capturedAt = new Date().toISOString();
   const payload = {
     schemaVersion: 1,
@@ -298,7 +369,10 @@ export async function main(): Promise<void> {
     braintrust: {
       dataset: dataset.data,
       trace: trace.data,
-      experiment: experiment.data,
+      baselineExperiment: baselineExperiment.data,
+      gatedExperiment: gatedExperiment.data,
+      experiment: gatedExperiment.data,
+      comparison,
     },
     claim:
       winnerCandidateId === null
@@ -337,7 +411,10 @@ export async function main(): Promise<void> {
         ),
         braintrustDatasetUrl: dataset.data.datasetUrl,
         braintrustTraceUrl: trace.data.traceUrl,
-        braintrustExperimentUrl: experiment.data.experimentUrl,
+        braintrustBaselineExperimentUrl:
+          baselineExperiment.data.experimentUrl,
+        braintrustGatedExperimentUrl: gatedExperiment.data.experimentUrl,
+        directVsGated: comparison,
         evidenceDirectory: runDirectory,
         liveCertified: false,
       },

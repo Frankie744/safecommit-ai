@@ -31,6 +31,20 @@ function request(): SafeCommitFireworksRequest {
     candidateId: "candidate-live-c",
     strategy: "relationship-preserving",
     seed: 19,
+    candidateScenario: {
+      hypothesis: "Link only the intended duplicate product.",
+      expectedEffects: [
+        {
+          effectId: "link-product",
+          table: "product",
+          operation: "update",
+          predicate: "product-duplicate",
+          expectedRowDelta: 1,
+          explanation: "Preserve the row and relationships.",
+        },
+      ],
+      risks: ["Historical rows remain intentionally preserved."],
+    },
     intentContract: logisticsIntentContract(),
     databaseProfile: {
       profileId: "openboxes-mysql-v1",
@@ -172,6 +186,9 @@ describe("SafeCommit Fireworks plan adapter", () => {
     );
     expect(client.requests[0]?.messages[1]?.content).toContain(
       "explicit bounded predicate",
+    );
+    expect(client.requests[0]?.messages[1]?.content).toContain(
+      '"candidateScenario"',
     );
     expect(client.requests[0]?.max_completion_tokens).toBe(8_192);
     expect(client.requests[0]?.thinking).toEqual({
