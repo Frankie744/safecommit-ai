@@ -15,6 +15,7 @@ import {
   SafeCommitBraintrustAdapter,
   SafeCommitDaytonaAdapter,
   SafeCommitFireworksAdapter,
+  ProviderResponseError,
   readSafeCommitBraintrustConfig,
   readSafeCommitDaytonaConfig,
   readSafeCommitFireworksConfig,
@@ -24,6 +25,7 @@ import {
 const EVIDENCE_ROOT = resolve(
   "artifacts/evidence/safecommit-database-live",
 );
+const MAX_EXECUTABLE_GENERATION_ATTEMPTS = 3;
 
 function git(...args: string[]): string {
   return execFileSync("git", args, {
@@ -141,67 +143,92 @@ export async function main(): Promise<void> {
     tables: Object.keys(profile.baseline.counts).sort(),
   } as const;
 
-  const generated = [];
+  const validated = [];
   for (const [index, slot] of profile.candidates.entries()) {
-    generated.push(
-      await fireworks.generateCandidate({
+    let accepted = false;
+    for (
+      let generationAttempt = 1;
+      generationAttempt <= MAX_EXECUTABLE_GENERATION_ATTEMPTS;
+      generationAttempt += 1
+    ) {
+      const candidate = await fireworks.generateCandidate({
         sessionId,
         candidateId: slot.candidateId,
         strategy: slot.strategy,
-        seed: 202_607_240 + index,
+        seed:
+          202_607_240 +
+          index * MAX_EXECUTABLE_GENERATION_ATTEMPTS +
+          generationAttempt -
+          1,
         intentContract: profile.intentContract,
         databaseProfile,
-      }),
-    );
-  }
-
-  const validated = [];
-  for (const [index, candidate] of generated.entries()) {
-    const runId = `daytona-${index + 1}-${randomUUID()}`;
-    const result = await daytona.validateCandidate({
-      sessionId,
-      runId,
-      sourceCommitSha,
-      repositoryUrl,
-      sourceBundle,
-      sourceBundleDigest,
-      candidate: candidate.data.candidate,
-      intentContract: profile.intentContract,
-      profile: {
-        profileId: profile.profileId,
-        fixtureSourceDigest: profile.fixtureSourceDigest,
-        schemaFingerprint: profile.schemaFingerprint,
-      },
-    });
-    const qualityScores = computeDatabaseQualityScores(
-      candidate.data.candidate,
-      result.data.databaseEvidence,
-      result.data.gates,
-    );
-    validated.push({
-      plan: candidate.data.candidate,
-      evidence: result.data.databaseEvidence,
-      gates: result.data.gates,
-      qualityScores,
-      weightedScore: computeDatabaseWeightedScore(qualityScores),
-      fireworks: {
-        requestId: candidate.data.requestId,
-        requestDigest: candidate.data.requestDigest,
-        model: candidate.data.model,
-        latencyMs: candidate.data.latencyMs,
-        totalTokens: candidate.data.totalTokens,
-        finishReason: candidate.data.finishReason,
-      },
-      daytona: {
-        sandboxId: result.data.sandboxId,
-        runId: result.data.runId,
-        snapshotName: result.data.snapshotName,
-        sourceBundleDigest: result.data.sourceBundleDigest,
-        networkBlockedBeforeExecution:
-          result.data.networkBlockedBeforeExecution,
-        destroyed: result.data.destroyed,
-      },
-    });
+      });
+      const runId = `daytona-${index + 1}-${generationAttempt}-${randomUUID()}`;
+      try {
+        const result = await daytona.validateCandidate({
+          sessionId,
+          runId,
+          sourceCommitSha,
+          repositoryUrl,
+          sourceBundle,
+          sourceBundleDigest,
+          candidate: candidate.data.candidate,
+          intentContract: profile.intentContract,
+          profile: {
+            profileId: profile.profileId,
+            fixtureSourceDigest: profile.fixtureSourceDigest,
+            schemaFingerprint: profile.schemaFingerprint,
+          },
+        });
+        const qualityScores = computeDatabaseQualityScores(
+          candidate.data.candidate,
+          result.data.databaseEvidence,
+          result.data.gates,
+        );
+        validated.push({
+          plan: candidate.data.candidate,
+          evidence: result.data.databaseEvidence,
+          gates: result.data.gates,
+          qualityScores,
+          weightedScore: computeDatabaseWeightedScore(qualityScores),
+          fireworks: {
+            requestId: candidate.data.requestId,
+            requestDigest: candidate.data.requestDigest,
+            model: candidate.data.model,
+            latencyMs: candidate.data.latencyMs,
+            totalTokens: candidate.data.totalTokens,
+            finishReason: candidate.data.finishReason,
+            generationAttempt,
+          },
+          daytona: {
+            sandboxId: result.data.sandboxId,
+            runId: result.data.runId,
+            snapshotName: result.data.snapshotName,
+            sourceBundleDigest: result.data.sourceBundleDigest,
+            networkBlockedBeforeExecution:
+              result.data.networkBlockedBeforeExecution,
+            destroyed: result.data.destroyed,
+          },
+        });
+        accepted = true;
+        break;
+      } catch (error) {
+        const executablePlanFailure =
+          error instanceof ProviderResponseError &&
+          error.message === "SafeCommit Daytona database runner failed";
+        if (
+          !executablePlanFailure ||
+          generationAttempt >= MAX_EXECUTABLE_GENERATION_ATTEMPTS
+        ) {
+          throw error;
+        }
+      }
+    }
+    if (!accepted) {
+      throw new Error(
+        `Candidate ${slot.candidateId} exhausted executable generation attempts`,
+      );
+    }
   }
 
   const tournamentCandidates: DatabaseTournamentCandidate[] = validated.map(
