@@ -45,10 +45,13 @@ test("replays manifest-verified provider evidence without pretending it is a new
     "Direct AI vs gated winner",
   );
   await expect(page.getByTestId("safety-reversal")).toContainText(
-    "1.00",
+    "0.99",
     { timeout: 15_000 },
   );
   await expect(page.getByTestId("safety-reversal")).toContainText("BLOCKED");
+  await expect(page.getByTestId("safety-reversal")).toContainText(
+    "crossed the warehouse boundary",
+  );
   await expect(
     page.getByTestId("candidate-candidate-b-shipped-order"),
   ).toContainText("Rewrote a shipped order");

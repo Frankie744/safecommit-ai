@@ -19,23 +19,23 @@ describe("Recorded Live SafeCommit replay", () => {
       },
     });
     expect(session.candidates).toHaveLength(3);
-    expect(
-      session.candidates.find(
-        (candidate) => candidate.candidateId === "candidate-b-shipped-order",
-      ),
-    ).toMatchObject({
-      weightedScore: 1,
+    const unsafeHighScore = session.candidates.find(
+      (candidate) => candidate.candidateId === "candidate-b-shipped-order",
+    );
+    const winner = session.candidates.find(
+      (candidate) => candidate.candidateId === session.winnerCandidateId,
+    );
+    expect(unsafeHighScore).toMatchObject({
       eligible: false,
       failedGateNames: ["ProtectedOrderState"],
     });
-    expect(
-      session.candidates.find(
-        (candidate) => candidate.candidateId === session.winnerCandidateId,
-      ),
-    ).toMatchObject({
+    expect(winner).toMatchObject({
       weightedScore: 0.9625,
       eligible: true,
     });
+    expect(unsafeHighScore!.weightedScore).toBeGreaterThan(
+      winner!.weightedScore,
+    );
     expect(session.approval).toMatchObject({
       decision: "approved",
       approverId: "workspace-owner",

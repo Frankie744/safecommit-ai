@@ -919,6 +919,18 @@ export function SafeCommitConsole() {
   const winner = session?.candidates.find(
     (candidate) => candidate.candidateId === session.winnerCandidateId,
   );
+  const directChoice =
+    session === null
+      ? undefined
+      : [...session.candidates].sort(
+          (left, right) =>
+            right.weightedScore - left.weightedScore ||
+            left.candidateId.localeCompare(right.candidateId),
+        )[0];
+  const directFailure =
+    directChoice === undefined
+      ? undefined
+      : directChoice.gates.find((gate) => !gate.passed);
   const scoreVisible = phaseIndex(phase) >= phaseIndex("scoring");
   const selectionVisible = phaseIndex(phase) >= phaseIndex("selecting");
   const workflowBusy =
@@ -1151,11 +1163,17 @@ export function SafeCommitConsole() {
                 <div>
                   <span>HIGHEST SCORE</span>
                   <strong>
-                    {Math.max(
-                      ...session.candidates.map((candidate) => candidate.weightedScore),
-                    ).toFixed(2)} <b>× BLOCKED</b>
+                    {directChoice?.weightedScore.toFixed(2) ?? "none"}{" "}
+                    <b>× BLOCKED</b>
                   </strong>
-                  <small>Rewrites a shipped order.</small>
+                  <small>
+                    {directChoice && directFailure
+                      ? `${candidateStory(directChoice).title}: ${gateStory(
+                          directFailure.name,
+                          directFailure.explanation,
+                        ).title.toLowerCase()}.`
+                      : "No direct candidate passed every hard gate."}
+                  </small>
                 </div>
                 <span className={styles.reversalArrow}>→</span>
                 <div>
