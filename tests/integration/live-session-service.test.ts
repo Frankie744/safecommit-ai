@@ -435,6 +435,7 @@ class FakeLiveWorkflow implements LiveWorkflowPort {
   publishCalls = 0;
   repairCalls = 0;
   refreshCalls = 0;
+  refreshGate?: Deferred<void>;
 
   private emit(
     state: LiveWorkflowProgressEvent["state"],
@@ -556,6 +557,7 @@ class FakeLiveWorkflow implements LiveWorkflowPort {
 
   async refreshReadyToMerge(): Promise<LiveWorkflowSnapshot> {
     this.refreshCalls += 1;
+    await this.refreshGate?.promise;
     const next = this.refreshPlan.shift();
     if (next instanceof Error) throw next;
     return next ?? snapshot("READY_TO_MERGE", { approved: true });
@@ -711,6 +713,47 @@ describe.sequential("live Web session service contract", () => {
     expect(invalidated.approval?.invalidatedAt).toBe(LATER);
     expect(invalidated.review).toBeUndefined();
     expect(workflow.refreshCalls).toBe(1);
+  });
+
+  it("coalesces overlapping read-only READY freshness checks", async () => {
+    let now = Date.parse(AT);
+    const workflow = new FakeLiveWorkflow();
+    const service = new LiveSessionService(workflow, {
+      idFactory: () => SESSION_ID,
+      now: () => new Date(now),
+      readyRefreshIntervalMs: 1_000,
+    });
+    await service.create({
+      incidentKind: "battery-sensor-disconnect",
+      runKind: "tournament",
+    });
+    workflow.start.resolve(snapshot("AWAITING_HUMAN_APPROVAL"));
+    await expect
+      .poll(async () => (await service.get(SESSION_ID)).currentEvidenceDigest)
+      .toBe(FULL_INITIAL_DIGEST);
+    const view = await service.get(SESSION_ID);
+    await service.decide(SESSION_ID, decisionBody(view));
+    await expect.poll(async () => (await service.get(SESSION_ID)).state).toBe(
+      "READY_TO_MERGE",
+    );
+    await expect
+      .poll(async () => {
+        await service.get(SESSION_ID);
+        return workflow.refreshCalls;
+      })
+      .toBe(1);
+
+    now += 1_001;
+    workflow.refreshGate = new Deferred<void>();
+    const firstRead = service.get(SESSION_ID);
+    const secondRead = service.list();
+    await expect.poll(() => workflow.refreshCalls).toBe(2);
+    expect(workflow.refreshCalls).toBe(2);
+    workflow.refreshGate.resolve();
+
+    await expect(Promise.all([firstRead, secondRead])).resolves.toBeDefined();
+    expect(workflow.refreshCalls).toBe(2);
+    expect((await service.get(SESSION_ID)).state).toBe("READY_TO_MERGE");
   });
 
   it("repairs a blocked review, retains loser-round provenance, and requires fresh approval", async () => {

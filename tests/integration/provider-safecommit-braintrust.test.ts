@@ -24,12 +24,16 @@ const CONFIG: BraintrustConfig = {
 };
 
 async function caseFromEvidence(): Promise<SafeCommitBraintrustExperimentCase> {
+  const evidenceRoot = resolve(
+    process.cwd(),
+    "artifacts/evidence/safecommit-database-local",
+  );
+  const latestRun = (
+    await readFile(resolve(evidenceRoot, "latest-run.txt"), "utf8")
+  ).trim();
   const artifact = JSON.parse(
     await readFile(
-      resolve(
-        process.cwd(),
-        "artifacts/evidence/safecommit-database-local/safecommit-mysql-20260724T064859855Z/database-evidence.json",
-      ),
+      resolve(evidenceRoot, latestRun, "database-evidence.json"),
       "utf8",
     ),
   ) as {

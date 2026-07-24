@@ -170,7 +170,7 @@ button {
   max-width: 180px;
   overflow: hidden;
   color: var(--text);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0;
@@ -269,7 +269,7 @@ button {
 }
 
 .temperature-reading strong {
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 37px;
   line-height: 0.9;
   letter-spacing: -0.07em;
@@ -293,7 +293,7 @@ button {
   align-items: center;
   gap: 7px;
   color: #ffc7cc;
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 10px;
   font-weight: 800;
 }
@@ -336,7 +336,7 @@ button {
   border-radius: 4px;
   background: #0a141d;
   color: var(--muted);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 7.5px;
   font-weight: 800;
   letter-spacing: 0.035em;
@@ -435,7 +435,7 @@ button {
 
 .policy-version {
   color: var(--cyan);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 9px;
 }
 
@@ -607,7 +607,7 @@ button {
 
 .evidence-row__value {
   overflow: hidden;
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 8.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -635,7 +635,7 @@ button {
 }
 
 .candidate-score > div strong {
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 17px;
 }
 
@@ -749,7 +749,7 @@ button {
 
 .event-count {
   color: var(--muted);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 9px;
 }
 
@@ -826,7 +826,7 @@ button {
   border: 1px solid var(--line-strong);
   border-radius: 50%;
   color: var(--muted);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 7px;
 }
 
@@ -852,7 +852,7 @@ button {
 
 .timeline-copy time {
   color: var(--faint);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 7px;
   white-space: nowrap;
 }
@@ -862,7 +862,7 @@ button {
   max-width: 100%;
   overflow: hidden;
   color: var(--cyan);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 7px;
   font-weight: 800;
   text-overflow: ellipsis;
@@ -958,7 +958,7 @@ button {
 .binding-grid strong {
   overflow: hidden;
   color: var(--text);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 8px;
   text-overflow: ellipsis;
   text-transform: none;
@@ -1161,7 +1161,7 @@ button {
 .competition-status strong {
   overflow: hidden;
   color: var(--text);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 8.5px;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -1255,7 +1255,7 @@ button {
 
 .pre-run-incident dd {
   margin: 3px 0 0;
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
 }
 
 .new-run-control {
@@ -1355,7 +1355,7 @@ button {
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   color: var(--cyan);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -1388,7 +1388,7 @@ button {
 
 .cross-device-proof__grid header span {
   color: var(--green);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 9px;
 }
 
@@ -1448,7 +1448,7 @@ button {
   max-width: 100%;
   overflow-wrap: anywhere;
   color: var(--cyan);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 9px;
 }
 
@@ -1782,7 +1782,7 @@ body {
 
 .section-nav a > span {
   color: var(--faint);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 8px;
 }
 
@@ -1902,7 +1902,7 @@ input:focus-visible {
 }
 
 .hero-outcome strong {
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: clamp(18px, 1.65vw, 25px);
   line-height: 1.15;
 }
@@ -2054,7 +2054,7 @@ input:focus-visible {
 
 .workflow-stepper li > span {
   color: var(--faint);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 9px;
 }
 
@@ -2199,7 +2199,7 @@ input:focus-visible {
   margin: 6px 0 0;
   overflow-wrap: anywhere;
   color: var(--text);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 14px;
   font-weight: 800;
 }
@@ -2258,7 +2258,6 @@ input:focus-visible {
   overflow: visible;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .selection-rule {
@@ -2398,7 +2397,7 @@ input:focus-visible {
 .review-card a {
   overflow-wrap: anywhere;
   color: var(--cyan);
-  font-family: "SFMono-Regular", Consolas, monospace;
+  font-family: SFMono-Regular, Consolas, monospace;
   font-size: 10px;
 }
 
@@ -2576,7 +2575,6 @@ input:focus-visible {
 .evidence-drawer__body code,
 .evidence-drawer__body a {
   overflow-wrap: anywhere;
-  word-break: break-word;
 }
 
 .evidence-drawer__body pre {

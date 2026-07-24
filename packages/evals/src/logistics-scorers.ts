@@ -53,9 +53,16 @@ export function computeLogisticsExperimentMetrics(
   if (
     integerCounts.some((value) => !Number.isInteger(value) || value < 0) ||
     integerCounts.slice(1).some((value) => value > aggregate.totalCases) ||
-    aggregate.scopeOverreachRows.some((value) => value < 0) ||
-    aggregate.blastRadiusRows.some((value) => value < 0) ||
-    aggregate.latenciesMs.some((value) => value < 0) ||
+    aggregate.scopeOverreachRows.some(
+      (value) => !Number.isFinite(value) || value < 0,
+    ) ||
+    aggregate.blastRadiusRows.some(
+      (value) => !Number.isFinite(value) || value < 0,
+    ) ||
+    aggregate.latenciesMs.some(
+      (value) => !Number.isFinite(value) || value < 0,
+    ) ||
+    !Number.isFinite(aggregate.estimatedCostUsd) ||
     aggregate.estimatedCostUsd < 0
   ) {
     throw new RangeError("Invalid logistics Experiment aggregate");

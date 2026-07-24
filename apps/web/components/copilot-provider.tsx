@@ -21,7 +21,7 @@ export function SafeCommitCopilotProvider({
   const agents = useMemo(() => ({ safecommit: agent }), [agent]);
 
   return (
-    <CopilotKitProvider agents__unsafe_dev_only={agents}>
+    <CopilotKitProvider selfManagedAgents={agents}>
       {children}
     </CopilotKitProvider>
   );

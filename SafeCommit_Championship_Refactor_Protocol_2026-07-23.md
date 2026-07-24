@@ -896,6 +896,7 @@ GITHUB_BASE_BRANCH=main
 SAFEFLASH_ALLOW_LIVE=true
 SAFEFLASH_PUBLISH_AUTH_SECRET
 SAFEFLASH_RECORDED_LIVE_SIGNING_KEY
+SAFECOMMIT_OPERATOR_TOKEN
 ```
 
 `Frankie744/safeflash-ai` 是仓库坐标，不是 GitHub 认证 Key。必须另行提供具备最小 Repository 权限的 `GITHUB_TOKEN`，或使用已登录的 GitHub CLI。CodeRabbit GitHub App 也必须对该仓库完成授权。
@@ -1422,4 +1423,3 @@ LIVE_CERTIFIED=YES
 评委最终应记住一句话：
 
 > The highest-scoring AI plan still cannot make inventory disappear.
-

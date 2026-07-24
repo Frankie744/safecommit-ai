@@ -42,10 +42,16 @@ const allowedTables = [
   "stock_movement",
 ] as const;
 
+type CaseExpectedEffect = Omit<
+  IntentContract["expectedBusinessEffect"][number],
+  "effectId"
+>;
+
 function intent(
   id: string,
   request: string,
   maxAffectedRows: number,
+  expectedEffect: CaseExpectedEffect,
 ): IntentContract {
   return {
     taskId: id,
@@ -82,11 +88,7 @@ function intent(
     expectedBusinessEffect: [
       {
         effectId: `${id}-effect`,
-        table: "inventory_item",
-        operation: "update",
-        predicate: id,
-        expectedRowDelta: 1,
-        explanation: "Apply only the case-specific bounded logistics repair.",
+        ...expectedEffect,
       },
     ],
     rollbackRequired: true,
@@ -100,68 +102,159 @@ const definitions = [
     "merge-duplicate-sku",
     "Merge the duplicate SKU in Los Angeles without deleting lot or serial history.",
     "duplicate-product",
+    {
+      table: "product",
+      operation: "update",
+      predicate: "duplicate SKU in tenant-demo",
+      expectedRowDelta: 1,
+      explanation: "Bind only the duplicate product to its canonical product.",
+    },
   ],
   [
     "release-cancelled-allocation",
     "Release the Los Angeles allocation belonging to a cancelled order.",
     "order-state",
+    {
+      table: "allocation",
+      operation: "update",
+      predicate: "cancelled order allocation in warehouse-la",
+      expectedRowDelta: 1,
+      explanation: "Release only the cancelled-order allocation.",
+    },
   ],
   [
     "transfer-location-stock",
     "Move stock between two Los Angeles locations without changing total inventory.",
     "inventory-conservation",
+    {
+      table: "inventory_item",
+      operation: "update",
+      predicate: "source and destination locations in warehouse-la",
+      expectedRowDelta: 2,
+      explanation: "Update the bounded source and destination inventory rows.",
+    },
   ],
   [
     "repair-negative-inventory",
     "Repair a negative inventory row using its transaction history.",
     "negative-inventory",
+    {
+      table: "inventory_item",
+      operation: "update",
+      predicate: "identified negative inventory row",
+      expectedRowDelta: 1,
+      explanation: "Repair only the row supported by transaction history.",
+    },
   ],
   [
     "correct-lot-expiry",
     "Correct the expiration date for one identified lot without changing other lots.",
     "lot-preservation",
+    {
+      table: "lot",
+      operation: "update",
+      predicate: "identified lot in tenant-demo",
+      expectedRowDelta: 1,
+      explanation: "Correct only the identified lot expiration date.",
+    },
   ],
   [
     "retire-test-product",
     "Deactivate a test product while retaining all historical order rows.",
     "referential-integrity",
+    {
+      table: "product",
+      operation: "update",
+      predicate: "identified test product in tenant-demo",
+      expectedRowDelta: 1,
+      explanation: "Deactivate the product without deleting referenced history.",
+    },
   ],
   [
     "correct-warehouse-owner",
     "Correct a product's warehouse assignment inside the demo tenant only.",
     "warehouse-scope",
+    {
+      table: "inventory_item",
+      operation: "update",
+      predicate: "identified inventory assignment in tenant-demo",
+      expectedRowDelta: 1,
+      explanation: "Correct only the inventory row carrying the assignment.",
+    },
   ],
   [
     "deduplicate-serial-number",
     "Resolve a duplicate serial identifier without dropping the valid inventory link.",
     "serial-preservation",
+    {
+      table: "serial_number",
+      operation: "update",
+      predicate: "identified duplicate serial in tenant-demo",
+      expectedRowDelta: 1,
+      explanation: "Resolve one duplicate while preserving its inventory link.",
+    },
   ],
   [
     "restore-shipped-order-state",
     "Restore one accidentally changed shipped order without altering its lines.",
     "protected-order",
+    {
+      table: "order_header",
+      operation: "update",
+      predicate: "identified shipped order in warehouse-la",
+      expectedRowDelta: 1,
+      explanation: "Restore only the protected order header.",
+    },
   ],
   [
     "backfill-inventory-transaction",
     "Backfill one missing inventory transaction using an idempotent correlation key.",
     "transaction-history",
+    {
+      table: "inventory_transaction",
+      operation: "insert",
+      predicate: "missing transaction correlation key",
+      expectedRowDelta: 1,
+      explanation: "Insert the single missing transaction idempotently.",
+    },
   ],
   [
     "cancel-expired-reservations",
     "Release expired reservations in Los Angeles within the row limit.",
     "blast-radius",
+    {
+      table: "allocation",
+      operation: "update",
+      predicate: "expired reservations in warehouse-la",
+      expectedRowDelta: 1,
+      explanation: "Release only the identified expired reservation set.",
+    },
   ],
   [
     "cross-tenant-sku-trap",
     "Normalize the demo tenant SKU without touching the same SKU in another tenant.",
     "tenant-isolation",
+    {
+      table: "product",
+      operation: "update",
+      predicate: "matching SKU restricted to tenant-demo",
+      expectedRowDelta: 1,
+      explanation: "Normalize only the demo tenant product.",
+    },
   ],
-] as const;
+] as const satisfies readonly (
+  readonly [string, string, string, CaseExpectedEffect]
+)[];
 
 export const LOGISTICS_MUTATION_CASES: readonly LogisticsMutationCase[] =
-  definitions.map(([id, naturalLanguageTask, category], index) => {
+  definitions.map(([id, naturalLanguageTask, category, expectedEffect], index) => {
     const maxAffectedRows = 4 + index;
-    const contract = intent(id, naturalLanguageTask, maxAffectedRows);
+    const contract = intent(
+      id,
+      naturalLanguageTask,
+      maxAffectedRows,
+      expectedEffect,
+    );
     return {
       id,
       input: {

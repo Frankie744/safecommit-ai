@@ -55,6 +55,7 @@ interface LiveSessionRecord {
   unsubscribeProgress?: () => void;
   lastProgressSequence?: number;
   lastReadyRefreshAtMs?: number;
+  readyRefreshOperation?: Promise<void>;
 }
 
 interface ResumableStage<T> {
@@ -1076,6 +1077,30 @@ export class LiveSessionService {
     record: LiveSessionRecord,
     sessionId: string,
     force = false,
+  ): Promise<void> {
+    if (record.readyRefreshOperation !== undefined) {
+      await record.readyRefreshOperation;
+      return;
+    }
+    const operation = this.performReadyClaimRefreshIfDue(
+      record,
+      sessionId,
+      force,
+    );
+    record.readyRefreshOperation = operation;
+    try {
+      await operation;
+    } finally {
+      if (record.readyRefreshOperation === operation) {
+        record.readyRefreshOperation = undefined;
+      }
+    }
+  }
+
+  private async performReadyClaimRefreshIfDue(
+    record: LiveSessionRecord,
+    sessionId: string,
+    force: boolean,
   ): Promise<void> {
     const authoritativeReady =
       record.snapshot?.session.state === "READY_TO_MERGE";

@@ -19,12 +19,16 @@ import { describe, expect, it } from "vitest";
 const SOURCE_SHA = "c".repeat(40);
 
 async function committedSafeCandidate() {
+  const evidenceRoot = resolve(
+    process.cwd(),
+    "artifacts/evidence/safecommit-database-local",
+  );
+  const latestRun = (
+    await readFile(resolve(evidenceRoot, "latest-run.txt"), "utf8")
+  ).trim();
   const raw = JSON.parse(
     await readFile(
-      resolve(
-        process.cwd(),
-        "artifacts/evidence/safecommit-database-local/safecommit-mysql-20260724T064859855Z/database-evidence.json",
-      ),
+      resolve(evidenceRoot, latestRun, "database-evidence.json"),
       "utf8",
     ),
   ) as {
@@ -78,6 +82,7 @@ describe("SafeCommit Daytona database adapter", () => {
       runId: "safecommit-live-run-c",
       sandboxId,
       sourceCommitSha: SOURCE_SHA,
+      schemaFingerprint: profile.schemaFingerprint,
       providerEvidence: {
         provenance: "live",
         executionProvider: "daytona",
@@ -137,7 +142,7 @@ describe("SafeCommit Daytona database adapter", () => {
       sessionId: evidence.sessionId,
       runId: evidence.runId,
       sourceCommitSha: SOURCE_SHA,
-      repositoryUrl: "https://github.com/Frankie744/safeflash-ai.git",
+      repositoryUrl: "https://github.com/example/safeflash.git",
       candidate: committed.plan,
       intentContract: profile.intentContract,
       profile: {
@@ -203,7 +208,7 @@ describe("SafeCommit Daytona database adapter", () => {
         sessionId: "safecommit-cleanup-test",
         runId: "safecommit-cleanup-run",
         sourceCommitSha: SOURCE_SHA,
-        repositoryUrl: "https://github.com/Frankie744/safeflash-ai.git",
+        repositoryUrl: "https://github.com/example/safeflash.git",
         candidate: committed.plan,
         intentContract: profile.intentContract,
         profile: {

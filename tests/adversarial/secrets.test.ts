@@ -25,7 +25,7 @@ const SOURCE_SCAN_EXCLUSIONS = new Set([
   "results",
 ]);
 const SENSITIVE_NAME =
-  /(?:^|_)(?:TOKEN|SECRET|PASSWORD|API_KEY|SIGNING_KEY|AUTHORIZATION|CREDENTIALS?|PAT)(?:$|_)/iu;
+  /(?:^|_)(?:TOKEN|SECRET|PASSWORD|API_KEY|SIGNING_KEY|AUTHORIZATION|CREDENTIALS?|PAT|DATABASE_URL|MYSQL_URL)(?:$|_)/iu;
 
 function localSensitiveValues(): readonly string[] {
   const values = new Set<string>();

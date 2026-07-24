@@ -33,6 +33,7 @@ describe("database approval binding", () => {
     expect(isDatabaseApprovalValid(approval, original)).toBe(true);
 
     for (const changed of [
+      { ...original, candidateId: "candidate-other" },
       { ...original, planDigest: "a".repeat(64) },
       { ...original, intentContractDigest: "b".repeat(64) },
       { ...original, evidenceDigest: "c".repeat(64) },
@@ -40,6 +41,8 @@ describe("database approval binding", () => {
       { ...original, schemaFingerprint: "e".repeat(64) },
       { ...original, policyVersion: "safecommit-logistics-v2" },
       { ...original, sourceCommitSha: "f".repeat(40) },
+      { ...original, approverId: "operator-2" },
+      { ...original, timestamp: "2026-07-24T00:02:00.000Z" },
     ]) {
       const invalidated = invalidateDatabaseApproval(
         approval,

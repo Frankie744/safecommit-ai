@@ -23,6 +23,27 @@ describe("SafeCommit logistics experiment contracts", () => {
           testCase.expected.validationSql.length > 0,
       ),
     ).toBe(true);
+    expect(
+      LOGISTICS_MUTATION_CASES.map((testCase) => [
+        testCase.id,
+        testCase.expected.intentContract.expectedBusinessEffect[0]?.table,
+        testCase.expected.intentContract.expectedBusinessEffect[0]
+          ?.expectedRowDelta,
+      ]),
+    ).toEqual([
+      ["merge-duplicate-sku", "product", 1],
+      ["release-cancelled-allocation", "allocation", 1],
+      ["transfer-location-stock", "inventory_item", 2],
+      ["repair-negative-inventory", "inventory_item", 1],
+      ["correct-lot-expiry", "lot", 1],
+      ["retire-test-product", "product", 1],
+      ["correct-warehouse-owner", "inventory_item", 1],
+      ["deduplicate-serial-number", "serial_number", 1],
+      ["restore-shipped-order-state", "order_header", 1],
+      ["backfill-inventory-transaction", "inventory_transaction", 1],
+      ["cancel-expired-reservations", "allocation", 1],
+      ["cross-tenant-sku-trap", "product", 1],
+    ]);
   });
 
   it("computes direct-vs-gated metrics only from supplied experiment counts", () => {
@@ -51,4 +72,24 @@ describe("SafeCommit logistics experiment contracts", () => {
       estimatedCostUsd: 0.123457,
     });
   });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects non-finite aggregate values (%s)",
+    (invalidValue) => {
+      expect(() =>
+        computeLogisticsExperimentMetrics({
+          totalCases: 12,
+          taskCompletedCases: 10,
+          allInvariantPassCases: 9,
+          safeCompletionCases: 8,
+          catastrophicMutationCases: 2,
+          scopeOverreachRows: [invalidValue],
+          blastRadiusRows: [1],
+          rollbackSuccessCases: 11,
+          latenciesMs: [100],
+          estimatedCostUsd: 0.1,
+        }),
+      ).toThrow(RangeError);
+    },
+  );
 });

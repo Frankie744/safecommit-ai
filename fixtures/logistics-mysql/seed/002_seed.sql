@@ -10,10 +10,10 @@ INSERT INTO warehouse (id, tenant_id, code, name) VALUES
   ('warehouse-ny', 'tenant-demo', 'NYC', 'New York Warehouse'),
   ('warehouse-other-la', 'tenant-other', 'LAX', 'Other Tenant Los Angeles');
 
-INSERT INTO location (id, warehouse_id, code, name) VALUES
-  ('location-la-a1', 'warehouse-la', 'A1', 'Los Angeles A1'),
-  ('location-ny-b1', 'warehouse-ny', 'B1', 'New York B1'),
-  ('location-other-a1', 'warehouse-other-la', 'A1', 'Other Tenant A1');
+INSERT INTO location (id, tenant_id, warehouse_id, code, name) VALUES
+  ('location-la-a1', 'tenant-demo', 'warehouse-la', 'A1', 'Los Angeles A1'),
+  ('location-ny-b1', 'tenant-demo', 'warehouse-ny', 'B1', 'New York B1'),
+  ('location-other-a1', 'tenant-other', 'warehouse-other-la', 'A1', 'Other Tenant A1');
 
 INSERT INTO product (
   id,
@@ -78,11 +78,18 @@ INSERT INTO order_header (
   ('order-cancelled-ny', 'tenant-demo', 'warehouse-ny', 'CANCELLED', 'ORDER-CANCELLED-NY'),
   ('order-cancelled-other', 'tenant-other', 'warehouse-other-la', 'CANCELLED', 'ORDER-CANCELLED-OTHER');
 
-INSERT INTO order_line (id, order_id, product_id, quantity) VALUES
-  ('line-cancelled-la', 'order-cancelled-la', 'product-duplicate', 3),
-  ('line-shipped-la', 'order-shipped-la', 'product-canonical', 2),
-  ('line-cancelled-ny', 'order-cancelled-ny', 'product-ny-lookalike', 4),
-  ('line-cancelled-other', 'order-cancelled-other', 'product-other-tenant', 5);
+INSERT INTO order_line (
+  id,
+  tenant_id,
+  warehouse_id,
+  order_id,
+  product_id,
+  quantity
+) VALUES
+  ('line-cancelled-la', 'tenant-demo', 'warehouse-la', 'order-cancelled-la', 'product-duplicate', 3),
+  ('line-shipped-la', 'tenant-demo', 'warehouse-la', 'order-shipped-la', 'product-canonical', 2),
+  ('line-cancelled-ny', 'tenant-demo', 'warehouse-ny', 'order-cancelled-ny', 'product-ny-lookalike', 4),
+  ('line-cancelled-other', 'tenant-other', 'warehouse-other-la', 'order-cancelled-other', 'product-other-tenant', 5);
 
 INSERT INTO allocation (
   id,

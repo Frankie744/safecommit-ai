@@ -20,7 +20,7 @@ export function recordedLiveCaptureFixture(): RecordedLiveCaptureInput {
       createdAt: "2026-07-23T06:00:00.000Z",
       updatedAt: "2026-07-23T06:00:10.000Z",
       repository: {
-        repoUrl: "https://github.com/Frankie744/safeflash-ai",
+        repoUrl: "https://github.example/safe-flash/demo.git",
         baseCommitSha: BASE_SHA,
         headCommitSha: HEAD_SHA,
       },
@@ -100,7 +100,7 @@ export function recordedLiveCaptureFixture(): RecordedLiveCaptureInput {
       },
       pullRequest: {
         number: 42,
-        url: "https://github.com/Frankie744/safeflash-ai/pull/42",
+        url: "https://github.example/safe-flash/demo/pull/42",
         status: "open",
       },
       review: {
@@ -156,11 +156,11 @@ export function recordedLiveCaptureFixture(): RecordedLiveCaptureInput {
         provenance: { mode: "live", kind: "live", verified: true },
         requestIds: [],
         resources: [
-          { kind: "repository", id: "Frankie744/safeflash-ai" },
+          { kind: "repository", id: "safe-flash/demo" },
           {
             kind: "pull-request",
             id: "42",
-            url: "https://github.com/Frankie744/safeflash-ai/pull/42",
+            url: "https://github.example/safe-flash/demo/pull/42",
           },
           { kind: "base-sha", id: BASE_SHA },
           { kind: "head-sha", id: HEAD_SHA },
@@ -176,13 +176,13 @@ export function recordedLiveCaptureFixture(): RecordedLiveCaptureInput {
           {
             kind: "pull-request",
             id: "42",
-            url: "https://github.com/Frankie744/safeflash-ai/pull/42",
+            url: "https://github.example/safe-flash/demo/pull/42",
           },
           { kind: "head-sha", id: HEAD_SHA },
           {
             kind: "review",
             id: "review-1",
-            url: "https://github.com/Frankie744/safeflash-ai/pull/42#pullrequestreview-1",
+            url: "https://github.example/safe-flash/demo/pull/42#pullrequestreview-1",
           },
         ],
         capturedAt: "2026-07-23T06:00:09.000Z",

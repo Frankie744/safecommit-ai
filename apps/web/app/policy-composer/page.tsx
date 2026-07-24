@@ -41,7 +41,7 @@ export default function SafetyPolicyComposerPage() {
         <p>
           Conversion availability: <strong>NOT IMPLEMENTED</strong>
         </p>
-        <Link href="/">Return to SafeFlash</Link>
+        <Link href="/">Return to SafeCommit console</Link>
       </section>
     </main>
   );

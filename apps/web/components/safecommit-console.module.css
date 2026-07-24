@@ -6,6 +6,7 @@
   --red: #ff5b5f;
   --green: #74e39a;
   --amber: #f0c76b;
+
   min-height: 100vh;
   color: var(--ink);
   background:
@@ -50,7 +51,7 @@
 }
 
 .provenance {
-  border: 1px solid currentColor;
+  border: 1px solid currentcolor;
   border-radius: 999px;
   padding: 7px 10px;
   color: var(--amber);

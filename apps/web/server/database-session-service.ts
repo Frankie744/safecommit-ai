@@ -265,7 +265,7 @@ function candidateViewsFromTournament(
         0,
       ),
       touchedWarehouses: [...touchedWarehouses],
-      inventoryDeltaUnits: inventoryGate?.passed ? 0 : Number.NaN,
+      inventoryDeltaUnits: inventoryGate?.passed ? 0 : -1,
       planDigest: candidate.evidence.planDigest,
       evidenceDigest: computeEvidenceDigest(candidate.evidence),
       gates: candidate.gates.results.map((gate) => ({
@@ -480,6 +480,15 @@ export class DatabaseSessionService {
 
   revalidate(sessionId: string): DatabaseSessionView {
     const record = this.requireRecord(sessionId);
+    const winner = record.view.candidates.find(
+      (candidate) => candidate.candidateId === record.view.winnerCandidateId,
+    );
+    if (winner === undefined || !winner.eligible) {
+      throw new DatabaseSessionServiceError(
+        "INVALID_STATE",
+        "Only a session with an eligible selected plan can be revalidated",
+      );
+    }
     const at = this.now().toISOString();
     record.evidenceRevision += 1;
     const nextEvidenceDigest = computeEvidenceDigest({

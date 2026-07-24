@@ -5,6 +5,7 @@ coverage/
 playwright-report/
 test-results/
 .safeflash/
+_site/
 
 # Secrets. Only the example file is committed.
 .env

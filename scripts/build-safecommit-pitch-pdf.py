@@ -183,7 +183,7 @@ def build() -> None:
     text(canvas, "FOR AI DATABASE AGENTS.", 64, 435, 58, INK, BOLD)
     stages = ["Generate", "Shadow Execute", "Prove", "Approve", "Commit"]
     x_positions = [78, 310, 565, 805, 1030]
-    for index, (stage, x) in enumerate(zip(stages, x_positions)):
+    for index, (stage, x) in enumerate(zip(stages, x_positions, strict=True)):
         canvas.setFillColor(GREEN if index == 4 else PANEL)
         canvas.circle(x + 66, 220, 44, stroke=0, fill=1)
         centered(canvas, str(index + 1), x + 66, 205, 24, BG, BOLD)
@@ -234,7 +234,9 @@ def build() -> None:
         ("CopilotKit", "evidence-bound HITL", GREEN),
     ]
     x_values = [70, 370, 680, 980]
-    for index, ((name, subtitle, color), x) in enumerate(zip(labels, x_values)):
+    for index, ((name, subtitle, color), x) in enumerate(
+        zip(labels, x_values, strict=True)
+    ):
         panel(canvas, x, 245, 230, 220)
         canvas.setFillColor(color)
         canvas.circle(x + 30, 430, 8, stroke=0, fill=1)
@@ -293,7 +295,7 @@ def build() -> None:
         ("0", "rollback digest drift"),
     ]
     x_values = [70, 370, 670, 970]
-    for (value, label), x in zip(metrics, x_values):
+    for (value, label), x in zip(metrics, x_values, strict=True):
         text(canvas, value, x, 390, 70, CYAN if value != "0" else GREEN, BOLD)
         text(canvas, label, x, 340, 18, MUTED, BOLD)
     text(canvas, "Before", 88, 220, 18, MUTED, BOLD)

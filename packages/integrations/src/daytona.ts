@@ -522,6 +522,7 @@ export class DaytonaAdapter {
         destroyed: true,
       });
     } catch (error) {
+      let cause: unknown = error;
       let cleanupFailed = cleanupAttempted && !destroyed;
       if (sandbox !== undefined && !destroyed && !cleanupAttempted) {
         cleanupAttempted = true;
@@ -534,7 +535,7 @@ export class DaytonaAdapter {
           destroyed = true;
         } catch (cleanupError) {
           cleanupFailed = true;
-          error = cleanupError;
+          cause = cleanupError;
         }
       }
       if (cleanupFailed) {
@@ -542,15 +543,15 @@ export class DaytonaAdapter {
           "daytona",
           "Daytona smoke sandbox cleanup failed after bounded retries",
           false,
-          { cause: error },
+          { cause },
         );
       }
-      if (error instanceof ProviderResponseError) throw error;
+      if (cause instanceof ProviderResponseError) throw cause;
       throw new ProviderResponseError(
         "daytona",
         "Daytona smoke failed",
-        isRetryableDaytonaFailure(error),
-        { cause: error },
+        isRetryableDaytonaFailure(cause),
+        { cause },
       );
     }
   }
@@ -722,6 +723,7 @@ export class DaytonaAdapter {
         commands,
       });
     } catch (error) {
+      let cause: unknown = error;
       let cleanupFailed = cleanupAttempted && !destroyed;
       if (sandbox !== undefined && !destroyed && !cleanupAttempted) {
         cleanupAttempted = true;
@@ -734,13 +736,13 @@ export class DaytonaAdapter {
           destroyed = true;
         } catch (cleanupError) {
           cleanupFailed = true;
-          error = cleanupError;
+          cause = cleanupError;
         }
       }
       if (sandbox !== undefined) {
         const retryable = cleanupFailed
           ? false
-          : isRetryableDaytonaFailure(error);
+          : isRetryableDaytonaFailure(cause);
         throw new DaytonaAttemptError({
           attempt: {
             sandboxId: sandbox.id,
@@ -752,12 +754,12 @@ export class DaytonaAdapter {
           retryable,
         });
       }
-      if (error instanceof ProviderResponseError) throw error;
+      if (cause instanceof ProviderResponseError) throw cause;
       throw new ProviderResponseError(
         "daytona",
         "Daytona sandbox validation failed",
-        isRetryableDaytonaFailure(error),
-        { cause: error },
+        isRetryableDaytonaFailure(cause),
+        { cause },
       );
     }
   }
