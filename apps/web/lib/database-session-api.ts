@@ -67,6 +67,10 @@ export function createDatabaseSession(
   });
 }
 
+export function loadRecordedLiveDatabaseSession(): Promise<DatabaseSessionView> {
+  return requestSession("/api/database-sessions/recorded-live");
+}
+
 export function decideDatabaseSession(
   sessionId: string,
   token: string,

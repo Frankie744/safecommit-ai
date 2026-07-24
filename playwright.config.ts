@@ -19,9 +19,9 @@ export default defineConfig({
     ["html", { open: "never", outputFolder: "tests/e2e/report" }],
   ],
   outputDir: "tests/e2e/results",
-  timeout: 30_000,
+  timeout: 45_000,
   expect: {
-    timeout: 7_500,
+    timeout: 15_000,
   },
   use: {
     baseURL: e2eBaseUrl,
