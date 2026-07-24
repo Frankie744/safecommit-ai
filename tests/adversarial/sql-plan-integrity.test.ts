@@ -73,4 +73,54 @@ describe("MySQL AST plan integrity", () => {
       ]),
     );
   });
+
+  it("rejects volatile mutation values when the intent requires idempotency", () => {
+    const base = logisticsCandidatePlan();
+    const plan = CandidateChangePlanSchema.parse({
+      ...base,
+      statements: [
+        {
+          ...base.statements[0],
+          sql: [
+            "UPDATE allocation",
+            "SET released_at = NOW(3)",
+            "WHERE id = 'allocation-cancelled-la'",
+          ].join(" "),
+        },
+      ],
+    });
+
+    expect(
+      validateSqlPlanIntegrity(plan, logisticsIntentContract()).violations,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "NON_DETERMINISTIC_MUTATION" }),
+      ]),
+    );
+  });
+
+  it("detects forbidden functions represented by nested MySQL AST names", () => {
+    const base = logisticsCandidatePlan();
+    const plan = CandidateChangePlanSchema.parse({
+      ...base,
+      statements: [
+        {
+          ...base.statements[0],
+          sql: [
+            "UPDATE allocation",
+            "SET quantity = SLEEP(1)",
+            "WHERE id = 'allocation-cancelled-la'",
+          ].join(" "),
+        },
+      ],
+    });
+
+    expect(
+      validateSqlPlanIntegrity(plan, logisticsIntentContract()).violations,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "FORBIDDEN_DATABASE_FEATURE" }),
+      ]),
+    );
+  });
 });

@@ -18,6 +18,7 @@ export type SqlPlanIntegrityViolationCode =
   | "TABLE_OUTSIDE_CONTRACT"
   | "AFFECTED_ROW_LIMIT_EXCEEDED"
   | "UNBOUNDED_MUTATION"
+  | "NON_DETERMINISTIC_MUTATION"
   | "FORBIDDEN_DATABASE_FEATURE";
 
 export interface SqlPlanIntegrityViolation {
@@ -50,6 +51,19 @@ const forbiddenFunctions = new Set([
   "SYS_EVAL",
 ]);
 
+const nonDeterministicFunctions = new Set([
+  "CURRENT_DATE",
+  "CURRENT_TIME",
+  "CURRENT_TIMESTAMP",
+  "LOCALTIME",
+  "LOCALTIMESTAMP",
+  "NOW",
+  "RAND",
+  "SYSDATE",
+  "UUID",
+  "UUID_SHORT",
+]);
+
 function parseSingleStatement(
   sql: string,
 ): { ast?: AstRecord; error?: string } {
@@ -79,6 +93,53 @@ function tableNames(sql: string): readonly string[] {
   return entries.map((entry) => entry.split("::").at(-1) ?? "").filter(Boolean);
 }
 
+function functionName(record: Record<string, unknown>): string | undefined {
+  if (record.type !== "function" && record.type !== "aggr_func") {
+    return undefined;
+  }
+  if (typeof record.name === "string") return record.name.toUpperCase();
+  if (
+    record.name !== null &&
+    typeof record.name === "object" &&
+    Array.isArray((record.name as { name?: unknown }).name)
+  ) {
+    const parts = (record.name as { name: unknown[] }).name
+      .map((part) =>
+        part !== null &&
+        typeof part === "object" &&
+        typeof (part as { value?: unknown }).value === "string"
+          ? (part as { value: string }).value
+          : "",
+      )
+      .filter(Boolean);
+    if (parts.length > 0) return parts.join(".").toUpperCase();
+  }
+  return undefined;
+}
+
+function containsFunction(
+  value: unknown,
+  names: ReadonlySet<string>,
+): string | undefined {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = containsFunction(item, names);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  }
+  if (value === null || typeof value !== "object") return undefined;
+
+  const record = value as Record<string, unknown>;
+  const name = functionName(record);
+  if (name !== undefined && names.has(name)) return name;
+  for (const item of Object.values(record)) {
+    const found = containsFunction(item, names);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
 function containsForbiddenFeature(value: unknown): string | undefined {
   if (Array.isArray(value)) {
     for (const item of value) {
@@ -101,13 +162,12 @@ function containsForbiddenFeature(value: unknown): string | undefined {
       return "SELECT INTO/OUTFILE is forbidden";
     }
   }
-  const functionName =
-    typeof record.name === "string" &&
-    (record.type === "function" || record.type === "aggr_func")
-      ? record.name.toUpperCase()
-      : undefined;
-  if (functionName !== undefined && forbiddenFunctions.has(functionName)) {
-    return `database function ${functionName} is forbidden`;
+  const forbiddenFunction = functionName(record);
+  if (
+    forbiddenFunction !== undefined &&
+    forbiddenFunctions.has(forbiddenFunction)
+  ) {
+    return `database function ${forbiddenFunction} is forbidden`;
   }
   if (
     record.type === "var" ||
@@ -205,6 +265,20 @@ function validateMutation(
       statementId: statement.statementId,
       message: forbidden,
     });
+  }
+
+  if (contract.idempotencyRequired) {
+    const nonDeterministic = containsFunction(
+      parsed.ast,
+      nonDeterministicFunctions,
+    );
+    if (nonDeterministic !== undefined) {
+      violations.push({
+        code: "NON_DETERMINISTIC_MUTATION",
+        statementId: statement.statementId,
+        message: `idempotent plans cannot use volatile database function ${nonDeterministic}`,
+      });
+    }
   }
 }
 
