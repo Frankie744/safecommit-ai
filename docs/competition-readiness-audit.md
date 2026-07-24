@@ -9,6 +9,7 @@ Audit snapshot: 2026-07-24, America/Los_Angeles.
 | Local MySQL tournament | `PASS / LOCAL_TEST` | clean source-bound evidence package |
 | Intent, SQL policy, hard gates, rollback | `PASS / LOCAL_TEST` | unit, adversarial, integration tests |
 | SafeCommit console and HITL | `PASS / LOCAL_TEST` | production build and four Playwright flows |
+| Dependency audit | `BLOCKED` | npm Registry TLS connection failed twice; no result claimed |
 | Fireworks database plans | `BLOCKED` | adapter contract passes; no current request ID |
 | Daytona database snapshots | `BLOCKED` | adapter contract passes; no sandbox IDs/cleanup receipts |
 | Braintrust evaluation | `BLOCKED` | 12-case contract passes; no Dataset/Trace/Experiment URL |
