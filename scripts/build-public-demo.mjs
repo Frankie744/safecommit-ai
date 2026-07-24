@@ -113,9 +113,16 @@ async function build() {
     liveEvidence.braintrust.trace.traceUrl.startsWith(
       "https://www.braintrust.dev/",
     ) &&
-    liveEvidence.braintrust.experiment.experimentUrl.startsWith(
+    liveEvidence.braintrust.baselineExperiment.experimentUrl.startsWith(
       "https://www.braintrust.dev/",
-    );
+    ) &&
+    liveEvidence.braintrust.gatedExperiment.experimentUrl.startsWith(
+      "https://www.braintrust.dev/",
+    ) &&
+    liveEvidence.braintrust.comparison.sameCandidatePool === true &&
+    liveEvidence.braintrust.comparison.preventedUnsafeDirectSelection === true &&
+    liveEvidence.braintrust.comparison.directAgentBaseline.eligible === false &&
+    liveEvidence.braintrust.comparison.safecommitGated.eligible === true;
   if (!liveProviderEvidenceIsComplete) {
     throw new Error(
       "Public live evidence must be complete, destroyed, network-isolated, and awaiting human approval",
@@ -168,6 +175,9 @@ async function build() {
         `<code>${escapeHtml(candidate.daytona.sandboxId)}</code>`,
     )
     .join("<br>");
+  const directSelection =
+    liveEvidence.braintrust.comparison.directAgentBaseline;
+  const gatedSelection = liveEvidence.braintrust.comparison.safecommitGated;
   const hardGateCount = liveGateCounts[0];
   const html = `<!doctype html>
 <html lang="en">
@@ -261,7 +271,7 @@ async function build() {
         <div class="section-head"><div><p class="eyebrow">Live sponsor provenance</p><h2>Three providers. One bound run.</h2></div><p>Run <code>${escapeHtml(liveRunId)}</code><br>Status <code>${escapeHtml(liveEvidence.status)}</code></p></div>
         <div class="boundary">
           <article><h3>Fireworks + Daytona</h3><p>Fireworks model <code>${escapeHtml(liveEvidence.candidates[0].fireworks.model)}</code> generated three structured plans. Each ran from the same MySQL snapshot in a network-blocked Daytona sandbox; all sandboxes were destroyed.</p><p>${liveRequestIds}</p><p>${liveSandboxIds}</p></article>
-          <article><h3>Braintrust evaluation</h3><p>Dataset version <code>${escapeHtml(liveEvidence.braintrust.dataset.datasetVersion)}</code> contains ${liveEvidence.braintrust.dataset.totalRecords} cases. The deterministic experiment recorded ${liveEvidence.braintrust.experiment.resultCount} candidate results.</p><div class="actions"><a class="button" href="${escapeHtml(liveEvidence.braintrust.dataset.datasetUrl)}">Dataset</a><a class="button" href="${escapeHtml(liveEvidence.braintrust.trace.traceUrl)}">Trace</a><a class="button primary" href="${escapeHtml(liveEvidence.braintrust.experiment.experimentUrl)}">Experiment</a></div></article>
+          <article><h3>Braintrust Direct vs Gated</h3><p>Direct selected <code>${escapeHtml(directSelection.selectedCandidateId)}</code> at ${directSelection.weightedScore.toFixed(4)}, but failed ${escapeHtml(directSelection.failedGateNames.join(" · "))}. SafeCommit selected <code>${escapeHtml(gatedSelection.selectedCandidateId)}</code> at ${gatedSelection.weightedScore.toFixed(4)} after every hard gate passed.</p><div class="actions"><a class="button" href="${escapeHtml(liveEvidence.braintrust.dataset.datasetUrl)}">Dataset</a><a class="button" href="${escapeHtml(liveEvidence.braintrust.trace.traceUrl)}">Trace</a><a class="button" href="${escapeHtml(liveEvidence.braintrust.baselineExperiment.experimentUrl)}">Direct baseline</a><a class="button primary" href="${escapeHtml(liveEvidence.braintrust.gatedExperiment.experimentUrl)}">SafeCommit gated</a></div></article>
         </div>
       </section>
       <section id="boundary">
