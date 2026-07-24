@@ -66,7 +66,8 @@ async function build() {
     summary.status !== "LOCAL_TEST" ||
     summary.liveCertified !== false ||
     summary.liveProviderCalls !== 0 ||
-    summary.candidateCount !== 3
+    summary.candidateCount !== 3 ||
+    !/^[a-f0-9]{40}$/u.test(summary.sourceCommitSha)
   ) {
     throw new Error(
       "Public evidence must remain an explicit three-candidate LOCAL_TEST result",
@@ -201,7 +202,7 @@ async function build() {
           <a class="button" href="evidence/summary.json">Run summary</a>
           <a class="button" href="evidence/database-evidence.json">Full database evidence</a>
           <a class="button" href="evidence/manifest.sha256">SHA-256 manifest</a>
-          <a class="button" href="https://github.com/Frankie744/safeflash-ai/pull/3">Review PR #3</a>
+          <a class="button" href="https://github.com/Frankie744/safeflash-ai/commit/${summary.sourceCommitSha}">Inspect evidence source commit</a>
         </div>
       </section>
     </main>
