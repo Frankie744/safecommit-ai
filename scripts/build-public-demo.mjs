@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +16,12 @@ const liveEvidenceRoot = path.join(
   "evidence",
   "safecommit-database-live",
 );
+const approvalEvidenceRoot = path.join(
+  root,
+  "artifacts",
+  "evidence",
+  "safecommit-database-approval",
+);
 const outputRoot = path.join(root, "_site");
 
 function escapeHtml(value) {
@@ -28,6 +35,23 @@ function escapeHtml(value) {
 
 function shortDigest(value) {
   return `${value.slice(0, 10)}…${value.slice(-8)}`;
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function candidateCard(candidate, winnerCandidateId) {
@@ -81,6 +105,21 @@ async function build() {
       "utf8",
     ),
   );
+  const approvalRunId = (
+    await readFile(path.join(approvalEvidenceRoot, "latest-run.txt"), "utf8")
+  ).trim();
+  if (!/^safecommit-approval-\d{8}T\d{9}Z$/u.test(approvalRunId)) {
+    throw new Error("Invalid SafeCommit approval run identifier");
+  }
+  const approvalRunRoot = path.join(approvalEvidenceRoot, approvalRunId);
+  const approvalBody = await readFile(
+    path.join(approvalRunRoot, "database-approval.json"),
+    "utf8",
+  );
+  const approvalEvidence = JSON.parse(approvalBody);
+  const approvalManifest = (
+    await readFile(path.join(approvalRunRoot, "manifest.sha256"), "utf8")
+  ).trim();
   if (
     summary.status !== "LOCAL_TEST" ||
     summary.liveCertified !== false ||
@@ -128,6 +167,47 @@ async function build() {
       "Public live evidence must be complete, destroyed, network-isolated, and awaiting human approval",
     );
   }
+  const winner = liveEvidence.candidates.find(
+    (candidate) =>
+      candidate.evidence.candidateId === liveEvidence.winnerCandidateId,
+  );
+  const winnerRanking = liveEvidence.rankings.find(
+    (ranking) => ranking.candidateId === liveEvidence.winnerCandidateId,
+  );
+  const approvalBinding = approvalEvidence.approval?.binding;
+  const approvalIsComplete =
+    approvalBinding !== undefined &&
+    approvalManifest ===
+      `${sha256(approvalBody)}  database-approval.json` &&
+    approvalEvidence.status === "SAFE_TO_COMMIT" &&
+    approvalEvidence.liveCertified === true &&
+    approvalEvidence.sourceEvidence.liveRunId === liveRunId &&
+    approvalEvidence.sourceEvidence.artifactSha256 ===
+      sha256(
+        await readFile(
+          path.join(liveRunRoot, "database-live-evidence.json"),
+          "utf8",
+        ),
+      ) &&
+    approvalEvidence.approval.decision === "approved" &&
+    approvalBinding.candidateId === liveEvidence.winnerCandidateId &&
+    approvalBinding.planDigest === winner?.evidence.planDigest &&
+    approvalBinding.intentContractDigest ===
+      winner?.evidence.intentContractDigest &&
+    approvalBinding.evidenceDigest === winnerRanking?.evidenceDigest &&
+    approvalBinding.snapshotDigest === winner?.evidence.snapshotDigest &&
+    approvalBinding.schemaFingerprint === winner?.evidence.schemaFingerprint &&
+    approvalBinding.sourceCommitSha === liveEvidence.sourceCommitSha &&
+    approvalEvidence.approval.bindingDigest ===
+      sha256(canonicalJson(approvalBinding)) &&
+    approvalEvidence.guardrails.productionCommitExecuted === false &&
+    approvalEvidence.guardrails.pullRequestMerged === false &&
+    approvalEvidence.guardrails.publicMutationControls === false;
+  if (!approvalIsComplete) {
+    throw new Error(
+      "Public approval must be exact-evidence-bound and preserve all execution guardrails",
+    );
+  }
 
   await mkdir(path.join(outputRoot, "evidence"), { recursive: true });
   await copyFile(
@@ -149,6 +229,14 @@ async function build() {
   await copyFile(
     path.join(liveRunRoot, "manifest.sha256"),
     path.join(outputRoot, "evidence", "live-manifest.sha256"),
+  );
+  await copyFile(
+    path.join(approvalRunRoot, "database-approval.json"),
+    path.join(outputRoot, "evidence", "database-approval.json"),
+  );
+  await copyFile(
+    path.join(approvalRunRoot, "manifest.sha256"),
+    path.join(outputRoot, "evidence", "approval-manifest.sha256"),
   );
   await copyFile(
     path.join(
@@ -255,7 +343,7 @@ async function build() {
           <h1>Safety before <em>commit.</em></h1>
           <p class="lede">Three database mutation plans entered the same MySQL 8 fixture. The two higher-scoring plans were rejected because hard safety invariants outrank model preference.</p>
         </div>
-        <div class="truth"><strong>Live providers verified; human approval pending.</strong>The public page is read-only and contains no operator controls or credentials. The recorded run remains <code>LIVE_CERTIFIED=false</code> until a human approves the evidence-bound winner.</div>
+        <div class="truth"><strong>Live providers and human approval verified.</strong>The unique eligible winner is evidence-bound and <code>SAFE_TO_COMMIT</code>. This public page remains read-only; no production database write or pull-request merge was executed.</div>
       </header>
       <div class="metrics" aria-label="Run summary">
         <div class="metric"><b>${summary.candidateCount}</b><span>candidate plans</span></div>
@@ -277,8 +365,8 @@ async function build() {
       <section id="boundary">
         <div class="section-head"><div><p class="eyebrow">Trust boundary</p><h2>Exactly what is proven.</h2></div></div>
         <div class="boundary">
-          <article><h3>Verified in these artifacts</h3><ul><li>MySQL ${escapeHtml(summary.mysql)} executable fixture</li><li>Same baseline for all three candidates</li><li>Hard-gate eligibility and deterministic ranking</li><li>Rollback digest equals baseline for every candidate</li><li>Live Fireworks, Daytona, and Braintrust provenance</li><li>SHA-256 manifests for local and live evidence</li></ul></article>
-          <article><h3>Not represented as complete</h3><ul><li>No human approval has been recorded</li><li>No production database connection or commit</li><li>No physical HIL evidence</li><li>No public mutation or merge controls</li><li><code>LIVE_CERTIFIED=false</code> until the approval boundary is completed</li></ul></article>
+          <article><h3>Verified in these artifacts</h3><ul><li>MySQL ${escapeHtml(summary.mysql)} executable fixture</li><li>Same baseline for all three candidates</li><li>Hard-gate eligibility and deterministic ranking</li><li>Rollback digest equals baseline for every candidate</li><li>Live Fireworks, Daytona, and Braintrust provenance</li><li>Evidence-bound human approval of the unique eligible winner</li><li>SHA-256 manifests for local, live, and approval evidence</li></ul></article>
+          <article><h3>Deliberately outside this result</h3><ul><li>No production database connection or commit</li><li>No pull-request merge</li><li>No physical HIL evidence</li><li>No public mutation or merge controls</li><li><code>SAFE_TO_COMMIT</code> means eligible for an upstream system to commit, not already committed</li></ul></article>
         </div>
       </section>
       <section id="artifacts">
@@ -290,6 +378,8 @@ async function build() {
           <a class="button" href="evidence/manifest.sha256">SHA-256 manifest</a>
           <a class="button" href="evidence/database-live-evidence.json">Live provider evidence</a>
           <a class="button" href="evidence/live-manifest.sha256">Live SHA-256 manifest</a>
+          <a class="button" href="evidence/database-approval.json">Human approval receipt</a>
+          <a class="button" href="evidence/approval-manifest.sha256">Approval SHA-256 manifest</a>
           <a class="button" href="https://github.com/Frankie744/safeflash-ai/commit/${summary.sourceCommitSha}">Inspect evidence source commit</a>
         </div>
       </section>

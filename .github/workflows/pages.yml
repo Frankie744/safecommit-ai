@@ -11,6 +11,7 @@ on:
       - "scripts/build-public-demo.mjs"
       - "artifacts/evidence/safecommit-database-local/**"
       - "artifacts/evidence/safecommit-database-live/**"
+      - "artifacts/evidence/safecommit-database-approval/**"
       - "artifacts/presentation/SafeCommit_Championship_Deck_LOCAL_TEST.pdf"
 
 permissions:

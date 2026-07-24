@@ -1,4 +1,5 @@
 export * from "./database-profile";
+export * from "./database-live-approval";
 export * from "./database-tournament";
 export * from "./event-store";
 export * from "./demo-scenarios";

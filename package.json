@@ -23,6 +23,7 @@
     "demo:local": "tsx scripts/run-local-tournament.ts",
     "demo:database-local": "tsx scripts/run-local-database-tournament.ts",
     "demo:database-live": "tsx scripts/run-live-database-tournament.ts",
+    "approve:database-live": "tsx scripts/record-live-database-approval.ts",
     "demo:cross-device": "tsx scripts/run-cross-device-proof.ts",
     "demo:live": "tsx scripts/run-live-workflow.ts",
     "smoke:external": "tsx scripts/smoke-external.ts",
