@@ -114,6 +114,27 @@ class FakeClient implements SafeCommitFireworksClient {
   }
 }
 
+class RetryClient implements SafeCommitFireworksClient {
+  readonly transport = "local-test" as const;
+  readonly requests: SafeCommitFireworksChatRequest[] = [];
+
+  constructor(
+    private readonly result: SafeCommitFireworksChatResponse,
+    private remainingFailures: number,
+  ) {}
+
+  async createChatCompletion(
+    value: SafeCommitFireworksChatRequest,
+  ): Promise<SafeCommitFireworksChatResponse> {
+    this.requests.push(value);
+    if (this.remainingFailures > 0) {
+      this.remainingFailures -= 1;
+      throw new Error("Connection error.");
+    }
+    return this.result;
+  }
+}
+
 describe("SafeCommit Fireworks plan adapter", () => {
   it("uses structured output and validates SQL with the server policy", async () => {
     const client = new FakeClient(
@@ -144,6 +165,27 @@ describe("SafeCommit Fireworks plan adapter", () => {
     expect(client.requests[0]?.messages[1]?.content).toContain(
       "explicit bounded predicate",
     );
+    expect(client.requests[0]?.max_completion_tokens).toBe(8_192);
+    expect(client.requests[0]?.thinking).toEqual({
+      type: "enabled",
+      budget_tokens: 1_024,
+    });
+  });
+
+  it("retries one transient provider connection failure", async () => {
+    const client = new RetryClient(
+      response(
+        "UPDATE product SET canonical_product_id = 'product-canonical' WHERE id = 'product-duplicate' AND tenant_id = 'tenant-demo'",
+      ),
+      1,
+    );
+    const result = await new SafeCommitFireworksAdapter(
+      CONFIG,
+      client,
+    ).generateCandidate(request());
+
+    expect(result.data.candidate.candidateId).toBe("candidate-live-c");
+    expect(client.requests).toHaveLength(2);
   });
 
   it("fails closed on an unbounded provider plan", async () => {

@@ -463,16 +463,27 @@ function providerFailureStatus(error: unknown, depth = 0): number | undefined {
   return providerFailureStatus((error as { cause?: unknown }).cause, depth + 1);
 }
 
-function isRetryableProviderFailure(error: unknown): boolean {
+function providerFailureCode(error: unknown, depth = 0): string {
+  if (depth > 3 || typeof error !== "object" || error === null) {
+    return "";
+  }
+  const direct = String((error as { code?: unknown }).code ?? "")
+    .trim()
+    .toUpperCase();
+  if (direct !== "") return direct;
+  return providerFailureCode(
+    (error as { cause?: unknown }).cause,
+    depth + 1,
+  );
+}
+
+export function isRetryableFireworksFailure(error: unknown): boolean {
   if (error instanceof ProviderResponseError) return error.retryable;
   const status = providerFailureStatus(error);
   if (status !== undefined) {
     return status === 408 || status === 429 || status >= 500;
   }
-  const code =
-    typeof error === "object" && error !== null
-      ? String((error as { code?: unknown }).code ?? "").toUpperCase()
-      : "";
+  const code = providerFailureCode(error);
   if (
     ["ECONNRESET", "ETIMEDOUT", "EAI_AGAIN", "ECONNREFUSED"].includes(code)
   ) {
@@ -484,7 +495,9 @@ function isRetryableProviderFailure(error: unknown): boolean {
       : typeof error === "object" && error !== null
         ? String((error as { message?: unknown }).message ?? "")
         : "";
-  return /\b(?:timeout|timed out|temporar(?:y|ily))\b/iu.test(message);
+  return /\b(?:connection error|timeout|timed out|temporar(?:y|ily))\b/iu.test(
+    message,
+  );
 }
 
 function providerRequestId(response: FireworksChatResponse): string {
@@ -721,12 +734,15 @@ export class FireworksAdapter {
           error instanceof ProviderResponseError
             ? error.message.slice(0, 1_000)
             : "Transient provider failure; return a fresh schema-valid candidate.";
-        if (attempt >= this.config.maxAttempts || !isRetryableProviderFailure(error)) {
+        if (
+          attempt >= this.config.maxAttempts ||
+          !isRetryableFireworksFailure(error)
+        ) {
           if (error instanceof ProviderResponseError) throw error;
           throw new ProviderResponseError(
             "fireworks",
             "Fireworks candidate generation failed",
-            isRetryableProviderFailure(error),
+            isRetryableFireworksFailure(error),
             { cause: error },
           );
         }
