@@ -54,7 +54,11 @@ export interface SafeCommitDatabaseProfile {
   candidates: readonly CandidateChangePlan[];
 }
 
-const fixtureRoot = resolve(process.cwd(), "fixtures", "logistics-mysql");
+const runtimeCwd = process.cwd().replaceAll("\\", "/");
+const workspaceRoot = runtimeCwd.endsWith("/apps/web")
+  ? resolve(process.cwd(), "../..")
+  : process.cwd();
+const fixtureRoot = resolve(workspaceRoot, "fixtures", "logistics-mysql");
 const schemaPath = resolve(fixtureRoot, "schema", "001_schema.sql");
 const seedPath = resolve(fixtureRoot, "seed", "002_seed.sql");
 const baselinePath = resolve(fixtureRoot, "expected", "baseline-state.json");
