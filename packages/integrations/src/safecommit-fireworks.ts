@@ -192,6 +192,7 @@ export interface SafeCommitFireworksRequest {
   seed: number;
   candidateScenario: {
     hypothesis: string;
+    requiredPreconditions: CandidateChangePlan["preconditions"];
     expectedEffects: CandidateChangePlan["expectedEffects"];
     risks: CandidateChangePlan["risks"];
   };
@@ -360,6 +361,8 @@ function assertRequest(request: SafeCommitFireworksRequest): void {
     request.seed > 2_147_483_647 ||
     request.candidateScenario.hypothesis.trim().length < 1 ||
     request.candidateScenario.hypothesis.length > 4_096 ||
+    request.candidateScenario.requiredPreconditions.length < 1 ||
+    request.candidateScenario.requiredPreconditions.length > 32 ||
     request.candidateScenario.expectedEffects.length < 1 ||
     request.candidateScenario.expectedEffects.length > 32 ||
     request.candidateScenario.risks.length < 1 ||
@@ -418,7 +421,7 @@ export class SafeCommitFireworksAdapter {
               role: "user",
               content: canonicalJson({
                 instruction:
-                  "Return JSON matching outputContract.candidateChangePlanJsonSchema with exactly the required candidate ID and strategy. Treat candidateScenario as the authoritative variant to implement, including when its stated tradeoffs may violate a post-execution invariant. Use only tables, columns, keys, and relationships explicitly present in databaseProfile.schemaSql and only allowed operations. All preconditions must succeed against the exact databaseProfile.seedSql fixture; do not create a deliberately failing precondition, because safety differences are measured by server-owned post-execution hard gates. Include read-only preconditions, bounded mutation statements, expected effects consistent with candidateScenario, an executable rollback plan, honest risks, and requested validations. Every mutation and rollback SQL string must be one MySQL statement with an explicit bounded predicate. requestedValidations must contain concise validation names from intentContract.requiredInvariants, never prose descriptions.",
+                  "Return JSON matching outputContract.candidateChangePlanJsonSchema with exactly the required candidate ID and strategy. Treat candidateScenario as the authoritative variant to implement, including when its stated tradeoffs may violate a post-execution invariant. Copy candidateScenario.requiredPreconditions exactly into preconditions and do not add other preconditions; these read-only checks are already bound to the exact databaseProfile.seedSql fixture. Use only tables, columns, keys, and relationships explicitly present in databaseProfile.schemaSql and only allowed operations. Include bounded mutation statements, expected effects consistent with candidateScenario, an executable rollback plan, honest risks, and requested validations. Every mutation and rollback SQL string must be one MySQL statement with an explicit bounded predicate. requestedValidations must contain concise validation names from intentContract.requiredInvariants, never prose descriptions.",
                 outputContract: {
                   candidateChangePlanJsonSchema:
                     SAFECOMMIT_CHANGE_PLAN_JSON_SCHEMA,
@@ -518,6 +521,16 @@ export class SafeCommitFireworksAdapter {
       throw new ProviderResponseError(
         "fireworks",
         "Fireworks changed the required candidate identity or strategy",
+        false,
+      );
+    }
+    if (
+      canonicalJson(candidate.preconditions) !==
+      canonicalJson(request.candidateScenario.requiredPreconditions)
+    ) {
+      throw new ProviderResponseError(
+        "fireworks",
+        "Fireworks changed the required candidate preconditions",
         false,
       );
     }

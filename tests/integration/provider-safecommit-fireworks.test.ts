@@ -33,6 +33,14 @@ function request(): SafeCommitFireworksRequest {
     seed: 19,
     candidateScenario: {
       hypothesis: "Link only the intended duplicate product.",
+      requiredPreconditions: [
+        {
+          checkId: "check-product",
+          sql: "SELECT id FROM product WHERE id = 'product-duplicate'",
+          expectation: "one-row",
+          purpose: "Confirm the intended product exists.",
+        },
+      ],
       expectedEffects: [
         {
           effectId: "link-product",
@@ -189,6 +197,9 @@ describe("SafeCommit Fireworks plan adapter", () => {
     );
     expect(client.requests[0]?.messages[1]?.content).toContain(
       '"candidateScenario"',
+    );
+    expect(client.requests[0]?.messages[1]?.content).toContain(
+      '"requiredPreconditions"',
     );
     expect(client.requests[0]?.max_completion_tokens).toBe(8_192);
     expect(client.requests[0]?.thinking).toEqual({

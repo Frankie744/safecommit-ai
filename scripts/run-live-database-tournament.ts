@@ -159,6 +159,7 @@ export async function main(): Promise<void> {
           strategy: slot.strategy,
           candidateScenario: {
             hypothesis: slot.hypothesis,
+            requiredPreconditions: slot.preconditions,
             expectedEffects: slot.expectedEffects,
             risks: slot.risks,
           },
@@ -234,6 +235,8 @@ export async function main(): Promise<void> {
             error.message === "Fireworks returned invalid JSON" ||
             error.message ===
               "Fireworks changed the required candidate identity or strategy" ||
+            error.message ===
+              "Fireworks changed the required candidate preconditions" ||
             error.message.startsWith(
               "Fireworks plan failed server-owned SQL integrity:",
             ));
