@@ -9,6 +9,9 @@ and binds human approval to the exact plan and evidence.
 
 ## Demo video
 
+Watch the demo on YouTube:
+[SafeCommit — Final Submission Demo](https://youtu.be/jbYM4vg6G1g).
+
 The final submission video is available at:
 [demo-video/SafeCommit_Final_Submission.mov](demo-video/SafeCommit_Final_Submission.mov).
 
