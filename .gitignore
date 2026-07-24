@@ -1,11 +1,14 @@
 node_modules/
 .next/
+.open-next/
+.wrangler/
 dist/
 coverage/
 playwright-report/
 test-results/
 .safeflash/
 _site/
+tmp/
 
 # Secrets. Only the example file is committed.
 .env
