@@ -170,6 +170,7 @@ export interface DaytonaClientPort {
       ephemeral: boolean;
       autoStopInterval: number;
       ttlMinutes: number;
+      snapshot?: string;
       networkBlockAll?: boolean;
       domainAllowList?: string;
     },

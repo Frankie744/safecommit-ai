@@ -8,10 +8,12 @@ import { describe, expect, it } from "vitest";
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "../..");
 const SERVER_SECRET_NAMES = [
   "DAYTONA_API_KEY",
+  "DAYTONA_DATABASE_MYSQL_URL",
   "BRAINTRUST_API_KEY",
   "FIREWORKS_API_KEY",
   "GITHUB_TOKEN",
   "SAFECOMMIT_OPERATOR_TOKEN",
+  "SAFECOMMIT_MYSQL_URL",
   "SAFEFLASH_PUBLISH_AUTH_SECRET",
   "SAFEFLASH_RECORDED_LIVE_SIGNING_KEY",
 ] as const;
