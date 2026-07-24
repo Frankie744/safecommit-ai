@@ -1,0 +1,32 @@
+COMMAND: D:\visual_studio\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\ctest.exe --test-dir F:\desktop\hackthon\artifacts\build\phase-1\20260724T060652075Z -C Debug -V -L unit --output-on-failure --no-tests=error
+EXIT_CODE: 0
+DURATION_MS: 116.549
+
+UpdateCTestConfiguration  from :F:/desktop/hackthon/artifacts/build/phase-1/20260724T060652075Z/DartConfiguration.tcl
+Test project F:/desktop/hackthon/artifacts/build/phase-1/20260724T060652075Z
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 1
+    Start 1: battery_unit_tests
+
+1: Test command: F:\desktop\hackthon\artifacts\build\phase-1\20260724T060652075Z\Debug\battery_unit_tests.exe
+1: Working Directory: F:/desktop/hackthon/artifacts/build/phase-1/20260724T060652075Z
+1: Test timeout computed to be: 5
+1: [PASS] initial_state_is_safe
+1: [PASS] normal_temperature_enables_charging
+1: [PASS] minimum_boundary_is_valid
+1: [PASS] maximum_boundary_is_valid
+1: [PASS] fresh_sample_resets_stale_counter
+1: [SUMMARY] 5 passed, 0 failed
+1/1 Test #1: battery_unit_tests ...............   Passed    0.02 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Label Time Summary:
+unit    =   0.02 sec*proc (1 test)
+
+Total Test time (real) =   0.03 sec
