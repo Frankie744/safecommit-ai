@@ -35,7 +35,7 @@ const REPOSITORY_PATH = "/workspace/safecommit-repository";
 const PLAN_PATH = "/tmp/safecommit-plan.json";
 const INTENT_PATH = "/tmp/safecommit-intent.json";
 const RUN_COMMAND =
-  "npx --no-install tsx scripts/run-daytona-database-candidate.ts";
+  "/workspace/node_modules/.bin/tsx scripts/run-daytona-database-candidate.ts";
 
 export interface SafeCommitDaytonaConfig extends DaytonaConfig {
   databaseSnapshot: string;

@@ -352,7 +352,11 @@ export class SafeCommitFireworksAdapter {
           role: "user",
           content: canonicalJson({
             instruction:
-              "Return exactly the required candidate ID and strategy. Use only allowed tables and operations. Include read-only preconditions, bounded mutation statements, expected effects, an executable rollback plan, honest risks, and requested validations.",
+              "Return JSON matching outputContract.candidateChangePlanJsonSchema with exactly the required candidate ID and strategy. Use only allowed tables and operations. Include read-only preconditions, bounded mutation statements, expected effects, an executable rollback plan, honest risks, and requested validations. Every mutation and rollback SQL string must be one MySQL statement with an explicit bounded predicate.",
+            outputContract: {
+              candidateChangePlanJsonSchema:
+                SAFECOMMIT_CHANGE_PLAN_JSON_SCHEMA,
+            },
             requiredCandidateId: request.candidateId,
             requiredStrategy: request.strategy,
             intentContract: request.intentContract,

@@ -138,6 +138,12 @@ describe("SafeCommit Fireworks plan adapter", () => {
     expect(client.requests[0]?.messages[0]?.content).toContain(
       "Never emit DDL",
     );
+    expect(client.requests[0]?.messages[1]?.content).toContain(
+      '"candidateChangePlanJsonSchema"',
+    );
+    expect(client.requests[0]?.messages[1]?.content).toContain(
+      "explicit bounded predicate",
+    );
   });
 
   it("fails closed on an unbounded provider plan", async () => {

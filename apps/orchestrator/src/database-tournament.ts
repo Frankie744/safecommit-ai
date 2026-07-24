@@ -13,7 +13,6 @@ import {
 } from "./database-profile";
 import {
   runLocalMysqlCandidate,
-  type LocalMysqlCandidateResult,
 } from "./mysql-runner";
 
 export interface DatabaseQualityScores {
@@ -116,14 +115,15 @@ export function rankDatabaseCandidates(
     });
 }
 
-function qualityScores(
+export function computeDatabaseQualityScores(
   plan: CandidateChangePlan,
-  run: LocalMysqlCandidateResult,
+  evidence: DatabaseEvidence,
+  gates: DatabaseGateEvaluation,
 ): DatabaseQualityScores {
-  const changedRows = run.evidence.rowDelta.length;
+  const changedRows = evidence.rowDelta.length;
   const requestedEffects = plan.expectedEffects.length;
   const observedChangedTables = new Set(
-    run.evidence.rowDelta.map((change) => change.table),
+    evidence.rowDelta.map((change) => change.table),
   );
   const expectedChangedTables = new Set(
     plan.expectedEffects.map((effect) => effect.table),
@@ -135,12 +135,17 @@ function qualityScores(
     expectedChangedTables.size === 0 ? 0 : matchedTables / expectedChangedTables.size;
   const minimality = Math.max(0, 1 - Math.max(0, changedRows - requestedEffects) / 24);
   const riskText = plan.risks.join(" ").toLowerCase();
-  const failureTerms = run.gates.failedGateNames.flatMap((gate) => {
+  const failureTerms = gates.failedGateNames.flatMap((gate) => {
     if (gate === "WarehouseScope") return ["warehouse"];
     if (gate === "TenantIsolation") return ["tenant"];
     if (gate === "ProtectedOrderState") return ["shipped", "order"];
     return [gate.toLowerCase()];
   });
+  const passedGates = new Set(
+    gates.results
+      .filter((result) => result.passed)
+      .map((result) => result.name),
+  );
   const explanationGroundedness =
     failureTerms.length === 0
       ? 0.75
@@ -152,8 +157,8 @@ function qualityScores(
     minimality,
     explanationGroundedness,
     reproducibility:
-      run.evidence.afterStateDigest === run.secondRun.digest &&
-      run.evidence.beforeStateDigest === run.evidence.rollbackStateDigest
+      passedGates.has("Idempotency") &&
+      passedGates.has("RollbackVerified")
         ? 1
         : 0,
     latency: 1,
@@ -182,7 +187,11 @@ export async function runLocalDatabaseTournament(options: {
       sandboxId: `local-mysql-transaction-${index + 1}-${randomUUID()}`,
       runId: `local-mysql-run-${index + 1}-${randomUUID()}`,
     });
-    const scores = qualityScores(plan, run);
+    const scores = computeDatabaseQualityScores(
+      plan,
+      run.evidence,
+      run.gates,
+    );
     candidates.push({
       plan,
       evidence: run.evidence,

@@ -163,7 +163,7 @@ describe("SafeCommit Daytona database adapter", () => {
       "/tmp/safecommit-intent.json",
     ]);
     expect(commands).toContain(
-      "npx --no-install tsx scripts/run-daytona-database-candidate.ts",
+      "/workspace/node_modules/.bin/tsx scripts/run-daytona-database-candidate.ts",
     );
     expect(deletes).toBe(1);
   });

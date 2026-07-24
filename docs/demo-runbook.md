@@ -83,6 +83,37 @@ database snapshot has been created.
 If any item is missing, keep that provider `BLOCKED`. Never substitute the
 local candidate plans for Fireworks output or local transactions for Daytona.
 
+### Build the Daytona database snapshot
+
+The repository contains a content-addressed MySQL 8.0.36 snapshot recipe. Run
+it only with explicit live authorization and a Daytona API key:
+
+```powershell
+$env:SAFEFLASH_ALLOW_LIVE = "true"
+$env:DAYTONA_API_KEY = [Environment]::GetEnvironmentVariable(
+  "DAYTONA_API_KEY",
+  "User"
+)
+npm run daytona:database-snapshot
+```
+
+The command reuses an exact active snapshot or creates one from
+`fixtures/logistics-mysql/Dockerfile.daytona`, then verifies MySQL, Node, and
+tsx in a private network-blocked sandbox and deletes that sandbox. Copy the
+reported snapshot name and loopback-only MySQL URI into the server environment;
+never commit either value to `.env.example`.
+
+After the snapshot and all three provider credentials are configured, run the
+live database tournament from a clean commit already pushed to its remote
+branch:
+
+```powershell
+npm run demo:database-live
+```
+
+The command stops at `AWAITING_HUMAN_APPROVAL` when an eligible winner exists.
+It does not publish, merge, or treat provider evidence as human authorization.
+
 ## Failure recovery
 
 - No eligible candidate: show the failed gates and stop.
