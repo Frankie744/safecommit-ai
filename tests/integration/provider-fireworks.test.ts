@@ -197,6 +197,15 @@ describe("Fireworks structured candidate contract", () => {
     expect(client.requests[0]?.messages[1]?.content).toContain(
       "EXPECT_CHARGING_DISABLED_ON_TIMEOUT",
     );
+    expect(client.requests[0]?.messages[1]?.content).toContain(
+      '"candidatePatchJsonSchema"',
+    );
+    expect(client.requests[0]?.messages[1]?.content).toContain(
+      "diff --git a/<path> b/<path>",
+    );
+    expect(client.requests[0]?.messages[1]?.content).toContain(
+      "removed lines exactly match sourceContext",
+    );
     expect(result.data.sourceContextDigest).toBe(request().sourceContext.digest);
     expect(result.data.requestDigest).toMatch(/^[0-9a-f]{64}$/u);
     expect(result.data.requestId).toBe("provider-request-contract");
