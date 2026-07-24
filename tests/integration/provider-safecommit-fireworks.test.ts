@@ -9,6 +9,7 @@ import {
   type SafeCommitFireworksRequest,
   type FireworksConfig,
 } from "@safeflash/integrations";
+import { computeEvidenceDigest } from "@safeflash/domain";
 import { logisticsIntentContract } from "../fixtures/database";
 import { describe, expect, it } from "vitest";
 
@@ -21,6 +22,10 @@ const CONFIG: FireworksConfig = {
 };
 
 function request(): SafeCommitFireworksRequest {
+  const schemaSql =
+    "CREATE TABLE product (id VARCHAR(64), tenant_id VARCHAR(64), canonical_product_id VARCHAR(64));";
+  const seedSql =
+    "INSERT INTO product (id, tenant_id, canonical_product_id) VALUES ('product-duplicate', 'tenant-demo', NULL);";
   return {
     sessionId: "safecommit-test",
     candidateId: "candidate-live-c",
@@ -31,7 +36,10 @@ function request(): SafeCommitFireworksRequest {
       profileId: "openboxes-mysql-v1",
       fixtureKind: "OpenBoxes-derived executable fixture",
       mysqlVersion: "8.0.36",
-      schemaFingerprint: "a".repeat(64),
+      fixtureSourceDigest: computeEvidenceDigest({ schemaSql, seedSql }),
+      schemaFingerprint: computeEvidenceDigest(schemaSql),
+      schemaSql,
+      seedSql,
       sourceRevision: "b".repeat(40),
       tables: ["product", "allocation", "order_line", "order_header"],
     },

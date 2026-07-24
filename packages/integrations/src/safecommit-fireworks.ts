@@ -195,7 +195,10 @@ export interface SafeCommitFireworksRequest {
     profileId: "openboxes-mysql-v1";
     fixtureKind: "OpenBoxes-derived executable fixture";
     mysqlVersion: "8.0.36";
+    fixtureSourceDigest: string;
     schemaFingerprint: string;
+    schemaSql: string;
+    seedSql: string;
     sourceRevision: string;
     tables: readonly string[];
   };
@@ -352,6 +355,16 @@ function assertRequest(request: SafeCommitFireworksRequest): void {
     request.seed > 2_147_483_647 ||
     request.databaseProfile.profileId !== request.intentContract.databaseProfile ||
     !/^[0-9a-f]{64}$/iu.test(request.databaseProfile.schemaFingerprint) ||
+    Buffer.byteLength(request.databaseProfile.schemaSql, "utf8") < 1 ||
+    Buffer.byteLength(request.databaseProfile.schemaSql, "utf8") > 20_000 ||
+    Buffer.byteLength(request.databaseProfile.seedSql, "utf8") < 1 ||
+    Buffer.byteLength(request.databaseProfile.seedSql, "utf8") > 30_000 ||
+    computeEvidenceDigest(request.databaseProfile.schemaSql) !==
+      request.databaseProfile.schemaFingerprint ||
+    computeEvidenceDigest({
+      schemaSql: request.databaseProfile.schemaSql,
+      seedSql: request.databaseProfile.seedSql,
+    }) !== request.databaseProfile.fixtureSourceDigest ||
     request.databaseProfile.tables.length === 0
   ) {
     throw new ProviderResponseError(
@@ -393,7 +406,7 @@ export class SafeCommitFireworksAdapter {
               role: "user",
               content: canonicalJson({
                 instruction:
-                  "Return JSON matching outputContract.candidateChangePlanJsonSchema with exactly the required candidate ID and strategy. Use only allowed tables and operations. Include read-only preconditions, bounded mutation statements, expected effects, an executable rollback plan, honest risks, and requested validations. Every mutation and rollback SQL string must be one MySQL statement with an explicit bounded predicate. requestedValidations must contain concise validation names from intentContract.requiredInvariants, never prose descriptions.",
+                  "Return JSON matching outputContract.candidateChangePlanJsonSchema with exactly the required candidate ID and strategy. Use only tables, columns, keys, and relationships explicitly present in databaseProfile.schemaSql and only allowed operations. All preconditions must succeed against the exact databaseProfile.seedSql fixture; do not create a deliberately failing precondition, because safety differences are measured by server-owned post-execution hard gates. Include read-only preconditions, bounded mutation statements, expected effects, an executable rollback plan, honest risks, and requested validations. Every mutation and rollback SQL string must be one MySQL statement with an explicit bounded predicate. requestedValidations must contain concise validation names from intentContract.requiredInvariants, never prose descriptions.",
                 outputContract: {
                   candidateChangePlanJsonSchema:
                     SAFECOMMIT_CHANGE_PLAN_JSON_SCHEMA,

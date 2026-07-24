@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -105,6 +105,11 @@ export async function main(): Promise<void> {
     throw new Error("SAFEFLASH_ALLOW_LIVE must equal true");
   }
   const { sourceCommitSha, branch, repositoryUrl } = assertCleanRemoteHead();
+  const profile = await loadSafeCommitDatabaseProfile();
+  const [schemaSql, seedSql] = await Promise.all([
+    readFile(profile.schemaPath, "utf8"),
+    readFile(profile.seedPath, "utf8"),
+  ]);
   const sourceBundle = gitBuffer(
     "bundle",
     "create",
@@ -114,7 +119,6 @@ export async function main(): Promise<void> {
   const sourceBundleDigest = createHash("sha256")
     .update(sourceBundle)
     .digest("hex");
-  const profile = await loadSafeCommitDatabaseProfile();
   const sessionId = `safecommit-live-${randomUUID()}`;
   const fireworks = new SafeCommitFireworksAdapter(
     readSafeCommitFireworksConfig(process.env, "live"),
@@ -129,7 +133,10 @@ export async function main(): Promise<void> {
     profileId: profile.profileId,
     fixtureKind: profile.fixtureKind,
     mysqlVersion: profile.mysqlVersion,
+    fixtureSourceDigest: profile.fixtureSourceDigest,
     schemaFingerprint: profile.schemaFingerprint,
+    schemaSql,
+    seedSql,
     sourceRevision: profile.sourceRevision,
     tables: Object.keys(profile.baseline.counts).sort(),
   } as const;
